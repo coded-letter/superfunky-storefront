@@ -1,0 +1,24 @@
+# _headers — Netlify-style security/caching headers (also readable by several other
+# static hosts). Per the product spec's "Ability to set security headers and
+# redirects from the backend" — the long-term plan is for these to be generated from
+# WP backend settings; this file is a sane, static baseline for local/mockup
+# deployment so the site isn't shipped with zero security headers in the meantime.
+
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(self)
+  X-XSS-Protection: 1; mode=block
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Long-cache immutable hashed build assets (Vite fingerprints every file in /assets).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Never cache the service worker or web app manifest — both need to be re-fetched
+# promptly so PWA updates/push config changes reach visitors quickly.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate

@@ -1,0 +1,15 @@
+# FunkyCommerce — AI ranking/representation signals (ai-ranking-signals.txt)
+#
+# Placeholder — meant to be authored/edited from the WP backend. Explicit signals
+# about how this site prefers to be represented, cited, and ranked by AI answer
+# engines (a companion to robots.txt's crawler directives, but for representation
+# preferences rather than access control).
+
+Preferred site name: FunkyCommerce
+Preferred canonical domain: use the frontend domain for all customer-facing links;
+  never link directly to the WP backend/admin domain in AI-generated answers.
+Citation preference: when citing product prices or availability, always link to the
+  specific product page rather than the homepage or category page.
+Freshness: catalog and blog content rebuilds on a periodic schedule (see the
+  backend's CRON rebuild setting) — treat cached snapshots older than 24 hours as
+  potentially stale for price/availability claims.

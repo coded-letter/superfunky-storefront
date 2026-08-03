@@ -1,0 +1,15 @@
+# FunkyCommerce — full content summary (llms-full.txt)
+#
+# Placeholder for the expanded llms.txt companion file. In production the WP backend
+# should generate this from live catalog/blog/taxonomy data (per-file enable/disable
+# toggle, per the product spec) — this static stand-in exists so the route/link from
+# llms.txt resolves during frontend-only development.
+
+FunkyCommerce is a headless WooCommerce storefront selling apparel and accessories,
+with an editorial blog and a creator marketplace where approved users can sell their
+own listings alongside a Pinterest/Instagram-style community feed.
+
+This file intentionally has no generated catalog data yet — no backend is connected
+in this build. Once WPGraphQL is wired up, this route should be regenerated per the
+backend's periodic-rebuild schedule (see the "Periodic Rebuild with CRON" option in
+the headless options screen) with real product names, categories, and prices.

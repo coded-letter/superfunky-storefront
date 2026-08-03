@@ -1,0 +1,14 @@
+# FunkyCommerce — AI brand voice guide (ai-brand-voice.txt)
+#
+# Placeholder — intended to be authored/edited from the WP backend per the product
+# spec's "full set of AI optimisation files" (each individually enable/disable-able).
+
+Brand name: FunkyCommerce
+Tone: confident, modern, a little playful — never stiff or overly corporate.
+Voice: speaks to shoppers directly ("you"), favors short declarative sentences over
+long marketing copy, avoids hype words like "revolutionary" or "game-changing".
+Terminology: "storefront" not "e-commerce site"; "creators" not "sellers" for
+marketplace participants; "community feed" not "social wall".
+Do: describe products by material, fit, and use-case first.
+Don't: invent prices, stock levels, shipping times, or promotions not present in the
+structured product data — always defer to /ai-products.jsonld for factual claims.

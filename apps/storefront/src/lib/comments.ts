@@ -1,0 +1,85 @@
+import type { ProductReview } from "../pages/shared";
+import { graphqlRequest } from "./graphqlClient";
+import { authStore } from "./auth";
+
+export type CreateReviewInput = {
+  commentOn: number;
+  author: string;
+  authorEmail: string;
+  content: string;
+  rating?: number;
+  parent?: number;
+};
+
+type CreateReviewResult = {
+  createReview: {
+    comment: {
+      id: string;
+      databaseId: number;
+      content: string | null;
+      date: string | null;
+      parentId: string | null;
+      rating: number | null;
+      author: { node: { name: string | null } } | null;
+    } | null;
+  } | null;
+};
+
+const CREATE_REVIEW_MUTATION = /* GraphQL */ `
+  mutation StorefrontCreateReview($input: CreateReviewInput!) {
+    createReview(input: $input) {
+      comment {
+        id
+        databaseId
+        content(format: RENDERED)
+        date
+        parentId
+        rating
+        author {
+          node {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export async function createReview(input: CreateReviewInput): Promise<ProductReview> {
+  const { data, errors } = await graphqlRequest<CreateReviewResult>(CREATE_REVIEW_MUTATION, { input }, authStore.load()?.authToken);
+
+  if (errors?.length) {
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
+
+  const comment = data?.createReview?.comment;
+  if (!comment) {
+    return {
+      id: `pending-${Date.now()}`,
+      databaseId: 0,
+      author: input.author,
+      content: input.content,
+      date: new Date().toISOString(),
+      parentId: input.parent ? String(input.parent) : null,
+      rating: input.rating,
+    };
+  }
+
+  return {
+    id: comment.id,
+    databaseId: comment.databaseId,
+    author: comment.author?.node.name?.trim() || input.author,
+    content: htmlToText(comment.content || input.content),
+    date: comment.date || new Date().toISOString(),
+    parentId: comment.parentId,
+    rating: normalizeRating(comment.rating),
+  };
+}
+
+function htmlToText(html: string): string {
+  return new DOMParser().parseFromString(html, "text/html").body.textContent?.replace(/\s+/g, " ").trim() || "";
+}
+
+function normalizeRating(rating: number | null): number | undefined {
+  return rating && rating >= 1 && rating <= 5 ? rating : undefined;
+}

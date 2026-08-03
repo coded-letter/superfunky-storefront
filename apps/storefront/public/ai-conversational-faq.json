@@ -1,0 +1,17 @@
+{
+  "$comment": "Placeholder — meant to be generated/edited from the WP backend per the product spec's AI-optimisation file set (each individually enable/disable-able). Real content should be sourced from an FAQ custom post type once the backend exists.",
+  "faqs": [
+    {
+      "question": "What is FunkyCommerce?",
+      "answer": "FunkyCommerce is a headless WooCommerce storefront for apparel and accessories, with an editorial blog and a creator marketplace."
+    },
+    {
+      "question": "Can I sell my own products on FunkyCommerce?",
+      "answer": "Users with the creator role can list their own products and posts, visible on their public profile alongside their community feed."
+    },
+    {
+      "question": "What payment methods are supported?",
+      "answer": "Card payments via Stripe, BLIK, cash on delivery, cheque, and cryptocurrency (Bitcoin and Ethereum) — availability may vary by region."
+    }
+  ]
+}

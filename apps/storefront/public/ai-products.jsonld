@@ -1,0 +1,6 @@
+{
+  "$comment": "Placeholder — meant to be generated from live WooCommerce product data via the WP backend once it exists. This structured feed lets AI shopping agents (and rich-result crawlers) read product facts directly instead of scraping rendered pages.",
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "itemListElement": []
+}

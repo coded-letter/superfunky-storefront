@@ -1,0 +1,10 @@
+# _redirects — Netlify-style redirects file. Per the product spec's "Ability to set
+# security headers and redirects from the backend", most real redirect rules should
+# eventually be generated from WP backend settings and merged in at build/deploy time
+# (e.g. via the CI/CD build webhook) — this file ships with just the one rule this
+# static SPA build actually needs to function correctly.
+
+# Client-side routing fallback: react-router-dom's <BrowserRouter> needs every unknown
+# path to resolve to index.html so it can take over routing, instead of the static
+# host 404ing on a deep link/refresh (e.g. /shop/some-product).
+/*  /index.html  200

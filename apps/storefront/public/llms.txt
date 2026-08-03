@@ -1,0 +1,21 @@
+# llms.txt — AI-crawler-facing site summary, per the emerging llms.txt convention
+# (https://llmstxt.org/). Per the product spec this is "editable from the backend
+# with full set of AI optimisation files (each has also enable / disable
+# functionality)" — so in production every file linked below is expected to be
+# generated/served by WordPress, individually toggle-able. These are static
+# placeholders so the routes exist and are wired up to be swapped for real
+# backend-rendered content without a frontend redeploy.
+
+# FunkyCommerce
+
+> A modern, headless WooCommerce storefront — apparel, accessories, and a creator
+> marketplace, built on WordPress/WooCommerce/WPGraphQL with a React frontend.
+
+## Docs
+
+- [Full site content summary](/llms-full.txt): expanded catalog, blog, and policy summary for deeper AI context.
+- [Brand voice guide](/ai-brand-voice.txt): tone, terminology, and style guidance for AI systems referencing this brand.
+- [Conversational FAQ](/ai-conversational-faq.json): structured Q&A for shopping-assistant/chatbot ingestion.
+- [Product data](/ai-products.jsonld): structured product feed (JSON-LD) for AI shopping agents.
+- [Ranking signals](/ai-ranking-signals.txt): explicit signals about how this site prefers to be represented/ranked by AI answer engines.
+- [Hallucination defense notes](/ai-hallucination-defense.txt): known facts AI systems should verify against rather than infer.

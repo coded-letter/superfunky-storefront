@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Default brand-color CSS variables — the "violet" preset. Read by the `brand`
+     color scale and `brand-gradient`/`brand-gradient-soft`/`shadow-glow` tokens in
+     tailwind.config.ts (as `rgb(var(--brand-500) / <alpha-value>)`, etc.), and
+     overwritten at runtime by `applyBrandPalette()` (see `state/brandPalettes.ts`)
+     whenever the Layout Studio's color-palette preset changes — that's what makes the
+     palette picker actually repaint the whole theme instead of just documenting it. */
+  :root {
+    --brand-50: 244 242 255;
+    --brand-100: 235 231 255;
+    --brand-200: 215 207 255;
+    --brand-300: 185 168 255;
+    --brand-400: 150 120 255;
+    --brand-500: 124 77 255;
+    --brand-600: 108 43 242;
+    --brand-700: 92 31 209;
+    --brand-800: 75 27 168;
+    --brand-900: 62 26 134;
+    --brand-950: 37 15 89;
+    --brand-gradient-from: 124 77 255;
+    --brand-gradient-to: 255 107 214;
+    --theme-background: 250 250 250;
+    --theme-foreground: 24 24 27;
+    --theme-radius: 16px;
+  }
+
+  html,
+  body,
+  #root {
+    @apply min-h-full;
+  }
+
+  html {
+    /* Safety net: a fixed, off-canvas drawer using translateX can, on some mobile
+       browser engines, still register as part of the scrollable width even though it's
+       visually off-screen — this guarantees the page itself never grows a horizontal
+       scrollbar because of it. Uses `clip` rather than `hidden`: setting `overflow-x`
+       to `hidden` forces the browser to compute `overflow-y` as `auto` too (per the CSS
+       overflow spec), which turns this element into its own scroll container and breaks
+       `position: sticky` for any descendant anchored to the real scrolling viewport.
+       `clip` achieves the same "no horizontal scrollbar, ever" guarantee without that
+       side effect. */
+    overflow-x: clip;
+  }
+
+  body {
+    @apply m-0 font-sans antialiased;
+    background-color: rgb(var(--theme-background));
+    color: rgb(var(--theme-foreground));
+    overflow-x: clip;
+  }
+
+  .dark body {
+    background-color: rgb(var(--theme-foreground));
+    color: rgb(var(--theme-background));
+  }
+
+  /* Modern, slim, rounded scrollbar for the whole document — same treatment as the
+     `.scrollbar-thin` utility below, applied globally so page and drawer scrolling feel
+     consistent. */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.zinc.300") transparent;
+  }
+
+  html.dark {
+    scrollbar-color: theme("colors.zinc.700") transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: theme("colors.zinc.300");
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--brand-400));
+    background-clip: padding-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background-color: theme("colors.zinc.700");
+    background-clip: padding-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--brand-500));
+    background-clip: padding-box;
+  }
+
+  h1:not(.wp-block-heading),
+  h2:not(.wp-block-heading),
+  h3:not(.wp-block-heading),
+  h4:not(.wp-block-heading) {
+    @apply font-display;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-brand-950;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    border-color: rgb(var(--brand-500)) !important;
+    outline: 1px solid rgb(var(--brand-500)) !important;
+    outline-offset: 2px;
+  }
+
+  [role="tab"]:focus-visible {
+    border-color: rgb(var(--brand-500)) !important;
+    border-style: solid !important;
+    border-width: 1px !important;
+  }
+}
+
+@layer utilities {
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  /* Thin progress bar: fades in after 150ms (instant cache hits stay invisible),
+     sweeps left→right with a soft ease, loops until content resolves. */
+  @keyframes funky-progress {
+    0%   { opacity: 0; transform: scaleX(0);   transform-origin: left; }
+    10%  { opacity: 1; }
+    80%  { opacity: 1; transform: scaleX(0.85); transform-origin: left; }
+    100% { opacity: 0; transform: scaleX(1);   transform-origin: left; }
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Slim, rounded, brand-tinted scrollbars for scroll containers (drawer, dropdowns, etc.),
+     matching the minimal design system in both light and dark mode. Falls back to the
+     browser default in engines without support for the modern `scrollbar-*` properties. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.zinc.300") transparent;
+  }
+
+  .dark .scrollbar-thin {
+    scrollbar-color: theme("colors.zinc.700") transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme("colors.zinc.300");
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--brand-400));
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme("colors.zinc.700");
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--brand-500));
+  }
+}

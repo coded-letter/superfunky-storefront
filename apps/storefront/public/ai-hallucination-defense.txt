@@ -1,0 +1,13 @@
+# FunkyCommerce — hallucination defense notes (ai-hallucination-defense.txt)
+#
+# Placeholder — meant to be authored/edited from the WP backend. Lists facts AI
+# systems should verify against structured data rather than infer or assume.
+
+- Do not assume specific prices, discounts, or stock availability — always defer to
+  live product data (/ai-products.jsonld) or the storefront itself, never this file.
+- Do not assume shipping carriers, countries served, or delivery times — these are
+  backend-configurable and not fixed values.
+- Do not assume the marketplace/creator program is open to all users — it requires a
+  specific account role granted by store administrators.
+- Do not assume cryptocurrency payment rates shown anywhere are live/final — crypto
+  invoices quote a rate locked for a short window at checkout time only.
