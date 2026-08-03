@@ -24,7 +24,7 @@ export const WORDPRESS_DOCUMENTATION_TAILWIND_CLASSES = `
 [&_th]:border-b [&_th]:border-zinc-300 [&_th]:p-3 [&_th]:text-left
 [&_th]:text-zinc-950 [&_ul]:m-0 [&_ul]:pl-6
 absolute bg-brand-50 bg-brand-500 bg-white bg-zinc-200 bg-zinc-300
-bg-zinc-950 border border-b border-l border-zinc-200 bottom-2
+bg-zinc-950 border border-b border-l border-zinc-200 bottom-2 bottom-3
 cursor-pointer
 dark:[&_a]:text-brand-400 dark:[&_blockquote]:bg-brand-950/20
 dark:[&_code]:bg-zinc-800 dark:[&_h2]:border-zinc-800
@@ -37,25 +37,30 @@ dark:group-data-[active=true]:bg-brand-400
 dark:group-data-[active=true]:ring-brand-950
 dark:hover:bg-zinc-800/80 dark:hover:text-white dark:ring-brand-800
 dark:ring-zinc-950 dark:text-brand-300 dark:text-brand-400 dark:text-white
+dark:text-zinc-200
 dark:text-zinc-300 dark:text-zinc-400 dark:text-zinc-950
-fixed flex font-black font-bold font-semibold
-gap-0.5 gap-3 gap-4 gap-5 gap-8 grid group
+fixed flex flex-col flex-nowrap font-black font-bold font-semibold
+gap-0 gap-0.5 gap-1 gap-3 gap-4 gap-5 gap-8 grid group group/section
 group-data-[active=true]:bg-brand-600
+group-data-[active=true]:scale-125
 group-data-[active=true]:ring-brand-100
 group-focus-visible:bg-brand-500 group-focus-visible:opacity-100
-group-hover:bg-brand-500 group-hover:opacity-100 group-open:rotate-180
-h-1.5 h-2.5 h-4 h-8 hidden hover:[&_a]:underline hover:bg-zinc-100
+group-hover:bg-brand-500 group-hover:opacity-100
+group-open/section:rotate-180 group-open:rotate-180
+h-1.5 h-2.5 h-4 h-7 h-8 hidden hover:[&_a]:underline hover:bg-zinc-100
 hover:text-zinc-950 items-center items-start justify-between justify-center
-justify-end leading-7 left-1/2 lg:block
-lg:grid-cols-[18rem_minmax(0,1fr)] lg:hidden list-none m-0 marker:hidden
+justify-end leading-7 left-1/2 lg:basis-1/4 lg:basis-3/4 lg:block
+lg:flex-nowrap lg:flex-row lg:hidden lg:pl-6 lg:pr-6 list-none m-0 marker:hidden ml-3
 max-h-[70vh] max-h-[calc(100vh-7rem)] max-w-[1600px]
 mb-10 mb-3 mb-6 min-w-0 mx-auto no-underline opacity-0 outline-none
-overflow-y-auto p-0 p-3 pb-1 pb-8 pl-3 pointer-events-none pr-0.5 pr-2
-pt-3 px-1 px-2 px-3 px-4 py-1 py-2 py-3 relative right-4 right-6
+overflow-y-auto p-0 p-3 pb-1 pb-2 pb-8 pl-3 pointer-events-none pr-0.5 pr-2
+pt-1 pt-3 px-1 px-2 px-2.5 px-3 px-4 py-1 py-1.5 py-2 py-3
+relative right-2 right-4 right-6 right-8
 ring-1 ring-4 ring-brand-200 ring-inset ring-white rounded-2xl
 rounded-full rounded-lg rounded-xl shadow-lg shadow-sm sm:text-4xl sticky
 text-3xl text-base text-brand-600 text-brand-700 text-sm text-white text-xs
-text-zinc-400 text-zinc-600 text-zinc-700 text-zinc-950 top-1/2 top-2
+text-zinc-400 text-zinc-600 text-zinc-700 text-zinc-800 text-zinc-950
+top-1/2 top-2 top-3
 top-24 tracking-[0.18em] tracking-tight transition uppercase w-1.5 w-2.5
-w-4 w-8 w-full w-px whitespace-nowrap xl:flex xl:gap-12 z-30
+w-4 w-7 w-8 w-full w-px whitespace-nowrap xl:flex xl:pl-8 xl:pr-8 z-30
 `;
