@@ -7,6 +7,7 @@ import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortc
 import { renderWordPressContent } from "../components/WordPressSpecialPageContent";
 import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
 import { useIncrementalData } from "../lib/incrementalData";
+import { mountDocumentationBehavior } from "../lib/documentationBehavior";
 import { executeContentScripts, mountEnqueuedScripts } from "../lib/pageScripts";
 import { mountPageStyles } from "../lib/pageStyles";
 import { getPageByUri } from "../lib/pages";
@@ -35,10 +36,12 @@ export function PageMockupPage() {
 
   useEffect(() => {
     if (!page || !contentRef.current) return;
+    const unmountDocumentation = mountDocumentationBehavior(contentRef.current);
     executeContentScripts(contentRef.current);
     const unmountScripts = mountEnqueuedScripts(page.scripts);
     const unmountStyles = mountPageStyles(page.themeStyles);
     return () => {
+      unmountDocumentation();
       unmountScripts();
       unmountStyles();
     };
