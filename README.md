@@ -1,36 +1,84 @@
 # Superfunky Storefront
 
-Free, open-source (MIT) React + Vite + TypeScript headless storefront for the
+Free, open-source (MIT) React headless storefront for the
 [Superfunky](https://superfunky.pro) headless WordPress/WooCommerce platform.
 
-This storefront talks to any WordPress site running WPGraphQL + WooGraphQL (or the
-companion [`superfunky-theme`](https://github.com/coded-letter/superfunky-theme)) over
-GraphQL, and to Stripe for checkout.
+Pair this storefront with [`superfunky-theme`](https://github.com/coded-letter/superfunky-theme)
+(the WordPress backend theme).
 
-## Status
+## Features
 
-**This repository is currently a scaffold only.** It contains no application source
-code yet. It exists so the public repository, licence, and CI conventions are in place
-before real code is extracted from the private integration monorepo
-(`coded-letter/superfunky-woo`), one module at a time, with review — see
-[`EXTRACTION_STATUS.md`](./EXTRACTION_STATUS.md) for the current migration checklist.
+- ⚡ **Vite + React 18** — fast development and production builds
+- 🛒 **Full e-commerce** — catalog, product pages, cart, checkout, account
+- 💳 **Stripe Payment Element** — secure card payments via WooCommerce Store API
+- 🌍 **Multilingual** — English and Polish with extensible locale system
+- 🎨 **Tailwind CSS** — utility-first styling with WordPress theme.json integration
+- 🌙 **Dark mode** — automatic and manual dark/light theme switching
+- 👥 **Community** — user profiles, community posts, marketplace, followers
+- 🔍 **SEO** — prerendering, sitemaps, RSS/Atom feeds, AI discovery files
+- 📱 **PWA-ready** — service worker, offline support, push notifications
+- 🔊 **Sound UX** — optional interaction sounds with per-event control
+- 🍪 **Cookie consent** — GDPR-compliant consent banner
 
-## What this project is (and isn't)
+## Quick Start
 
-- **Is**: a minimal, free, community-usable headless storefront starter — the open-source
-  "acquisition" edge of the Superfunky product family.
-- **Isn't**: the commercial Superfunky Pro theme, the premium plugin bundle, or any
-  paid feature. Those remain closed-source in the private monorepo and are never
-  extracted here.
+```bash
+# Clone the repository
+git clone https://github.com/coded-letter/superfunky-storefront.git
+cd superfunky-storefront
+
+# Install dependencies
+pnpm install
+
+# Copy environment config
+cp apps/storefront/.env.example apps/storefront/.env
+
+# Edit .env to point at your WordPress/WPGraphQL endpoint
+# VITE_GRAPHQL_ENDPOINT=https://your-site.com/graphql
+
+# Start development server
+pnpm dev
+```
+
+## Project Structure
+
+```
+apps/storefront/     # Main Vite application
+  src/
+    components/      # React components
+    lib/             # API clients, utilities
+    pages/           # Route pages
+    state/           # Context providers, state management
+  public/            # Static assets, SEO files
+  scripts/           # Build scripts (prerender, SEO generation)
+packages/ui/         # Shared React component library (@funky/ui)
+  src/
+    catalog/         # Product cards, gallery, quick view
+    layout/          # Header, footer, cart, search, cookie consent
+    locale/          # Language, currency, UI strings contexts
+    state/           # Cart, sound, collections, brand palettes
+```
+
+## Requirements
+
+- Node.js 18+
+- pnpm 9+
+- A WordPress site with [WPGraphQL](https://wpgraphql.com/) and the
+  [Superfunky Theme](https://github.com/coded-letter/superfunky-theme)
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `VITE_GRAPHQL_ENDPOINT` | WordPress WPGraphQL endpoint URL |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (`pk_...`) for checkout |
+| `VITE_GEOLOCATION_ENDPOINT` | Optional CDN geolocation endpoint |
 
 ## Licence
 
-MIT — see [`LICENSE`](./LICENSE). Contributions are welcome once the initial code
-extraction lands.
+MIT — see [`LICENSE`](./LICENSE).
 
 ## Related repositories
 
 - [`coded-letter/superfunky-theme`](https://github.com/coded-letter/superfunky-theme) —
-  companion free WordPress theme (GPL-2.0).
-- `coded-letter/superfunky-woo` (private) — the source-of-truth integration monorepo,
-  including the commercial Pro theme and premium plugin bundle.
+  companion WordPress backend theme (GPL-2.0)
