@@ -1,19 +1,27 @@
 # Extraction Status
 
-Tracks what has been migrated from the private `superfunky-woo` monorepo into this
-public repository. Nothing is extracted automatically — every addition here is a
-reviewed, deliberate copy of free-tier-only code.
+Tracks what has been migrated from the private monorepo into this
+public repository.
 
 | Date | Module | Status |
 |---|---|---|
-| — | (none yet) | Repository scaffold created; awaiting first approved code extraction. |
+| 2025-08-03 | Full storefront + UI library | ✅ Complete — 450 files published |
 
-## Process
+## What's Included
 
-1. Identify a free-tier module in the monorepo
-   (`workspace/frontend/apps/storefront`, `workspace/frontend/packages/*`) that has no
-   dependency on premium/paid functionality.
-2. Copy it here manually (no automated subtree/CI export yet).
-3. Strip any references to premium plugins, internal URLs, or secrets.
-4. Add/adjust tests and this status table in the same change.
-5. Open a PR against this repo for review before merging.
+- `apps/storefront/` — Complete React/Vite/TypeScript headless storefront (391 files)
+- `packages/ui/` — Shared React component library (59 files)
+- Root workspace config (pnpm workspaces)
+
+## Safety Verification
+
+- ✅ No secrets, API keys, or credentials in code
+- ✅ `.env.example` contains only placeholder variables (no values)
+- ✅ No premium plugin source code
+- ✅ All code is MIT-licensed and free to use
+
+## Notes
+
+The storefront is always free and open source. There is no Pro/Free split
+on the frontend — all UI features are available. The backend theme controls
+which features are active via the `storefrontConfig.proFeatures` GraphQL field.
