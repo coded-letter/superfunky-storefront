@@ -1,4 +1,4 @@
-export { ProductCard, resolveVariationSwatchColor } from "./ProductCard";
+export { ProductCard, ProductCardPreferencesProvider, resolveVariationSwatchColor } from "./ProductCard";
 export type {
   ProductCardData,
   ProductCardImageAspect,

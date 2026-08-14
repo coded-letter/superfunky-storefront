@@ -13,33 +13,25 @@ type PopupState = {
 };
 
 const STORAGE_KEY = "funkycommerce-mailing-list-popup";
-const INITIAL_DELAY_MS = 6000;
 const SUBSCRIBE_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 30;
 const DAY_MS = 1000 * 60 * 60 * 24;
-
-function readPopupState(): PopupState {
-  if (typeof window === "undefined") return { status: "idle", nextVisibleAt: null };
-
-  try {
-    const parsed = window.localStorage.getItem(STORAGE_KEY);
-    if (!parsed) return { status: "idle", nextVisibleAt: null };
-
-    const value = JSON.parse(parsed) as Partial<PopupState>;
-    return {
-      status: value.status === "dismissed" || value.status === "subscribed" ? value.status : "idle",
-      nextVisibleAt: typeof value.nextVisibleAt === "number" ? value.nextVisibleAt : null,
-    };
-  } catch {
-    return { status: "idle", nextVisibleAt: null };
-  }
-}
 
 function writePopupState(next: PopupState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
-export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: string) => Promise<void> }) {
+export function NewsletterSignupPopup({
+  onSubscribe,
+  title = "Be the first to know when the next favorite drops.",
+  description = "Join our insider list for early access, private offers, and curated stories from the Superfunky world.",
+  privacyConsentLabel = "I agree to receive occasional email updates and understand that I can unsubscribe at any time.",
+}: {
+  onSubscribe?: (email: string) => Promise<void>;
+  title?: string;
+  description?: string;
+  privacyConsentLabel?: string;
+}) {
   const { playAction } = useSoundUX();
   const { showNewsletterPopup, newsletterPopupVariant, newsletterPopupCooldownDays } = useLayoutPreferences();
   const [isOpen, setIsOpen] = useState(false);
@@ -59,22 +51,6 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!showNewsletterPopup) return;
-
-    const state = readPopupState();
-    const now = Date.now();
-    if (state.nextVisibleAt && now < state.nextVisibleAt) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setIsOpen(true);
-      setIsVisible(false);
-    }, INITIAL_DELAY_MS);
-    return () => window.clearTimeout(timeout);
-  }, [showNewsletterPopup]);
 
   // Any link/URL ending in `#newsletter` opens this popup on demand — a plain anchor
   // works from the footer, a nav item, inline copy, etc. — bypassing the initial delay
@@ -122,11 +98,7 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
     }
 
     playAction("modal-open");
-
-    const frame = window.requestAnimationFrame(() => {
-      setIsVisible(true);
-    });
-    return () => window.cancelAnimationFrame(frame);
+    setIsVisible(true);
   }, [isOpen, playAction]);
 
   useEffect(() => {
@@ -270,7 +242,7 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500"
         />
         <span className="break-words">
-          I agree to receive occasional email updates and understand that I can unsubscribe at any time.
+          {privacyConsentLabel}
         </span>
       </label>
 
@@ -311,7 +283,7 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
     // A compact, non-blocking bottom-corner toast card — no dark overlay, slides up
     // from the corner instead of the classic centered dialog.
     return (
-      <div className="funky-newsletter-popup pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-3 pb-3 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:justify-end sm:px-0 sm:pb-0">
+      <div className="sf-newsletter-popup funky-newsletter-popup pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-3 pb-3 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:justify-end sm:px-0 sm:pb-0">
         <div
           role="dialog"
           aria-modal="true"
@@ -326,10 +298,10 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
             <span>Stay in the loop</span>
           </div>
           <h3 className="mt-3 font-display text-lg font-semibold leading-tight text-zinc-900 dark:text-zinc-100">
-            Be first to know when the next favorite drops.
+            {title}
           </h3>
           <p className="m-0 mt-1.5 text-[13px] leading-5 text-zinc-500 dark:text-zinc-400">
-            Early access and private offers — one quick email.
+            {description}
           </p>
           {isSubscribed ? subscribedPanel : subscribeForm}
         </div>
@@ -350,7 +322,7 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
           role="dialog"
           aria-modal="true"
           aria-label="Join the mailing list"
-          className={`funky-newsletter-popup relative w-full max-w-md overflow-hidden rounded-4xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 ${
+          className={`sf-newsletter-popup funky-newsletter-popup relative w-full max-w-md overflow-hidden rounded-4xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 ${
             isVisible ? "translate-y-0 scale-[1] opacity-100" : "translate-y-6 scale-[0.98] opacity-0"
           }`}
         >
@@ -361,10 +333,10 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
               <Sparkles className="h-6 w-6" aria-hidden="true" />
             </div>
             <h3 className="mt-4 font-display text-2xl font-bold leading-tight text-zinc-900 dark:text-zinc-100">
-              Be the first to know when the next favorite drops.
+              {title}
             </h3>
             <p className="m-0 mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Join our insider list for early access, private offers, and curated stories from the FunkyCommerce world.
+              {description}
             </p>
             {isSubscribed ? subscribedPanel : subscribeForm}
             <div className="flex justify-center">{trustRow}</div>
@@ -385,7 +357,7 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
        role="dialog"
        aria-modal="true"
        aria-label="Join the mailing list"
-       className={`funky-newsletter-popup relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 sm:max-h-[calc(100dvh-3rem)] sm:rounded-4xl ${
+       className={`sf-newsletter-popup funky-newsletter-popup relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 sm:max-h-[calc(100dvh-3rem)] sm:rounded-4xl ${
          isVisible ? "translate-y-0 scale-[1] opacity-100" : "translate-y-6 scale-[0.98] opacity-0"
        }`}
       >
@@ -427,10 +399,10 @@ export function NewsletterSignupPopup({ onSubscribe }: { onSubscribe?: (email: s
               </div>
               <div className="space-y-2 sm:space-y-3">
                 <h3 className="max-w-[18rem] font-display text-[1.35rem] font-semibold leading-[1.05] text-zinc-900 sm:max-w-none sm:text-3xl sm:leading-[0.95] dark:text-zinc-100">
-                  Be the first to know when the next favorite drops.
+                  {title}
                 </h3>
                 <p className="m-0 max-w-xl text-[13px] leading-6 text-zinc-600 sm:text-[15px] sm:leading-7 dark:text-zinc-400">
-                  Join our insider list for early access, private offers, and curated stories from the FunkyCommerce world.
+                  {description}
                 </p>
               </div>
             </div>

@@ -8,9 +8,8 @@
  * isn't configured, so pages can call these unconditionally without special-casing the
  * mockup environment. */
 
-import { useEffect, useState } from "react";
-import { isBackendConfigured } from "./env";
-import { graphqlRequest } from "./graphqlClient";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { graphqlRequest, isBackendConfigured } from "@funky/sdk";
 
 const STORAGE_KEY = "funkycommerce-auth";
 
@@ -376,12 +375,54 @@ export function isUserLoggedIn(): boolean {
   return Boolean(authStore.load()?.authToken);
 }
 
+export function useIsUserLoggedIn(): boolean {
+  return useSyncExternalStore(authStore.subscribe, isUserLoggedIn, () => false);
+}
+
+function accountIdFromAuth(auth: StoredAuth | null): string | null {
+  const userId = Number(auth?.user?.databaseId);
+  if (Number.isInteger(userId) && userId > 0) return String(userId);
+
+  // Sessions created by older storefront versions may predate the stored user id.
+  // The signed JWT's stable subject still gives saved lists an account scope without
+  // using the access token itself (which changes on refresh).
+  const payload = auth?.authToken?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = JSON.parse(atob(normalized)) as { sub?: unknown; data?: { user?: { id?: unknown } } };
+    const tokenUserId = Number(decoded.data?.user?.id ?? decoded.sub);
+    return Number.isInteger(tokenUserId) && tokenUserId > 0 ? String(tokenUserId) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A stable account key for state that must never cross logout/account switches. */
+export function useAuthenticatedAccountId(): string | null {
+  return useSyncExternalStore(authStore.subscribe, () => accountIdFromAuth(authStore.load()), () => null);
+}
+
 export function logOut(): void {
   authStore.clear();
 }
 
 const HEARTBEAT_INTERVAL_MS = 60_000; // Check every minute.
 const REFRESH_BUFFER_SECONDS = 90; // Refresh 90s before expiry, not exactly at expiry.
+
+/** Returns a usable access token for non-GraphQL backend requests. Refreshing here
+ * prevents a checkout started near token expiry from silently becoming a guest order. */
+export async function getAuthTokenForRequest(): Promise<string | null> {
+  const auth = authStore.load();
+  if (!auth?.authToken) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (auth.authTokenExpiration && now >= auth.authTokenExpiration - REFRESH_BUFFER_SECONDS) {
+    return performRefresh();
+  }
+
+  return auth.authToken;
+}
 
 /** Session-keepalive heartbeat — ports the legacy `useAuthHeartbeat` hook. Polls the
  * stored token's expiry every minute and calls `performRefresh()` shortly before it

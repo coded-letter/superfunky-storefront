@@ -1,6 +1,6 @@
 {
-  "name": "FunkyCommerce",
-  "short_name": "FunkyCommerce",
+  "name": "Superfunky",
+  "short_name": "Superfunky",
   "description": "A modern storefront experience — shop, journal, and account, installable as an app with offline support and push notifications.",
   "id": "/",
   "start_url": "/?source=pwa",

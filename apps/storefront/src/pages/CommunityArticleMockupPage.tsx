@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, Calendar } from "lucide-react";
-import { ResponsiveImage, avatarColorFor } from "@funky/ui";
+import { ResponsiveImage, avatarColorFor, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ShareButtonsRow } from "./ShareButtons";
 import { NotFoundMockupPage } from "./NotFoundMockupPage";
@@ -19,6 +19,7 @@ import { getCreatorArticleBySlug, getSocialUserByHandle } from "./socialShared";
 export function CommunityArticleMockupPage() {
   const { handle = "", slug = "" } = useParams();
   const creatorContent = useCreatorContent();
+  const { discussionLayout } = useLayoutPreferences();
   const author = getSocialUserByHandle(handle);
   const userArticles = useMemo(
     () => creatorContent.articles.filter((article) => article.vendorHandle === handle),
@@ -97,7 +98,7 @@ export function CommunityArticleMockupPage() {
 
         {article.imageUrl ? (
           <div className="overflow-hidden rounded-3xl bg-zinc-100 shadow-soft dark:bg-zinc-900">
-            <ResponsiveImage src={article.imageUrl} alt="" priority sizes="100vw" className="h-auto w-full object-cover" style={{ aspectRatio: "16 / 9" }} />
+            <ResponsiveImage src={article.imageUrl} alt="" priority sizes="100vw" className="aspect-video h-auto w-full object-cover" />
           </div>
         ) : null}
 
@@ -127,10 +128,13 @@ export function CommunityArticleMockupPage() {
 
       <CommentsSection
         anchorId="discussion"
+        contentKey={`community-article:${handle}:${slug}`}
         heading="Discussion"
         initialReviews={[]}
         formTitle="Join the discussion"
-        formNote="Comments are held for moderation, just like a standard WordPress comment, and only appear once approved."
+        formNote="Comments are held for moderation and only appear once approved."
+        showRatingField={false}
+        discussionLayout={discussionLayout}
       />
     </div>
   );

@@ -3,8 +3,10 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   BellRing,
+  Download,
   Eye,
   EyeOff,
+  ExternalLink,
   LogOut,
   Mail,
   MapPin,
@@ -16,46 +18,65 @@ import {
   ShieldCheck,
   Sparkles,
   Store,
+  Trash2,
   Upload,
   User,
   Users,
 } from "lucide-react";
 import { InputMock, primaryActionButtonClass } from "./shared";
-import { CustomerShortcodePage } from "../components/CustomerShortcodePage";
-import { useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { StandaloneApplicationNotice, useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import {
   getCurrentPermission,
   getExistingSubscription,
+  getPushPreferences,
   isPushBackendConfigured,
   isPushSupported,
   subscribeToPush,
   unsubscribeFromPush,
+  updatePushPreferences,
   type PushPermission,
 } from "../lib/push";
-import { ListProductModal, PaginablePostGrid, PaginableProductGrid, ResponsiveImage, SocialFeedGrid, UploadPostModal, WriteArticleModal, useCurrency, useLanguage, useToast, type ListProductInitialValues, type SocialPostCardData, type WriteArticleInitialValues } from "@funky/ui";
+import { ListProductModal, PaginablePostGrid, PaginableProductGrid, ResponsiveImage, SocialFeedGrid, UploadPostModal, WriteArticleModal, avatarColorFor, useCurrency, useLanguage, useT, useToast, type ListProductInitialValues, type SocialPostCardData, type WriteArticleInitialValues } from "@funky/ui";
 import { useCommunityData } from "../state/communityData";
 import { useBlogData } from "../state/blogData";
 import {
   createCollaboratorPost,
   createCommunityPost,
   createMarketplaceProduct,
+  deleteCollaboratorPost,
   getCollaboratorPostForEditing,
+  getCommunityProfileConnection,
+  getCommunityProfileDashboard,
   getMarketplaceProductForEditing,
+  manageCommunityFollower,
+  removeCommunityProfileCover,
+  searchTranslationCandidateCommunityPosts,
   searchTranslationCandidatePosts,
   updateCollaboratorPost,
   updateCommunityProfileVisibility,
   updateMarketplaceProduct,
+  uploadCommunityProfileCover,
+  type CommunityMember,
+  type CommunityProfileConnection,
 } from "../lib/community";
 import { authStore, logOut } from "../lib/auth";
-import { useStorefrontPath } from "../lib/storefrontPaths";
+import { orderDetailsPath, useStorefrontPath } from "../lib/storefrontPaths";
+import { ACCOUNT_TABS, accountTabFromHash, accountTabLocation, configuredAccountTabs, type AccountTab } from "../lib/accountNavigation";
+import { resolveMarketplaceMutationPrice } from "../lib/marketplaceProductPricing";
+import { DigitalDownloadsPanel } from "../components/DigitalDownloadsPanel";
 import {
   getStorefrontAccount,
+  removeStorefrontAvatar,
+  resendStorefrontEmailVerification,
+  updateStorefrontEmail,
   updateStorefrontAddress,
+  uploadStorefrontAvatar,
   type AccountAddress,
+  type AccountAvatar,
   type StorefrontAccount,
 } from "../lib/account";
-
-type AccountTab = "dashboard" | "orders" | "addresses" | "community";
+import { readAvatarFile } from "../lib/accountAvatar";
+import { useNavigationData } from "../state/navigationData";
 
 const ORDER_STATUS_CLASS: Record<string, string> = {
   processing: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
@@ -67,13 +88,6 @@ const ORDER_STATUS_CLASS: Record<string, string> = {
   failed: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
 };
 
-const ACCOUNT_TABS: AccountTab[] = ["dashboard", "orders", "addresses", "community"];
-
-function tabFromHash(hash: string): AccountTab | null {
-  const candidate = hash.replace("#", "") as AccountTab;
-  return ACCOUNT_TABS.includes(candidate) ? candidate : null;
-}
-
 /**
  * Account shell backed by authenticated WordPress and WooCommerce account data. The
  * active tab remains URL-addressable for account-menu deep links.
@@ -81,26 +95,22 @@ function tabFromHash(hash: string): AccountTab | null {
 export function AccountMockupPage() {
   const embedded = useEmbeddedApplicationShortcode();
   if (!embedded) {
-    return (
-      <CustomerShortcodePage
-        pageKey="account"
-        defaultShortcode="account"
-        defaultAttributes={{ "default-tab": "dashboard", tabs: "dashboard,orders,addresses,community" }}
-      />
-    );
+    return <StandaloneApplicationNotice shortcode="account" />;
   }
   const location = useLocation();
   const navigate = useNavigate();
+  const t = useT();
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const config = useApplicationShortcode(["funkycommerce_account", "woocommerce_my_account"], {
     "default-tab": "dashboard",
-    tabs: "dashboard,orders,addresses,community",
+    tabs: "dashboard,orders,downloads,addresses,community",
   });
   const configuredTab = ACCOUNT_TABS.includes(config["default-tab"] as AccountTab) ? config["default-tab"] as AccountTab : "dashboard";
-  const allowedTabs = config.tabs.split(",").map((tab) => tab.trim()).filter((tab): tab is AccountTab => ACCOUNT_TABS.includes(tab as AccountTab));
+  const allowedTabs = configuredAccountTabs(config.tabs);
   const defaultTab = allowedTabs.includes(configuredTab) ? configuredTab : allowedTabs[0] ?? "dashboard";
-  const [activeTab, setActiveTab] = useConfiguredState<AccountTab>(embedded ? defaultTab : tabFromHash(location.hash) ?? defaultTab);
+  const hashTab = accountTabFromHash(location.hash);
+  const [activeTab, setActiveTab] = useConfiguredState<AccountTab>(hashTab && allowedTabs.includes(hashTab) ? hashTab : defaultTab);
   const [accountRevision, setAccountRevision] = useState(0);
   const [authUserId, setAuthUserId] = useState(() => authStore.load()?.user?.databaseId || 0);
   const [accountState, setAccountState] = useState<{ data: StorefrontAccount | null; isLoading: boolean; error: Error | null }>({
@@ -130,14 +140,29 @@ export function AccountMockupPage() {
     };
   }, [accountRevision, authUserId]);
   const account = accountState.data;
+  const accountInitials = `${account?.firstName[0] ?? ""}${account?.lastName[0] ?? ""}`.toUpperCase() || "—";
+
+  const updateAccountAvatar = ({ avatarUrl, attachmentId }: AccountAvatar) => {
+    setAccountState((current) => current.data
+      ? {
+          ...current,
+          data: {
+            ...current.data,
+            avatarUrl,
+            avatarAttachmentId: attachmentId,
+          },
+        }
+      : current);
+  };
 
   useEffect(() => {
-    setActiveTab(embedded ? defaultTab : tabFromHash(location.hash) ?? defaultTab);
-  }, [defaultTab, embedded, location.hash, setActiveTab]);
+    const nextHashTab = accountTabFromHash(location.hash);
+    setActiveTab(nextHashTab && allowedTabs.includes(nextHashTab) ? nextHashTab : defaultTab);
+  }, [allowedTabs.join(","), defaultTab, location.hash, setActiveTab]);
 
   const selectTab = (tab: AccountTab) => {
     setActiveTab(tab);
-    if (!embedded) navigate(`/account#${tab}`, { replace: true });
+    navigate(accountTabLocation(location, tab), { replace: true });
   };
 
   return (
@@ -145,37 +170,62 @@ export function AccountMockupPage() {
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="grid h-fit gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-28">
           <div className="flex items-center gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-bold text-white">
-              JD
-            </div>
-            <div className="grid min-w-0 gap-0.5">
-              <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{account?.displayName || "Guest account"}</p>
-              <p className="m-0 truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.email || "Sign in to load your account"}</p>
-            </div>
+            {accountState.isLoading ? (
+              <div className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-700" aria-hidden="true" />
+            ) : account?.avatarUrl ? (
+              <ResponsiveImage
+                src={account.avatarUrl}
+                alt=""
+                priority
+                sizes="2.75rem"
+                className="h-11 w-11 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-bold text-white">
+                {accountInitials}
+              </div>
+            )}
+            {accountState.isLoading ? (
+              <div className="grid min-w-0 flex-1 gap-2" role="status" aria-label="Loading account identity">
+                <span className="h-3.5 w-28 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                <span className="h-3 w-36 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+              </div>
+            ) : (
+              <div className="grid min-w-0 gap-0.5">
+                <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{account?.displayName || "Guest account"}</p>
+                <p className="m-0 truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.email || "Sign in to load your account"}</p>
+              </div>
+            )}
           </div>
 
           <nav className="grid gap-1">
             {allowedTabs.includes("dashboard") ? <SidebarTab
               icon={<User className="h-4 w-4" aria-hidden="true" />}
-              label="Dashboard"
+              label={t("account.tab.dashboard")}
               isActive={activeTab === "dashboard"}
               onClick={() => selectTab("dashboard")}
             /> : null}
             {allowedTabs.includes("orders") ? <SidebarTab
               icon={<Package className="h-4 w-4" aria-hidden="true" />}
-              label="Orders"
+              label={t("account.tab.orders")}
               isActive={activeTab === "orders"}
               onClick={() => selectTab("orders")}
             /> : null}
+            {allowedTabs.includes("downloads") ? <SidebarTab
+              icon={<Download className="h-4 w-4" aria-hidden="true" />}
+              label="Downloads"
+              isActive={activeTab === "downloads"}
+              onClick={() => selectTab("downloads")}
+            /> : null}
             {allowedTabs.includes("addresses") ? <SidebarTab
               icon={<MapPin className="h-4 w-4" aria-hidden="true" />}
-              label="Addresses"
+              label={t("account.tab.addresses")}
               isActive={activeTab === "addresses"}
               onClick={() => selectTab("addresses")}
             /> : null}
             {allowedTabs.includes("community") ? <SidebarTab
               icon={<Users className="h-4 w-4" aria-hidden="true" />}
-              label="Community"
+              label={t("account.tab.community")}
               isActive={activeTab === "community"}
               onClick={() => selectTab("community")}
             /> : null}
@@ -203,9 +253,16 @@ export function AccountMockupPage() {
         <section>
           {!authUserId ? <GuestAccountPanel tab={activeTab} authLoginPath={authLoginPath} authRegisterPath={authRegisterPath} /> : null}
           {authUserId && activeTab === "dashboard" ? (
-            <DashboardPanel account={account} isLoading={accountState.isLoading} error={accountState.error} />
+            <DashboardPanel
+              account={account}
+              isLoading={accountState.isLoading}
+              error={accountState.error}
+              onAvatarChanged={updateAccountAvatar}
+              onAccountChanged={() => setAccountRevision((revision) => revision + 1)}
+            />
           ) : null}
           {authUserId && activeTab === "orders" ? <OrdersPanel account={account} isLoading={accountState.isLoading} error={accountState.error} /> : null}
+          {authUserId && activeTab === "downloads" ? <DownloadsPanel account={account} isLoading={accountState.isLoading} error={accountState.error} /> : null}
           {authUserId && activeTab === "addresses" ? (
             <AddressesPanel
               account={account}
@@ -225,7 +282,7 @@ const GUEST_ACCOUNT_CONTENT: Record<AccountTab, { eyebrow: string; title: string
   dashboard: {
     eyebrow: "Your personal storefront",
     title: "Bring your account experience together",
-    description: "Sign in to see your verified profile and the private customer tools available to your WordPress account.",
+    description: "Sign in to see your verified profile and private customer tools.",
     benefits: ["Review your profile and account status", "See orders and saved delivery details together", "Discover publishing tools enabled for your role"],
   },
   orders: {
@@ -234,10 +291,16 @@ const GUEST_ACCOUNT_CONTENT: Record<AccountTab, { eyebrow: string; title: string
     description: "Your order history is private. Sign in to review real order statuses, totals, products, and variation details.",
     benefits: ["See current fulfilment status", "Review line items and variations", "Keep past purchases available for reference"],
   },
+  downloads: {
+    eyebrow: "Secure digital library",
+    title: "Keep purchased files available",
+    description: "Sign in to access the downloads available to your account.",
+    benefits: ["Use signed download links", "Review expiry and remaining limits", "Keep purchases tied to your account"],
+  },
   addresses: {
     eyebrow: "Faster checkout",
     title: "Save billing and shipping details",
-    description: "Create an account to securely manage the addresses WordPress uses for your customer profile and future checkouts.",
+    description: "Create an account to securely manage your customer profile and checkout addresses.",
     benefits: ["Edit billing and shipping separately", "Reuse accurate customer details", "Keep address data private to your account"],
   },
   community: {
@@ -272,7 +335,7 @@ function GuestAccountPanel({ tab, authLoginPath, authRegisterPath }: { tab: Acco
           </Link>
           <Link
             to={authRegisterPath}
-            className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-700 no-underline transition hover:border-brand-400 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+            className="inline-flex items-center justify-center rounded-control border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-700 no-underline transition hover:border-brand-400 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
           >
             Create an account
           </Link>
@@ -335,15 +398,23 @@ function DashboardPanel({
   account,
   isLoading,
   error,
+  onAvatarChanged,
+  onAccountChanged,
 }: {
   account: StorefrontAccount | null;
   isLoading: boolean;
   error: Error | null;
+  onAvatarChanged: (avatar: AccountAvatar) => void;
+  onAccountChanged: () => void;
 }) {
+  const { showToast } = useToast();
+  const { viewer } = useCommunityData();
   const [profile, setProfile] = useState<ProfileFormState>(DEFAULT_PROFILE);
   const [draft, setDraft] = useState<ProfileFormState>(DEFAULT_PROFILE);
   const [isEditing, setIsEditing] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isAvatarSaving, setIsAvatarSaving] = useState(false);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
   useEffect(() => {
     if (!account) return;
     const nextProfile = {
@@ -356,6 +427,7 @@ function DashboardPanel({
     };
     setProfile(nextProfile);
     setDraft(nextProfile);
+    setAvatarUrl(account.avatarUrl);
   }, [account]);
 
   const startEditing = () => {
@@ -366,29 +438,109 @@ function DashboardPanel({
     setDraft(profile);
     setIsEditing(false);
   };
-  const saveEditing = () => {
+  const saveEditing = async () => {
+    if (!account) return;
+
+    if (draft.email !== profile.email) {
+      setIsSavingEmail(true);
+      try {
+        await updateStorefrontEmail(draft.email);
+        onAccountChanged();
+        showToast({
+          title: "Email updated",
+          description: account.emailVerificationRequired
+            ? "Check your inbox to confirm the new address."
+            : "Your new email address is ready to use.",
+          tone: "success",
+        });
+      } catch (saveError) {
+        showToast({
+          title: "Email could not be updated",
+          description: saveError instanceof Error ? saveError.message : "Check the address and try again.",
+          tone: "error",
+        });
+        setIsSavingEmail(false);
+        return;
+      }
+      setIsSavingEmail(false);
+    }
     setProfile(draft);
     setIsEditing(false);
+  };
+
+  const resendVerification = async () => {
+    try {
+      const status = await resendStorefrontEmailVerification();
+      const description = status === "sent"
+        ? "A new confirmation link was sent. Check your inbox."
+        : status === "throttled"
+          ? "A link was sent recently. Check your inbox or try again in a minute."
+          : status === "verified"
+            ? "This email is already verified."
+            : status === "disabled"
+              ? "Email verification is not required."
+              : "The confirmation email could not be sent. Please try again.";
+      showToast({
+        title: status === "failed" || status === "invalid" ? "Confirmation email not sent" : "Email confirmation",
+        description,
+        tone: status === "failed" || status === "invalid" ? "error" : "success",
+      });
+      if (status === "verified" || status === "disabled") onAccountChanged();
+    } catch (resendError) {
+      showToast({
+        title: "Confirmation email not sent",
+        description: resendError instanceof Error ? resendError.message : "Please try again.",
+        tone: "error",
+      });
+    }
   };
 
   const updateDraft = (key: keyof ProfileFormState) => (value: string) =>
     setDraft((previous) => ({ ...previous, [key]: value }));
 
-  // Mock-only avatar upload: previews the picked file locally via FileReader (no upload
-  // target exists yet) — mirrors the legacy prototype's separate "upload immediately"
-  // avatar mutation, decoupled from the main profile Save/Cancel flow.
-  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") setAvatarPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    setIsAvatarSaving(true);
+    try {
+      const imageDataUrl = await readAvatarFile(file);
+      const avatar = await uploadStorefrontAvatar(imageDataUrl);
+      setAvatarUrl(avatar.avatarUrl);
+      onAvatarChanged(avatar);
+      showToast({ title: "Avatar updated", description: "Your new profile image is now live.", tone: "success" });
+    } catch (uploadError) {
+      showToast({
+        title: "Avatar could not be updated",
+        description: uploadError instanceof Error ? uploadError.message : "Choose another image and try again.",
+        tone: "error",
+      });
+    } finally {
+      setIsAvatarSaving(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    setIsAvatarSaving(true);
+    try {
+      const avatar = await removeStorefrontAvatar();
+      setAvatarUrl(null);
+      onAvatarChanged(avatar);
+      showToast({ title: "Avatar removed", description: "Your initials will be shown instead.", tone: "success" });
+    } catch (removeError) {
+      showToast({
+        title: "Avatar could not be removed",
+        description: removeError instanceof Error ? removeError.message : "Try again.",
+        tone: "error",
+      });
+    } finally {
+      setIsAvatarSaving(false);
+    }
   };
 
   const initials = `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase() || "JD";
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
+  const canManageLayouts = viewer?.capabilities.includes("manage_options") ?? false;
   if (isLoading) return <AccountLoadingDots label="Loading your account" />;
   if (error) return <AccountPanelStatus message={error.message} tone="error" />;
   if (!account) return <AccountPanelStatus message="Sign in to load your profile and account summary." />;
@@ -399,9 +551,9 @@ function DashboardPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <div className="grid gap-2">
-              {avatarPreview ? (
+              {avatarUrl ? (
                 <ResponsiveImage
-                  src={avatarPreview}
+                  src={avatarUrl}
                   alt={fullName}
                   priority
                   sizes="4rem"
@@ -413,14 +565,37 @@ function DashboardPanel({
                 </div>
               )}
               {isEditing ? (
-                <label className="grid gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  <span className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-full border border-zinc-200 px-2.5 py-1 font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300">
-                    <Upload className="h-3 w-3" aria-hidden="true" />
-                    Change avatar
-                    <input type="file" accept="image/png, image/jpeg, image/gif, image/webp" onChange={handleAvatarChange} className="sr-only" />
-                  </span>
+                <div className="grid gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <label>
+                    <span className={`inline-flex w-fit items-center gap-1 rounded-control border border-zinc-200 px-2.5 py-1 font-semibold text-zinc-600 transition dark:border-zinc-700 dark:text-zinc-300 ${
+                      isAvatarSaving
+                        ? "cursor-wait opacity-60"
+                        : "cursor-pointer hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                    }`}>
+                      <Upload className="h-3 w-3" aria-hidden="true" />
+                      {isAvatarSaving ? "Saving avatar…" : avatarUrl ? "Change avatar" : "Add avatar"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
+                        onChange={handleAvatarChange}
+                        disabled={isAvatarSaving}
+                        className="sr-only"
+                      />
+                    </span>
+                  </label>
+                  {avatarUrl ? (
+                    <button
+                      type="button"
+                      onClick={handleAvatarRemove}
+                      disabled={isAvatarSaving}
+                      className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-rose-600 transition hover:text-rose-500 disabled:cursor-wait disabled:opacity-60 dark:text-rose-400"
+                    >
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
+                      Remove avatar
+                    </button>
+                  ) : null}
                   <span>Max file size 690KB</span>
-                </label>
+                </div>
               ) : null}
             </div>
             <div className="grid gap-1">
@@ -429,9 +604,19 @@ function DashboardPanel({
             </div>
           </div>
           <div className="grid gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              account.emailVerified
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                : account.emailVerificationRequired
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+            }`}>
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              Verified account
+              {account.emailVerified
+                ? "Verified email"
+                : account.emailVerificationRequired
+                  ? "Email verification required"
+                  : "Email verification optional"}
             </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -447,11 +632,46 @@ function DashboardPanel({
         </div>
       </div>
 
+      {account.emailVerificationRequired && !account.emailVerified ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="m-0">Confirm {account.email} using the link in your inbox. You can continue to sign in while confirmation is pending.</p>
+          <button
+            type="button"
+            onClick={resendVerification}
+            className="mt-3 rounded-control border border-amber-300 px-3.5 py-1.5 text-xs font-semibold transition hover:border-amber-500 dark:border-amber-800 dark:hover:border-amber-600"
+          >
+            Resend confirmation email
+          </button>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Orders placed" value={(account?.orders.length || 0).toString()} />
         <StatCard label="Saved addresses" value={[account?.billingAddress.address1, account?.shippingAddress.address1].filter(Boolean).length.toString()} />
         <StatCard label="Publishing role" value={account?.role || "Member"} />
       </div>
+
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          Storefront controls
+        </h2>
+        <div className={`mt-4 grid gap-3 ${canManageLayouts ? "sm:grid-cols-2" : ""}`}>
+          <AccountControlLink
+            to="/shortcodes"
+            icon={<Sparkles className="h-5 w-5" aria-hidden="true" />}
+            title="Shortcode library"
+            description="Browse public storefront shortcodes and their supported attributes."
+          />
+          {canManageLayouts ? (
+            <AccountControlLink
+              to="/layout-studio"
+              icon={<Store className="h-5 w-5" aria-hidden="true" />}
+              title="Layout Studio"
+              description="Configure storefront layouts and preview component variants."
+            />
+          ) : null}
+        </div>
+      </section>
 
       <PushNotificationsCard />
 
@@ -463,14 +683,15 @@ function DashboardPanel({
               <button
                 type="button"
                 onClick={saveEditing}
-                className={`${primaryActionButtonClass} !px-3.5 !py-1.5 text-xs`}
+                disabled={isSavingEmail}
+                className={`${primaryActionButtonClass} !px-3.5 !py-1.5 text-xs disabled:cursor-wait disabled:opacity-60`}
               >
-                Save
+                {isSavingEmail ? "Saving…" : "Save"}
               </button>
               <button
                 type="button"
                 onClick={cancelEditing}
-                className="rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+                className="rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
               >
                 Cancel
               </button>
@@ -520,6 +741,35 @@ function DashboardPanel({
   );
 }
 
+function AccountControlLink({
+  to,
+  icon,
+  title,
+  description,
+}: {
+  to: string;
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-start gap-3 rounded-xl border border-zinc-200 p-4 no-underline transition hover:border-brand-300 hover:bg-brand-50/50 dark:border-zinc-700 dark:hover:border-brand-600 dark:hover:bg-brand-500/5"
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
+        {icon}
+      </span>
+      <span className="grid gap-1">
+        <span className="font-semibold text-zinc-900 group-hover:text-brand-700 dark:text-zinc-100 dark:group-hover:text-brand-300">
+          {title}
+        </span>
+        <span className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</span>
+      </span>
+    </Link>
+  );
+}
+
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
@@ -529,21 +779,24 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Preview-only push-notification opt-in: registers/checks the `/sw.js` subscription
- * via `lib/push.ts` and reflects real browser permission + subscription state. The
- * actual pushes are configured and sent from the WP backend once it exists — see
- * `lib/push.ts`'s header comment for the expected REST routes. */
 function PushNotificationsCard() {
   const [permission, setPermission] = useState<PushPermission>(() => getCurrentPermission());
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState(["orders", "community", "marketing"]);
 
   useEffect(() => {
     let cancelled = false;
-    getExistingSubscription().then((subscription) => {
-      if (!cancelled) setIsSubscribed(Boolean(subscription));
-    });
+    getExistingSubscription()
+      .then(async (subscription) => {
+        if (cancelled) return;
+        setIsSubscribed(Boolean(subscription));
+        if (subscription && isPushBackendConfigured) setCategories(await getPushPreferences());
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load notification preferences.");
+      });
     return () => {
       cancelled = true;
     };
@@ -576,6 +829,20 @@ function PushNotificationsCard() {
     }
   };
 
+  const handleCategory = async (category: string, enabled: boolean) => {
+    const next = enabled ? [...categories, category] : categories.filter((item) => item !== category);
+    setIsBusy(true);
+    setError(null);
+    try {
+      await updatePushPreferences(next);
+      setCategories(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save notification preferences.");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -603,6 +870,31 @@ function PushNotificationsCard() {
             {isSubscribed ? "Enabled" : "Disabled"}
           </span>
         ) : null}
+
+        {isSubscribed ? (
+          <fieldset className="mt-5 border-0 p-0" disabled={isBusy}>
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Activities sent to this device
+            </legend>
+            <div className="flex flex-wrap gap-4">
+              {[
+                ["orders", "Orders and shipping"],
+                ["community", "Community activity"],
+                ["marketing", "News and offers"],
+              ].map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={categories.includes(value)}
+                    onChange={(event) => void handleCategory(value, event.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
       </div>
 
       {isPushSupported ? (
@@ -612,7 +904,7 @@ function PushNotificationsCard() {
               type="button"
               onClick={handleDisable}
               disabled={isBusy}
-              className="rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+              className="rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
             >
               {isBusy ? "Disabling…" : "Disable notifications"}
             </button>
@@ -639,8 +931,7 @@ function PushNotificationsCard() {
       {isPushSupported && !isPushBackendConfigured ? (
         <p className="m-0 mt-4 flex items-start gap-1.5 rounded-lg border border-dashed border-zinc-300 p-3 text-xs text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          Not connected yet — once the WordPress backend is wired up (VAPID key + subscribe endpoint), enabling here
-          registers this device to receive its pushes.
+          Push delivery is unavailable until the WordPress administrator configures a VAPID key and delivery provider.
         </p>
       ) : null}
     </div>
@@ -656,8 +947,12 @@ function OrdersPanel({
   isLoading: boolean;
   error: Error | null;
 }) {
+  const t = useT();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
+  const shopPath = useStorefrontPath("shop", "/shop");
+  const customerPortalUrl = useNavigationData().data?.storefrontConfig.stripeCustomerPortalUrl;
   const orders = account?.orders || [];
   const statusFilters = [
     { label: "All", value: "all" },
@@ -680,18 +975,18 @@ function OrdersPanel({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search order number..."
-            className="rounded-full border border-zinc-200 bg-white py-2 pl-9 pr-3.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-500 dark:focus:ring-brand-950"
+            className="rounded-control border border-zinc-200 bg-white py-2 pl-9 pr-3.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-500 dark:focus:ring-brand-950"
           />
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 rounded-full bg-zinc-100 p-1 dark:bg-zinc-800/60">
+      <div className="flex flex-wrap gap-1.5 rounded-control bg-zinc-100 p-1 dark:bg-zinc-800/60">
         {statusFilters.map((filter) => (
           <button
             key={filter.value}
             type="button"
             onClick={() => setStatusFilter(filter.value)}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+            className={`rounded-control px-3.5 py-1.5 text-xs font-semibold transition ${
               statusFilter === filter.value
                 ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-100"
                 : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -705,12 +1000,25 @@ function OrdersPanel({
       {isLoading ? <AccountPanelStatus message="Loading your orders…" /> : null}
       {error ? <AccountPanelStatus message={error.message} tone="error" /> : null}
       {!isLoading && !error && !account ? <AccountPanelStatus message="Sign in to view your order history." /> : null}
-      {!isLoading && account && filteredOrders.length === 0 ? (
+      {!isLoading && !error && account && account.emailVerificationRequired && !account.emailVerified ? (
+        <AccountPanelStatus message="Your account email still needs confirmation. You can continue using your account while it is pending." />
+      ) : null}
+      {!isLoading && !error && account && orders.length === 0 ? (
         <div className="grid place-items-center gap-2 rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-14 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
           <Package className="h-8 w-8 text-zinc-300 dark:text-zinc-700" aria-hidden="true" />
+          <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">You have not placed an order with this account yet.</p>
+          <Link to={shopPath} className="text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">
+            Browse the shop
+          </Link>
+        </div>
+      ) : null}
+      {!isLoading && !error && account && orders.length > 0 && filteredOrders.length === 0 ? (
+        <div className="grid place-items-center gap-2 rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-14 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
+          <Search className="h-8 w-8 text-zinc-300 dark:text-zinc-700" aria-hidden="true" />
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">No orders match your search.</p>
         </div>
-      ) : (
+      ) : null}
+      {!isLoading && !error && account && filteredOrders.length > 0 ? (
         <div className="grid gap-3">
           {filteredOrders.map((order) => (
             <article
@@ -741,19 +1049,66 @@ function OrdersPanel({
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                 <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Total: {order.total}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs uppercase tracking-wide text-zinc-400">{order.currency}</span>
-                  <a
-                    href={`/order/${order.databaseId}`}
+                  <span className="text-xs uppercase tracking-wide text-zinc-400">
+                    {[order.currency, order.language].filter(Boolean).join(" · ")}
+                  </span>
+                  <Link
+                    to={orderDetailsPath(order.databaseId, languageCode, configuredLanguageCodes)}
                     className="text-xs font-medium text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100"
                   >
-                    View details
-                  </a>
+                    {t("account.orders.view_details")}
+                  </Link>
                 </div>
               </div>
             </article>
           ))}
         </div>
-      )}
+      ) : null}
+      {customerPortalUrl ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+          <div>
+            <h2 className="m-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Subscription billing</h2>
+            <p className="mb-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">Manage subscription payments, invoices, and billing details securely.</p>
+          </div>
+          <a
+            href={customerPortalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline transition hover:bg-brand-600 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+          >
+            Manage billing
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DownloadsPanel({
+  account,
+  isLoading,
+  error,
+}: {
+  account: StorefrontAccount | null;
+  isLoading: boolean;
+  error: Error | null;
+}) {
+  const downloads = (account?.orders || []).flatMap((order) => order.downloads || []);
+  if (!isLoading && !error && !account) {
+    return <AccountPanelStatus message="Sign in to access downloads from your paid orders." />;
+  }
+  return (
+    <div className="grid gap-4">
+      <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Downloads</h1>
+      {account?.emailVerificationRequired && !account.emailVerified && !isLoading && !error ? (
+        <AccountPanelStatus message="Your account email still needs confirmation. Existing account downloads remain available." />
+      ) : null}
+      <DigitalDownloadsPanel
+        downloads={downloads}
+        isLoading={isLoading}
+        error={error?.message || null}
+      />
     </div>
   );
 }
@@ -802,7 +1157,73 @@ function CommunityPanel() {
   const [editingProduct, setEditingProduct] = useState<ListProductInitialValues | null>(null);
   const [editingArticle, setEditingArticle] = useState<WriteArticleInitialValues | null>(null);
   const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
+  const [coverUrl, setCoverUrl] = useState(user?.coverUrl);
+  const [isCoverSaving, setIsCoverSaving] = useState(false);
+  const [coverError, setCoverError] = useState("");
+  const [pendingRequests, setPendingRequests] = useState<CommunityProfileConnection | null>(null);
+  const [acceptedFollowers, setAcceptedFollowers] = useState<CommunityProfileConnection | null>(null);
+  const [isManagingFollower, setIsManagingFollower] = useState(false);
+  const [loadingFollowerPage, setLoadingFollowerPage] = useState<"pending" | "accepted" | null>(null);
   const { showToast } = useToast();
+  useEffect(() => setCoverUrl(user?.coverUrl), [user?.coverUrl]);
+  const loadFollowerDashboard = async () => {
+    if (!user) return;
+    try {
+      const dashboard = await getCommunityProfileDashboard(user.handle);
+      setPendingRequests(dashboard.pendingRequests);
+      setAcceptedFollowers(dashboard.followers);
+    } catch (error) {
+      showToast({
+        title: "Could not load follower requests",
+        description: error instanceof Error ? error.message : "Try again.",
+        tone: "error",
+      });
+    }
+  };
+  useEffect(() => {
+    void loadFollowerDashboard();
+  }, [user?.databaseId]);
+  const loadMoreFollowerDashboard = async (list: "pending" | "accepted") => {
+    if (!user || loadingFollowerPage) return;
+    const current = list === "pending" ? pendingRequests : acceptedFollowers;
+    if (!current?.hasNextPage) return;
+    setLoadingFollowerPage(list);
+    try {
+      const next = await getCommunityProfileConnection(
+        user.handle,
+        list === "pending" ? "pendingFollowRequests" : "followers",
+        current.endCursor,
+      );
+      const merged = { ...next, nodes: [...current.nodes, ...next.nodes] };
+      if (list === "pending") setPendingRequests(merged);
+      else setAcceptedFollowers(merged);
+    } catch (error) {
+      showToast({
+        title: "Could not load more followers",
+        description: error instanceof Error ? error.message : "Try again.",
+        tone: "error",
+      });
+    } finally {
+      setLoadingFollowerPage(null);
+    }
+  };
+  const handleFollower = async (followerUserId: number, action: "approve" | "decline" | "remove") => {
+    if (isManagingFollower) return;
+    setIsManagingFollower(true);
+    try {
+      await manageCommunityFollower(followerUserId, action);
+      await loadFollowerDashboard();
+      refresh();
+    } catch (error) {
+      showToast({
+        title: "Could not update follower",
+        description: error instanceof Error ? error.message : "Try again.",
+        tone: "error",
+      });
+    } finally {
+      setIsManagingFollower(false);
+    }
+  };
   const canPublishCommunityPosts = user?.capabilities.includes("publish_community_posts") ?? false;
   const canPublishMarketplace = user?.capabilities.includes("publish_marketplace_products") ?? false;
   const canPublishArticles = user?.capabilities.includes("publish_collaborator_posts") ?? false;
@@ -892,11 +1313,20 @@ function CommunityPanel() {
             onClick={async () => {
               if (!user) return;
               const nextValue = !isPublic;
-              await updateCommunityProfileVisibility(nextValue);
-              setIsPublic(nextValue);
-              refresh();
+              try {
+                await updateCommunityProfileVisibility(nextValue);
+                setIsPublic(nextValue);
+                refresh();
+                await loadFollowerDashboard();
+              } catch (error) {
+                showToast({
+                  title: "Could not update profile visibility",
+                  description: error instanceof Error ? error.message : "Try again.",
+                  tone: "error",
+                });
+              }
             }}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+            className={`inline-flex shrink-0 items-center gap-2 rounded-control px-3.5 py-2 text-xs font-semibold transition ${
               isPublic
                 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
                 : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
@@ -907,10 +1337,74 @@ function CommunityPanel() {
           </button>
         </div>
 
+        <div className="mt-5 grid gap-3 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+          <div className="grid gap-1">
+            <h3 className="m-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Profile cover</h3>
+            <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">Use an allowed JPG, PNG, GIF, or WebP image. The site upload limit is enforced by the backend.</p>
+          </div>
+          <div className="relative h-32 overflow-hidden rounded-2xl bg-brand-gradient">
+            {coverUrl ? <ResponsiveImage src={coverUrl} alt="Current community profile cover" sizes="40rem" className="h-full w-full object-cover" /> : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-2 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300">
+              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+              {coverUrl ? "Replace cover" : "Upload cover"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                className="sr-only"
+                disabled={isCoverSaving}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  setIsCoverSaving(true);
+                  setCoverError("");
+                  try {
+                    const dataUrl = await readFileDataUrl(file);
+                    const uploadedUrl = await uploadCommunityProfileCover(dataUrl);
+                    setCoverUrl(uploadedUrl);
+                    refresh();
+                  } catch (error) {
+                    setCoverError(error instanceof Error ? error.message : "The cover could not be uploaded.");
+                  } finally {
+                    setIsCoverSaving(false);
+                  }
+                }}
+              />
+            </label>
+            {coverUrl ? (
+              <button
+                type="button"
+                disabled={isCoverSaving}
+                onClick={async () => {
+                  setIsCoverSaving(true);
+                  setCoverError("");
+                  try {
+                    await removeCommunityProfileCover();
+                    setCoverUrl(undefined);
+                    refresh();
+                  } catch (error) {
+                    setCoverError(error instanceof Error ? error.message : "The cover could not be removed.");
+                  } finally {
+                    setIsCoverSaving(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-control px-3.5 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Remove
+              </button>
+            ) : null}
+            {isCoverSaving ? <span className="text-xs text-zinc-500">Saving…</span> : null}
+          </div>
+          {coverError ? <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{coverError}</p> : null}
+        </div>
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {user ? <Link
             to={`/community/${user.handle}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+            className="inline-flex items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
           >
             View my public profile
           </Link> : null}
@@ -940,6 +1434,36 @@ function CommunityPanel() {
             </div>
           </div>
         ) : null}
+
+        {user && community?.followersEnabled ? (
+          <div className="mt-5 grid gap-4 border-t border-zinc-100 pt-5 dark:border-zinc-800">
+            <FollowerManagementList
+              title={`Pending requests (${pendingRequests?.totalCount || 0})`}
+              members={pendingRequests?.nodes || []}
+              actions={[
+                { label: "Approve", action: "approve" },
+                { label: "Decline", action: "decline" },
+              ]}
+              disabled={isManagingFollower}
+              onAction={handleFollower}
+              emptyText="No pending follow requests."
+              hasNextPage={pendingRequests?.hasNextPage ?? false}
+              isLoadingMore={loadingFollowerPage === "pending"}
+              onLoadMore={() => void loadMoreFollowerDashboard("pending")}
+            />
+            <FollowerManagementList
+              title={`Accepted followers (${acceptedFollowers?.totalCount || 0})`}
+              members={acceptedFollowers?.nodes || []}
+              actions={[{ label: "Remove", action: "remove" }]}
+              disabled={isManagingFollower}
+              onAction={handleFollower}
+              emptyText="No accepted followers yet."
+              hasNextPage={acceptedFollowers?.hasNextPage ?? false}
+              isLoadingMore={loadingFollowerPage === "accepted"}
+              onLoadMore={() => void loadMoreFollowerDashboard("accepted")}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
@@ -960,7 +1484,7 @@ function CommunityPanel() {
               </h2>
               <p className="m-0 max-w-md text-sm text-zinc-600 dark:text-zinc-300">
                 {canPublishMarketplace || canPublishArticles
-                  ? "Your account can publish the enabled WooCommerce products and WordPress articles under your profile."
+                  ? "Your account can publish enabled store products and journal articles under your profile."
                   : "Marketplace products and authored articles require the staff-assigned Collaborator role."}
               </p>
             </div>
@@ -969,7 +1493,7 @@ function CommunityPanel() {
             <button
               type="button"
               onClick={requestCreatorAccess}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 px-3.5 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-control border border-amber-300 px-3.5 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
             >
               Publishing roles
             </button>
@@ -987,14 +1511,14 @@ function CommunityPanel() {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Link
                 to={`/community/${user?.handle || ""}?tab=shop`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                className="inline-flex items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <Package className="h-3.5 w-3.5" aria-hidden="true" />
                 {myProducts.length} product{myProducts.length === 1 ? "" : "s"} listed
               </Link>
               <Link
                 to={`/community/${user?.handle || ""}?tab=articles`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                className="inline-flex items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                 {myArticles.length} article{myArticles.length === 1 ? "" : "s"} published
@@ -1010,7 +1534,7 @@ function CommunityPanel() {
               {canPublishArticles ? <button
                 type="button"
                 onClick={() => setIsWriteArticleOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 py-2 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                className="inline-flex items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-2 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                 Write an article
@@ -1040,7 +1564,7 @@ function CommunityPanel() {
                   type="button"
                   disabled={isLoadingEditTarget}
                   onClick={() => openArticleForEditing(article.databaseId as number)}
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+                  className="inline-flex items-center gap-1 rounded-control border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
                 >
                   <Pencil className="h-3 w-3" aria-hidden="true" />
                   Edit "{article.title}"
@@ -1062,7 +1586,7 @@ function CommunityPanel() {
                   type="button"
                   disabled={isLoadingEditTarget}
                   onClick={() => openProductForEditing(product.databaseId as number)}
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+                  className="inline-flex items-center gap-1 rounded-control border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
                 >
                   <Pencil className="h-3 w-3" aria-hidden="true" />
                   Edit "{product.name}"
@@ -1076,9 +1600,23 @@ function CommunityPanel() {
       {isUploadOpen ? (
         <UploadPostModal
           onClose={() => setIsUploadOpen(false)}
+          defaultLanguageCode={languageCode}
+          searchTranslationCandidates={(query, selectedLanguage) =>
+            searchTranslationCandidateCommunityPosts(query, selectedLanguage)
+          }
           onSubmit={async (draft) => {
-            if (!draft.imagePreview) throw new Error("Choose an image before publishing");
-            await createCommunityPost({ imageDataUrl: draft.imagePreview, caption: draft.caption, tags: draft.tags, language: languageCode });
+            const media = draft.media.map(({ dataUrl }) => {
+              if (!dataUrl) throw new Error("New community media is missing its upload data");
+              return { dataUrl };
+            });
+            await createCommunityPost({
+              title: draft.title,
+              description: draft.description,
+              tags: draft.tags,
+              media,
+              language: draft.languageCode || languageCode,
+              translationOfId: draft.translationOfId,
+            });
             refresh();
           }}
         />
@@ -1101,23 +1639,35 @@ function CommunityPanel() {
               crossSellIds: draft.crossSellIds,
               sku: draft.sku,
               currency: baseCurrency,
-              price: draft.productType === "simple" ? convertSelectedToBase(draft.priceAmount) : 0,
+              price: convertSelectedToBase(resolveMarketplaceMutationPrice(
+                draft.productType,
+                draft.priceAmount,
+                draft.variations.map((variation) => variation.priceAmount),
+              )),
               regularPrice: draft.compareAtPriceAmount !== undefined ? convertSelectedToBase(draft.compareAtPriceAmount) : undefined,
               stockQuantity: draft.stockQuantity,
-              imageDataUrls: draft.imagePreviews,
+              imageDataUrls: draft.imageDataUrls,
               isVirtual: draft.isVirtual,
               isDownloadable: draft.isDownloadable,
               downloadableFiles: draft.downloadableFiles,
               downloadLimit: draft.downloadLimit,
               downloadExpiryDays: draft.downloadExpiryDays,
+              externalUrl: draft.externalUrl,
+              buttonText: draft.buttonText,
               attributes: draft.attributes,
               variations: draft.variations.map((variation) => ({
+                variationId: variation.variationId,
                 attributes: variation.attributes,
                 sku: variation.sku,
                 price: convertSelectedToBase(variation.priceAmount),
                 regularPrice: variation.compareAtPriceAmount !== undefined ? convertSelectedToBase(variation.compareAtPriceAmount) : undefined,
                 stockQuantity: variation.stockQuantity,
                 imageIndex: variation.imageIndex,
+                isVirtual: variation.isVirtual,
+                isDownloadable: variation.isDownloadable,
+                downloadableFiles: variation.downloadableFiles,
+                downloadLimit: variation.downloadLimit,
+                downloadExpiryDays: variation.downloadExpiryDays,
               })),
             };
             if (draft.productId) {
@@ -1145,7 +1695,7 @@ function CommunityPanel() {
               content: draft.body,
               category: draft.category,
               tags: draft.tags,
-              imageDataUrl: draft.imagePreview || undefined,
+              imageDataUrl: draft.imageDataUrl,
               slug: draft.slug,
               metaTitle: draft.metaTitle,
               metaDescription: draft.metaDescription,
@@ -1157,6 +1707,11 @@ function CommunityPanel() {
             } else {
               await createCollaboratorPost({ ...postInput, language: languageCode });
             }
+            setEditingArticle(null);
+            refresh();
+          }}
+          onDelete={async (postId) => {
+            await deleteCollaboratorPost(postId);
             setEditingArticle(null);
             refresh();
           }}
@@ -1245,7 +1800,7 @@ function AddressCard({
                 setSaveError(null);
                 setIsEditing(false);
               }}
-              className="rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              className="rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
             >
               Cancel
             </button>
@@ -1270,7 +1825,7 @@ function AddressCard({
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+            className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
           >
             {isEmpty ? <Plus className="h-3.5 w-3.5" aria-hidden="true" /> : <Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
             {isEmpty ? "Add address" : "Edit"}
@@ -1312,6 +1867,93 @@ function AccountPanelStatus({ message, tone = "neutral" }: { message: string; to
   );
 }
 
+function FollowerManagementList({
+  title,
+  members,
+  actions,
+  disabled,
+  onAction,
+  emptyText,
+  hasNextPage,
+  isLoadingMore,
+  onLoadMore,
+}: {
+  title: string;
+  members: CommunityMember[];
+  actions: { label: string; action: "approve" | "decline" | "remove" }[];
+  disabled: boolean;
+  onAction: (userId: number, action: "approve" | "decline" | "remove") => void;
+  emptyText: string;
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+}) {
+  return (
+    <section className="grid gap-2">
+      <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{title}</h3>
+      {members.length ? (
+        <>
+          {members.map((member) => (
+            <div key={member.databaseId} className="flex flex-wrap items-center gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950/50">
+              {member.avatarUrl ? (
+                <ResponsiveImage src={member.avatarUrl} alt="" sizes="2.5rem" className="h-10 w-10 rounded-full object-cover" />
+              ) : (
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: avatarColorFor(member.displayName) }} aria-hidden="true">
+                  {member.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?"}
+                </span>
+              )}
+              <div className="grid min-w-0 flex-1">
+                <strong className="truncate text-sm text-zinc-900 dark:text-zinc-100">{member.displayName}</strong>
+                <span className="truncate text-xs text-zinc-500">@{member.handle}</span>
+              </div>
+              <div className="flex gap-2">
+                {actions.map(({ label, action }) => (
+                  <button
+                    key={action}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onAction(member.databaseId, action)}
+                    className={`rounded-control px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                      action === "approve"
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        : "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {hasNextPage ? (
+            <button
+              type="button"
+              disabled={isLoadingMore}
+              onClick={onLoadMore}
+              className="w-fit rounded-control border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+            >
+              {isLoadingMore ? "Loading…" : "Load more"}
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{emptyText}</p>
+      )}
+    </section>
+  );
+}
+
+function readFileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected image could not be read."));
+    reader.onload = () => typeof reader.result === "string"
+      ? resolve(reader.result)
+      : reject(new Error("The selected image is invalid."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function AccountLoadingDots({ label }: { label: string }) {
   return (
     <div role="status" aria-live="polite" aria-label={label} className="flex min-h-24 items-center justify-center gap-1.5">
@@ -1331,4 +1973,3 @@ function formatOrderDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
-

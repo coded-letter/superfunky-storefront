@@ -1,39 +1,29 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ResponsiveImage, Seo, ViewSwitch, useLanguage } from "@funky/ui";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ResponsiveImage, Seo, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { useIncrementalData } from "../lib/incrementalData";
-import { executeContentScripts, mountEnqueuedScripts } from "../lib/pageScripts";
+import { GuestStarRating } from "../components/GuestStarRating";
+import { renderCmsContent } from "../components/CmsPageContent";
+import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
+import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortcodeRenderers";
+import { useIncrementalData } from "@funky/sdk/react";
+import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
+import { mountEnqueuedScripts } from "../lib/pageScripts";
 import { mountPageStyles } from "../lib/pageStyles";
+import { BACKEND_ORIGIN } from "@funky/sdk";
 import { getPostByUri, type CmsPost } from "../lib/posts";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { createReview } from "../lib/comments";
+import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
 import { CommentsSection, stringToHSL, summarizeReviews } from "./CommentThread";
 import { ShareButtonsRow } from "./ShareButtons";
 import { slugifyHeading } from "./shared";
 
+
 type TocLayout = "current" | "hidden" | "above";
 type SharePosition = "above-toc" | "on-image" | "below-toc-right";
 type AuthorLayout = "fullwidth" | "compact" | "editorial";
-
-const TOC_LAYOUT_OPTIONS: { value: TocLayout; label: string }[] = [
-  { value: "current", label: "Sticky sidebar (current)" },
-  { value: "hidden", label: "Hidden — dot rail" },
-  { value: "above", label: "Above post" },
-];
-
-const SHARE_POSITION_OPTIONS: { value: SharePosition; label: string }[] = [
-  { value: "above-toc", label: "Above TOC (current)" },
-  { value: "on-image", label: "On the image" },
-  { value: "below-toc-right", label: "Below TOC" },
-];
-
-const AUTHOR_LAYOUT_OPTIONS: { value: AuthorLayout; label: string }[] = [
-  { value: "fullwidth", label: "Full width (current)" },
-  { value: "compact", label: "Compact" },
-  { value: "editorial", label: "Editorial" },
-];
 
 /**
  * Post template — ported from the legacy Gatsby prototype's `templates/blog-post.js`,
@@ -44,34 +34,29 @@ const AUTHOR_LAYOUT_OPTIONS: { value: AuthorLayout; label: string }[] = [
  * `reviews-list.js` — here upgraded with real nested replies, see `CommentThread.tsx`),
  * and WordPress-rendered content with anchor-linked headings.
  */
-export function PostMockupPage() {
+export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const { languageCode, hasLanguagePreference, syncLanguageCode } = useLanguage();
   const postUri = normalizePostUri(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
-  const { data: post, isLoading, error } = useIncrementalData(`post:${postUri}`, () => getPostByUri(postUri));
+  const { data: post, isLoading, isRevalidating, error } = useIncrementalData(
+    `post:${postUri}`,
+    () => getPostByUri(postUri),
+  );
 
-  useEffect(() => {
-    if (!post) return;
-    if (!hasLanguagePreference) {
-      syncLanguageCode(post.languageCode);
-      return;
-    }
-    if (post.languageCode.toLowerCase() === languageCode.toLowerCase()) return;
-    const translation = post.translations.find(({ languageCode: translatedLanguage }) => translatedLanguage.toLowerCase() === languageCode.toLowerCase());
-    if (translation) {
-      const translationPath = toInternalPath(translation.uri);
-      if (translationPath !== pathname) navigate(translationPath);
-    }
-  }, [hasLanguagePreference, languageCode, navigate, pathname, post, syncLanguageCode]);
+  useCanonicalContentLanguage(
+    post?.languageCode,
+    post?.translations || [],
+    pathname,
+    !isLoading && !isRevalidating,
+  );
 
   useEffect(() => {
     if (!post || !contentRef.current) return;
-    executeContentScripts(contentRef.current);
+    const unmountBehaviors = mountCmsBehaviors(contentRef.current);
     const unmountScripts = mountEnqueuedScripts(post.scripts);
-    const unmountStyles = mountPageStyles(post.themeStyles);
+    const unmountStyles = mountPageStyles(post.themeStyles, BACKEND_ORIGIN);
     return () => {
+      unmountBehaviors();
       unmountScripts();
       unmountStyles();
     };
@@ -79,16 +64,17 @@ export function PostMockupPage() {
 
   if (isLoading) return <ContentLoadingState label="Loading post" />;
   if (error) return <PostStatus title="Post unavailable" message={error.message} />;
-  if (!post) return <PostStatus title="Post not found" message={`WordPress has no published post at “${postUri}”.`} />;
+  if (!post) {
+    return fallback ?? <PostStatus title="Post not found" message={`The site has no published post at “${postUri}”.`} />;
+  }
 
   return <PostMockupPageInner post={post} contentRef={contentRef} />;
 }
 
 function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: RefObject<HTMLDivElement> }) {
   const blogPath = useStorefrontPath("blog", "/blog");
-  const [tocLayout, setTocLayout] = useState<TocLayout>("current");
-  const [sharePosition, setSharePosition] = useState<SharePosition>("above-toc");
-  const [authorLayout, setAuthorLayout] = useState<AuthorLayout>("fullwidth");
+  const { postTocLayout: tocLayout, postSharePosition: sharePosition, postAuthorLayout: authorLayout, discussionLayout } =
+    useLayoutPreferences();
 
   const preparedContent = useMemo(() => preparePostContent(post.content), [post.content]);
   const tocEntries = preparedContent.entries;
@@ -110,10 +96,22 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
         opengraphType="article"
         opengraphTitle={post.seo.opengraphTitle || undefined}
         opengraphDescription={post.seo.opengraphDescription || undefined}
-        opengraphImage={post.seo.opengraphImage || post.featuredImage?.sourceUrl}
+        image={post.featuredImage
+          ? {
+              url: post.featuredImage.sourceUrl,
+              alt: post.featuredImage.altText || post.title,
+              width: post.featuredImage.width,
+              height: post.featuredImage.height,
+            }
+          : post.seo.opengraphImage
+            ? { url: post.seo.opengraphImage, alt: post.title }
+            : undefined}
         opengraphPublishedTime={post.seo.opengraphPublishedTime || post.date}
         opengraphModifiedTime={post.seo.opengraphModifiedTime || post.modified || undefined}
         opengraphAuthor={post.seo.opengraphAuthor || post.author.name}
+        opengraphPublisher={post.seo.opengraphPublisher || undefined}
+        articleSection={post.categories[0]?.name}
+        articleTags={post.tags.map((tag) => tag.name)}
         twitterTitle={post.seo.twitterTitle || undefined}
         twitterDescription={post.seo.twitterDescription || undefined}
         schema={{
@@ -127,12 +125,6 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
         }))}
       />
       <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
-
-      <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-xs dark:border-zinc-800 dark:bg-zinc-900/40">
-        <ViewSwitch label="Table of contents" value={tocLayout} onChange={setTocLayout} options={TOC_LAYOUT_OPTIONS} />
-        <ViewSwitch label="Share buttons" value={sharePosition} onChange={setSharePosition} options={SHARE_POSITION_OPTIONS} />
-        <ViewSwitch label="Author" value={authorLayout} onChange={setAuthorLayout} options={AUTHOR_LAYOUT_OPTIONS} />
-      </section>
 
       <article itemScope itemType="https://schema.org/Article" className="grid gap-8">
         <header className="grid gap-4">
@@ -164,6 +156,12 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
             </span>
           </div>
 
+          <GuestStarRating
+            targetType="post"
+            targetId={post.databaseId}
+            initialSummary={post.engagementRating}
+          />
+
           {post.tags.length ? (
             <div className="flex flex-wrap gap-2">
               {post.tags.map((tag) => (
@@ -184,6 +182,9 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
             <ResponsiveImage
               src={post.featuredImage.sourceUrl}
               alt={post.featuredImage.altText}
+              width={post.featuredImage.width}
+              height={post.featuredImage.height}
+              srcSet={post.featuredImage.srcSet}
               priority
               sizes="100vw"
               className="aspect-[21/9] w-full object-cover"
@@ -247,23 +248,25 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
 
       <CommentsSection
         anchorId="opinions"
+        contentKey={`post:${post.id}`}
         heading="Comments"
         key={post.id}
         initialReviews={post.comments}
         averageRating={reviewSummary.averageRating}
         ratingHistogram={reviewSummary.averageRating ? reviewSummary.histogram : undefined}
-        totalCountOverride={post.comments.filter((comment) => !comment.parentId).length}
+        totalCountOverride={post.comments.length}
         formTitle="Join the discussion"
-        formNote="Comments and ratings are held for WordPress moderation and only appear publicly once approved."
+        formNote="Comments are held for moderation and only appear publicly once approved."
+        showRatingField={false}
+        discussionLayout={discussionLayout}
         onSubmitReview={(review) => createReview({
           commentOn: post.databaseId,
           author: review.author,
           authorEmail: review.email,
           content: review.content,
-          rating: review.rating,
         })}
         onSubmitReply={(parent, reply) => {
-          if (!parent.databaseId) throw new Error("This comment cannot be replied to because its WordPress ID is unavailable.");
+          if (!parent.databaseId) throw new Error("This comment cannot be replied to because its content ID is unavailable.");
           return createReview({
             commentOn: post.databaseId,
             author: reply.author,
@@ -280,7 +283,7 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
 type TocEntry = { id: string; text: string; level: 2 | 3 | 4 | 5 | 6 };
 
 function preparePostContent(html: string): { html: string; entries: TocEntry[] } {
-  const document = new DOMParser().parseFromString(html, "text/html");
+  const document = new DOMParser().parseFromString(sanitizeCmsHtml(html), "text/html");
   const usedIds = new Set<string>();
   const entries = Array.from(document.body.querySelectorAll("h2, h3, h4, h5, h6")).flatMap((heading) => {
     const text = heading.textContent?.trim();
@@ -436,9 +439,13 @@ function PostContentBody({
     <div
       ref={contentRef}
       itemProp="articleBody"
-      className={`wp-site-blocks entry-content is-layout-flow grid gap-5 text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300 [&_a]:font-semibold [&_a]:text-brand-600 [&_a]:underline-offset-4 hover:[&_a]:underline dark:[&_a]:text-brand-400 [&_blockquote]:m-0 [&_blockquote]:border-l-4 [&_blockquote]:border-brand-400 [&_blockquote]:bg-brand-50/60 [&_blockquote]:py-3 [&_blockquote]:pl-5 [&_blockquote]:pr-4 [&_blockquote]:italic dark:[&_blockquote]:border-brand-500 dark:[&_blockquote]:bg-brand-950/30 [&_h2]:m-0 [&_h2]:mt-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-zinc-900 dark:[&_h2]:text-zinc-100 [&_h3]:m-0 [&_h3]:mt-2 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-zinc-900 dark:[&_h3]:text-zinc-100 [&_h4]:m-0 [&_h4]:mt-2 [&_h4]:font-bold [&_h4]:text-zinc-900 dark:[&_h4]:text-zinc-100 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-2xl [&_li]:my-1 [&_ol]:m-0 [&_ol]:pl-5 [&_p]:m-0 [&_ul]:m-0 [&_ul]:pl-5 ${className ?? ""}`}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+      className={`wp-site-blocks entry-content is-layout-flow grid gap-5 text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300 ${className ?? ""}`}
+    >
+      {renderCmsContent(
+        html,
+        { ...WORDPRESS_SHORTCODE_RENDERERS, ...APPLICATION_SHORTCODE_RENDERERS },
+      )}
+    </div>
   );
 }
 
@@ -563,7 +570,7 @@ function normalizePostUri(pathname: string): string {
 function PostStatus({ title, message }: { title: string; message: string }) {
   const blogPath = useStorefrontPath("blog", "/blog");
   return (
-    <section className="mx-auto grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="mx-auto mt-16 grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
       <p className="m-0 text-zinc-500 dark:text-zinc-400">{message}</p>
       <Link to={blogPath} className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">

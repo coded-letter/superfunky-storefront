@@ -2,7 +2,7 @@ import { Bookmark, Truck } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ResponsiveImage, useReadingList, ViewSwitch, type PostCardData, type ProductCardData, type ProductGalleryImage } from "@funky/ui";
-import type { HeroVariant } from "../components/HeroMock";
+import { sanitizeCmsHtml } from "../lib/cmsBehaviors";
 
 const BOOL_OPTIONS: { value: "on" | "off"; label: string }[] = [
   { value: "on", label: "On" },
@@ -10,23 +10,10 @@ const BOOL_OPTIONS: { value: "on" | "off"; label: string }[] = [
 ];
 
 /** Shared on/off `ViewSwitch` wrapper — used by the cart, checkout, and community
- * profile pages' own local layout-option panels (mirrors the one already local to
- * `LayoutStudioMockupPage`, kept separate since that one drives site-wide chrome
- * while these drive page-local content switches). */
+ * profile pages' own local layout-option panels for page-local content switches. */
 export function BoolSwitch({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
   return <ViewSwitch label={label} value={value ? "on" : "off"} onChange={(next) => onChange(next === "on")} options={BOOL_OPTIONS} />;
 }
-
-/** Shared archive-hero layout options for the product/post category & tag templates —
- * `split` (current default, image+copy side by side), `fullbleed` (full-bleed photo
- * banner), `minimal` (text-only, centered, generous width) which is the one that lets
- * long-form category/tag descriptions read natively instead of being cramped next to
- * an image. */
-export const ARCHIVE_HERO_OPTIONS: { value: HeroVariant; label: string }[] = [
-  { value: "split", label: "Split (image + copy)" },
-  { value: "fullbleed", label: "Full-bleed banner" },
-  { value: "minimal", label: "Minimal (long copy)" },
-];
 
 /**
  * Long-form taxonomy description block — rendered below the main product/post grid on
@@ -67,7 +54,7 @@ export function ArchiveDescriptionSection({
          * a WP/Woo taxonomy description field would once the backend is wired up. */}
         <div
           className="grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300 [&_a]:font-semibold [&_a]:text-brand-600 [&_a]:no-underline [&_a:hover]:underline dark:[&_a]:text-brand-400 [&_h3]:m-0 [&_h3]:font-display [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-zinc-900 dark:[&_h3]:text-zinc-100 [&_li]:my-1 [&_p]:m-0 [&_strong]:text-zinc-900 dark:[&_strong]:text-zinc-100 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5"
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(html) }}
         />
       </div>
     </section>
@@ -113,6 +100,7 @@ export function InputMock({
   name,
   autoComplete,
   inputMode,
+  optionalHint = false,
 }: {
   label: string;
   type?: string;
@@ -133,8 +121,13 @@ export function InputMock({
   name?: string;
   autoComplete?: string;
   inputMode?: React.InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  /** Marks the field as optional for assistive tech without repeating a redundant
+   * visible "Optional" caption underneath — fields without `required`/the asterisk
+   * are already visually understood as optional, but screen reader users don't get
+   * that visual cue, so we append a `sr-only` "(optional)" to the label instead. */
+  optionalHint?: boolean;
 }) {
-  const sharedClassName = `rounded-xl border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 read-only:cursor-not-allowed read-only:bg-zinc-50 read-only:text-zinc-500 dark:read-only:bg-zinc-900 dark:read-only:text-zinc-400 ${
+  const sharedClassName = `rounded-[var(--theme-radius)] border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 read-only:cursor-not-allowed read-only:bg-zinc-50 read-only:text-zinc-500 dark:read-only:bg-zinc-900 dark:read-only:text-zinc-400 ${
     error
       ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100 dark:border-rose-500/60 dark:focus:ring-rose-950"
       : "border-zinc-200 focus:border-brand-400 focus:ring-brand-100 dark:border-zinc-700 dark:focus:border-brand-500 dark:focus:ring-brand-950"
@@ -145,6 +138,7 @@ export function InputMock({
       <span>
         {label}
         {required ? <span className="ml-0.5 text-rose-500">*</span> : null}
+        {optionalHint ? <span className="sr-only"> (optional)</span> : null}
       </span>
       {multiline ? (
         <textarea
@@ -193,7 +187,7 @@ export const AUTHORS: Author[] = [
     name: "Elena Marchetti",
     slug: "elena-marchetti",
     role: "Head of Product Design",
-    bio: "Elena leads product design at FunkyCommerce, obsessing over fabric weight and stitch tolerances so nobody else has to.",
+    bio: "Elena leads product design at Superfunky, obsessing over fabric weight and stitch tolerances so nobody else has to.",
   },
   {
     name: "Marcus Webb",
@@ -205,7 +199,7 @@ export const AUTHORS: Author[] = [
     name: "Ingrid Solberg",
     slug: "ingrid-solberg",
     role: "Sustainability Lead",
-    bio: "Ingrid runs sustainability and supply-chain reporting at FunkyCommerce, translating dye-lot paperwork and mill audits into plain language customers can actually use.",
+    bio: "Ingrid runs sustainability and supply-chain reporting at Superfunky, translating dye-lot paperwork and mill audits into plain language customers can actually use.",
   },
 ];
 
@@ -365,7 +359,7 @@ export function BookmarkButton({ postId, className = "" }: { postId: string; cla
 }
 
 export const primaryActionButtonClass =
-  "rounded-full bg-brand-gradient px-4 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5";
+  "rounded-control bg-brand-gradient px-4 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5";
 
 export const MOCK_READING_POSTS: ReadingPost[] = [
   {
@@ -542,6 +536,10 @@ export type ProductReview = {
   /** id of the comment this one replies to — omitted/null for a top-level review. Lets
    * the UI rebuild WordPress's native, arbitrarily-deep threaded-comment tree. */
   parentId?: string | null;
+  /** Numeric parent ID used when GraphQL Relay IDs are unavailable or inconsistent. */
+  parentDatabaseId?: number | null;
+  /** Local submissions remain visible while they await moderation or a server refresh. */
+  isPending?: boolean;
 };
 
 export type ProductDetail = {
@@ -599,7 +597,7 @@ export const MOCK_PRODUCT_DETAILS: Record<string, ProductDetail> = {
         // Store reply, one level deep — demonstrates a merchant responding directly
         // under a review, the way WooCommerce/WordPress comment threading works.
         id: "rev-1-reply-1",
-        author: "FunkyCommerce Support",
+        author: "Superfunky Support",
         date: "2026-06-03",
         content: "Thanks so much, Priya! Really glad the Navy shade lived up to the photos — happy wearing. 💙",
         parentId: "rev-1",

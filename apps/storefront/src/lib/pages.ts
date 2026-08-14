@@ -1,4 +1,22 @@
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { normalizeFeaturedImage, type CmsFeaturedImage, type RawFeaturedImage } from "@funky/cms";
+import { languageHomePath } from "@funky/ui/src/locale/urlPaths.ts";
+import { resolveHomePageDatabaseId } from "./homepageResolution";
+import {
+  createCompatiblePageLookupQuery,
+  selectPageLookupCandidate,
+} from "./pageLookupCompatibility";
+import {
+  missingGraphqlFieldRule,
+  removeGraphqlFieldSelections,
+  requestGraphqlWithCompatibility,
+  unsupportedRenderedFormatRule,
+  type GraphqlCompatibilityRule,
+} from "./graphqlFieldFallback";
+import {
+  createCorePageQuery,
+  shouldPreferCoreGraphqlQueries,
+} from "./profileGraphqlCompatibility";
 
 export type CmsPageScript = {
   id: string;
@@ -29,6 +47,7 @@ export type CmsPageSeo = {
   opengraphUrl: string | null;
   opengraphImage: string | null;
   opengraphPublishedTime: string | null;
+  opengraphPublisher: string | null;
   opengraphModifiedTime: string | null;
   opengraphAuthor: string | null;
   siteName: string | null;
@@ -74,33 +93,9 @@ export type CmsPage = {
     uri: string | null;
     avatarUrl: string | null;
   } | null;
-  featuredImage: {
-    sourceUrl: string;
-    altText: string;
-  } | null;
+  featuredImage: CmsFeaturedImage | null;
   scripts: CmsPageScript[];
   themeStyles: CmsThemeStyles;
-  /** Set when this page is a registered special storefront page. */
-  specialPageKey: SpecialPageKey | null;
-};
-
-export type SpecialPageKey =
-  | "home"
-  | "shop"
-  | "blog"
-  | "cart"
-  | "checkout"
-  | "account";
-
-const SPECIAL_PAGE_KEYS = new Set<SpecialPageKey>(["home", "shop", "blog", "cart", "checkout", "account"]);
-
-function isSpecialPageKey(value: unknown): value is SpecialPageKey {
-  return typeof value === "string" && SPECIAL_PAGE_KEYS.has(value as SpecialPageKey);
-}
-
-export type CmsSpecialPage = CmsPage & {
-  headlessContent: string;
-  headlessShortcodes: string[];
 };
 
 export type RawCmsScript = {
@@ -126,12 +121,13 @@ export type RawCmsSeo = {
   opengraphImage: { sourceUrl: string | null } | null;
   opengraphModifiedTime: string | null;
   opengraphPublishedTime: string | null;
+  opengraphPublisher: string | null;
   opengraphSiteName: string | null;
   opengraphTitle: string | null;
   opengraphType: string | null;
   opengraphUrl: string | null;
   readingTime?: number | null;
-  schema: { articleType: (string | null)[] | null; pageType: (string | null)[] | null } | null;
+  schema: { articleType: (string | null)[] | null; pageType: (string | null)[] | null; raw?: string | null } | null;
   title: string | null;
   twitterDescription: string | null;
   twitterTitle: string | null;
@@ -165,7 +161,6 @@ type PageResult = {
     template: { templateName: string | null } | null;
     language: { code: string | null } | null;
     translations: ({ databaseId: number; uri: string | null; language: { code: string | null } | null } | null)[] | null;
-    funkycommerceSpecialPageKey: string | null;
     author: {
       node: {
         id: string;
@@ -175,19 +170,40 @@ type PageResult = {
         avatar: { url: string | null } | null;
       };
     } | null;
-    featuredImage: {
-      node: {
-        sourceUrl: string | null;
-        altText: string | null;
-      } | null;
-    } | null;
+    featuredImage: RawFeaturedImage;
     enqueuedScripts: {
       nodes: RawCmsScript[];
     } | null;
     seo: RawCmsSeo | null;
-    themeStyles: CmsThemeStyles;
+    themeStyles: CmsThemeStyles | null;
   } | null;
 };
+
+type PageByNameResult = {
+  pages: {
+    nodes: {
+      databaseId: number;
+      slug: string | null;
+      uri: string | null;
+    }[];
+  } | null;
+};
+
+type ReadingSettingsResult = {
+  readingSettings: {
+    showOnFront: string | null;
+    pageOnFront: number | null;
+  } | null;
+};
+
+const READING_SETTINGS_QUERY = /* GraphQL */ `
+  query StorefrontReadingSettings {
+    readingSettings {
+      showOnFront
+      pageOnFront
+    }
+  }
+`;
 
 const PAGE_QUERY = /* GraphQL */ `
   query StorefrontPage($id: ID!, $idType: PageIdType!) {
@@ -214,7 +230,6 @@ const PAGE_QUERY = /* GraphQL */ `
           code
         }
       }
-      funkycommerceSpecialPageKey
       author {
         node {
           id
@@ -230,6 +245,11 @@ const PAGE_QUERY = /* GraphQL */ `
         node {
           sourceUrl
           altText
+          srcSet
+          mediaDetails {
+            width
+            height
+          }
         }
       }
       enqueuedScripts(first: 100) {
@@ -278,6 +298,7 @@ const PAGE_QUERY = /* GraphQL */ `
         }
         opengraphModifiedTime
         opengraphPublishedTime
+        opengraphPublisher
         opengraphSiteName
         opengraphTitle
         opengraphType
@@ -285,6 +306,7 @@ const PAGE_QUERY = /* GraphQL */ `
         schema {
           articleType
           pageType
+          raw
         }
         title
         twitterDescription
@@ -297,77 +319,123 @@ const PAGE_QUERY = /* GraphQL */ `
   }
 `;
 
-type SpecialPageFields = {
-  id: string;
-  databaseId: number;
-  uri: string | null;
-  headlessContent: string | null;
-  headlessShortcodes: (string | null)[] | null;
-  themeStyles: CmsThemeStyles;
+const PAGE_COMPATIBILITY_RULES = [
+  {
+    matches: (message) => message.includes("Cannot access offset of type string on string"),
+    transform: (query) => removeGraphqlFieldSelections(query, "template"),
+  },
+  missingGraphqlFieldRule("headlessContent"),
+  missingGraphqlFieldRule("headlessShortcodes"),
+  missingGraphqlFieldRule("themeStyles"),
+  missingGraphqlFieldRule("enqueuedScripts"),
+  missingGraphqlFieldRule("language"),
+  missingGraphqlFieldRule("translations"),
+  missingGraphqlFieldRule("seo"),
+  unsupportedRenderedFormatRule,
+] as const;
+
+const PAGE_STATUS_COMPATIBILITY_RULE: GraphqlCompatibilityRule = {
+  matches: (message) => message.includes("Cannot access offset of type string on string"),
+  transform: createCompatiblePageLookupQuery,
 };
 
-type SpecialPageByUriResult = {
-  page: SpecialPageFields | null;
-};
-
-type FrontPageResult = {
-  pages: {
-    nodes: { databaseId: number; isFrontPage: boolean }[];
-  } | null;
-};
-
-const SPECIAL_PAGE_FIELDS_QUERY = /* GraphQL */ `
-  query StorefrontSpecialPageFields($key: String!) {
-    page: funkycommerceSpecialPage(key: $key) {
-      id
-      databaseId
-      uri
-      headlessContent
-      headlessShortcodes
-      themeStyles {
-        ${THEME_STYLES_FIELDS}
-      }
-    }
-  }
-`;
-
-const SPECIAL_PAGE_BY_DATABASE_ID_QUERY = /* GraphQL */ `
-  query StorefrontTranslatedSpecialPageFields($id: ID!) {
-    page(id: $id, idType: DATABASE_ID) {
-      id
-      databaseId
-      uri
-      headlessContent
-      headlessShortcodes
-      themeStyles {
-        ${THEME_STYLES_FIELDS}
-      }
-    }
-  }
-`;
-
-const FRONT_PAGE_QUERY = /* GraphQL */ `
-  query StorefrontFrontPage($language: LanguageCodeFilterEnum!) {
-    pages(first: 100, where: { status: PUBLISH, language: $language }) {
+const PAGE_BY_NAME_QUERY = /* GraphQL */ `
+  query StorefrontPageByName($name: String!) {
+    pages(first: 10, where: { name: $name, status: PUBLISH }) {
       nodes {
         databaseId
-        isFrontPage
+        slug
+        uri
       }
     }
   }
 `;
 
 export async function getPageByUri(uri: string): Promise<CmsPage | null> {
-  return getPage(uri, "URI");
+  const page = await getPage(uri, "URI");
+  if (page) return page;
+
+  const normalizedUri = normalizePageLookupUri(uri);
+  const slug = normalizedUri.split("/").filter(Boolean).at(-1);
+  if (!slug) return null;
+
+  const { data, errors } = await requestGraphqlWithCompatibility<PageByNameResult>(
+    graphqlRequest,
+    PAGE_BY_NAME_QUERY,
+    { name: slug },
+    [PAGE_STATUS_COMPATIBILITY_RULE],
+  );
+  if (errors?.length) {
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
+  if (!data?.pages) {
+    throw new Error("The page name lookup returned no pages");
+  }
+
+  const candidate = selectPageLookupCandidate(data.pages.nodes, normalizedUri, slug);
+  if (!candidate) return null;
+
+  const resolvedPage = await getPage(candidate.databaseId, "DATABASE_ID");
+  return resolvedPage && !resolvedPage.uri
+    ? { ...resolvedPage, uri: normalizedUri }
+    : resolvedPage;
+}
+
+export async function getHomePage(
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): Promise<CmsPage | null> {
+  const { data, errors } = await graphqlRequest<ReadingSettingsResult>(READING_SETTINGS_QUERY);
+  if (errors?.length) {
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
+  const settings = data?.readingSettings;
+  if (!settings) throw new Error("The reading settings query returned no settings");
+  if (settings.showOnFront !== "page") return null;
+  if (!settings.pageOnFront) throw new Error("WordPress has no static front page configured");
+
+  const frontPage = await getPage(settings.pageOnFront, "DATABASE_ID");
+  if (!frontPage) {
+    throw new Error(`The configured static front page ${settings.pageOnFront} was not found`);
+  }
+  const selectedPageId = resolveHomePageDatabaseId(frontPage, languageCode, configuredLanguageCodes);
+  if (!selectedPageId) return null;
+  const selectedPage = selectedPageId === frontPage.databaseId
+    ? frontPage
+    : await getPage(selectedPageId, "DATABASE_ID");
+  if (!selectedPage) {
+    throw new Error(`The translated static front page ${selectedPageId} was not found`);
+  }
+
+  return {
+    ...selectedPage,
+    uri: languageHomePath(selectedPage.languageCode, configuredLanguageCodes),
+    translations: selectedPage.translations.map((translation) => ({
+      ...translation,
+      uri: languageHomePath(translation.languageCode, configuredLanguageCodes),
+    })),
+  };
+}
+
+function normalizePageLookupUri(uri: string): string {
+  const pathname = uri.startsWith("/") ? uri : `/${uri}`;
+  return pathname === "/" || pathname.endsWith("/") ? pathname : `${pathname}/`;
 }
 
 async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Promise<CmsPage | null> {
-  const { data, errors } = await graphqlRequest<PageResult>(PAGE_QUERY, { id, idType });
+  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCorePageQuery(PAGE_QUERY)
+    : PAGE_QUERY;
+  const result = await requestGraphqlWithCompatibility<PageResult>(
+    graphqlRequest,
+    query,
+    { id, idType },
+    PAGE_COMPATIBILITY_RULES,
+  );
+  const { data, errors } = result;
 
   if (errors?.length) {
-    // Gracefully handle older backends that don't yet have funkycommerceSpecialPageKey
-    const fatalErrors = errors.filter((e) => !e.message.includes("funkycommerceSpecialPageKey"));
-    if (fatalErrors.length) throw new Error(fatalErrors.map(({ message }) => message).join("; "));
+    throw new Error(errors.map(({ message }) => message).join("; "));
   }
   if (!data) {
     throw new Error("The page query returned no data");
@@ -387,12 +455,11 @@ async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Prom
     uri: page.uri || (idType === "URI" ? String(id) : ""),
     title: page.title?.trim() || "Untitled page",
     content: page.content || "",
-    headlessContent: page.headlessContent || "",
+    headlessContent: page.headlessContent || page.content || "",
     headlessShortcodes: page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [],
     modified: page.modified,
     templateName: page.template?.templateName || null,
     languageCode: page.language?.code?.toLowerCase() || "en",
-    specialPageKey: isSpecialPageKey(page.funkycommerceSpecialPageKey) ? page.funkycommerceSpecialPageKey : null,
     translations:
       page.translations?.flatMap((translation) =>
         translation?.uri && translation.language?.code
@@ -412,90 +479,26 @@ async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Prom
           avatarUrl: author.avatar?.url || null,
         }
       : null,
-    featuredImage: page.featuredImage?.node?.sourceUrl
-      ? {
-          sourceUrl: page.featuredImage.node.sourceUrl,
-          altText: page.featuredImage.node.altText || "",
-        }
-      : null,
+    featuredImage: normalizeFeaturedImage(page.featuredImage, seo?.schema),
     scripts: page.enqueuedScripts?.nodes.map(mapScript) || [],
-    themeStyles: page.themeStyles,
+    themeStyles: page.themeStyles || emptyThemeStyles(),
     seo: mapSeo(seo),
   };
 }
 
-export async function getSpecialPage(
-  key: SpecialPageKey,
-  languageCode: string,
-  backendLanguageCode: string,
-): Promise<CmsSpecialPage | null> {
-  const lookup = await requestSpecialPageLookup(key);
-  if (!lookup?.databaseId) {
-    if (key !== "home") return null;
-    return requestFrontPage(backendLanguageCode);
-  }
-
-  const basePage = await getPage(lookup.databaseId, "DATABASE_ID");
-  if (!basePage) {
-    throw new Error(`WordPress returned special page "${key}" but its page node is unavailable`);
-  }
-
-  async function requestFrontPage(backendLanguageCode: string): Promise<CmsSpecialPage | null> {
-    const { data, errors } = await graphqlRequest<FrontPageResult>(FRONT_PAGE_QUERY, {
-      language: backendLanguageCode,
-    });
-    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-    if (!data) throw new Error("The front page query returned no data");
-    const frontPage = data.pages?.nodes.find(({ isFrontPage }) => isFrontPage);
-    return frontPage ? getPage(frontPage.databaseId, "DATABASE_ID") : null;
-  }
-
-  if (basePage.languageCode !== languageCode) {
-    const translation = basePage.translations.find(({ languageCode: translatedLanguage }) => translatedLanguage === languageCode);
-    if (!translation) return null;
-
-    const [translatedPage, translatedFields] = await Promise.all([
-      getPage(translation.databaseId, "DATABASE_ID"),
-      requestSpecialPageFieldsByDatabaseId(translation.databaseId),
-    ]);
-    if (!translatedPage || !translatedFields) {
-      throw new Error(`The ${languageCode.toUpperCase()} translation for special page "${key}" is unavailable`);
-    }
-    return mergeSpecialPage(translatedPage, translatedFields);
-  }
-
-  return mergeSpecialPage(basePage, lookup);
-}
-
-async function requestSpecialPageLookup(key: SpecialPageKey): Promise<SpecialPageFields | null> {
-  const { data, errors } = await graphqlRequest<SpecialPageByUriResult>(
-    SPECIAL_PAGE_FIELDS_QUERY,
-    { key },
-  );
-  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  if (!data) throw new Error("The special page lookup returned no data");
-  return data.page;
-}
-
-async function requestSpecialPageFieldsByDatabaseId(databaseId: number): Promise<SpecialPageFields | null> {
-  const { data, errors } = await graphqlRequest<SpecialPageByUriResult>(
-    SPECIAL_PAGE_BY_DATABASE_ID_QUERY,
-    { id: databaseId },
-  );
-  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  if (!data) throw new Error("The translated special page lookup returned no data");
-  return data.page;
-}
-
-function mergeSpecialPage(page: CmsPage, fields: SpecialPageFields): CmsSpecialPage {
-  if (page.id !== fields.id) {
-    throw new Error(`Special page lookup mismatch for "${page.uri}"`);
-  }
+export function emptyThemeStyles(): CmsThemeStyles {
   return {
-    ...page,
-    headlessContent: fields.headlessContent || "",
-    headlessShortcodes: fields.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [],
-    themeStyles: fields.themeStyles,
+    customCss: "",
+    fontFaceStyles: "",
+    globalStyles: "",
+    stylesheets: [],
+    colors: [],
+    fontFamilies: [],
+    fontSizes: [],
+    gradients: [],
+    spacingSizes: [],
+    contentSize: "",
+    wideSize: "",
   };
 }
 
@@ -525,6 +528,7 @@ export function mapSeo(seo: RawCmsSeo | null | undefined): CmsPageSeo {
     opengraphUrl: seo?.opengraphUrl || null,
     opengraphImage: seo?.opengraphImage?.sourceUrl || null,
     opengraphPublishedTime: seo?.opengraphPublishedTime || null,
+    opengraphPublisher: seo?.opengraphPublisher || null,
     opengraphModifiedTime: seo?.opengraphModifiedTime || null,
     opengraphAuthor: seo?.opengraphAuthor || null,
     siteName: seo?.opengraphSiteName || null,

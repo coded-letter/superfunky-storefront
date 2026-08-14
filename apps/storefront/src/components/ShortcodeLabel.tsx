@@ -1,8 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Copy } from "lucide-react";
+import { buildShortcode, type ShortcodeAttrValue } from "../lib/shortcodeSyntax";
 
-export type ShortcodeAttrValue = string | number | boolean | string[];
+export type { ShortcodeAttrValue } from "../lib/shortcodeSyntax";
 
 type PopoverPosition = {
   left: number;
@@ -10,11 +11,6 @@ type PopoverPosition = {
   width: number;
   maxHeight: number;
 };
-
-function formatAttrValue(value: ShortcodeAttrValue): string {
-  if (Array.isArray(value)) return `[${value.join(", ")}]`;
-  return String(value);
-}
 
 export function ShortcodeLabel({ name, attrs }: { name: string; attrs: Record<string, ShortcodeAttrValue> }) {
   const [copied, setCopied] = useState(false);
@@ -25,10 +21,7 @@ export function ShortcodeLabel({ name, attrs }: { name: string; attrs: Record<st
   const popoverRef = useRef<HTMLDivElement>(null);
   const popoverId = useId();
 
-  const attrEntries = Object.entries(attrs).filter(([, value]) => value !== undefined && value !== "");
-  const shortcode = `[${name}${attrEntries.length ? " " : ""}${attrEntries
-    .map(([key, value]) => `${key}="${formatAttrValue(value)}"`)
-    .join(" ")}]`;
+  const shortcode = buildShortcode(name, attrs);
 
   const updatePosition = () => {
     const trigger = triggerRef.current;
@@ -101,7 +94,7 @@ export function ShortcodeLabel({ name, attrs }: { name: string; attrs: Record<st
   };
 
   return (
-    <span className="inline-flex h-9 max-w-full self-center align-middle">
+    <span className="sf-shortcode-label inline-flex h-9 max-w-full self-center align-middle">
       <button
         ref={triggerRef}
         type="button"

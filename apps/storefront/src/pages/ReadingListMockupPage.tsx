@@ -1,8 +1,9 @@
 import { BookOpen, Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import { PostCard, useReadArticles, useReadingList } from "@funky/ui";
+import { PostCard, savedListEntityId, useReadArticles, useReadingList } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useBlogData } from "../state/blogData";
 
@@ -12,12 +13,13 @@ export function ReadingListMockupPage() {
   useEmbeddedApplicationShortcode();
   const config = useApplicationShortcode(["funkycommerce_reading_list"], { layout: "cards" });
   const blogPath = useStorefrontPath("blog", "/blog");
-  const { ids, clear } = useReadingList();
+  const { ids, clear, syncError } = useReadingList();
   const { has: isRead, toggle: toggleRead } = useReadArticles();
   const { data: blog, isLoading, error } = useBlogData();
+  const { cap, error: capError, isLoggedIn } = useSavedListCap("reading_list");
 
   // Build an index of all posts by ID for fast lookup.
-  const postsById = new Map((blog?.posts || []).map((post) => [post.id, post]));
+  const postsById = new Map((blog?.posts || []).map((post) => [savedListEntityId(post), post]));
 
   // For each saved ID, try to find the post in the current language.
   // If the post itself isn't present but one of its translations is, use that.
@@ -29,7 +31,7 @@ export function ReadingListMockupPage() {
         // This post is the translation of another; map the other to this one.
         if (!postsById.has(translationId)) {
           // translationId points to a different language — reverse-map it
-          translationMap.set(translationId, post.id);
+          translationMap.set(translationId, savedListEntityId(post));
         }
       });
     }
@@ -60,11 +62,15 @@ export function ReadingListMockupPage() {
         <div className="grid gap-1">
           <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Reading list</h1>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            {ids.length} saved {ids.length === 1 ? "article" : "articles"} · persisted locally in this browser.
+            {ids.length} saved {ids.length === 1 ? "article" : "articles"}
+            {cap ? ` of ${cap}` : ""} · {isLoggedIn ? "synced to your account" : "persisted locally in this browser"}.
           </p>
+          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">Sign in</Link> to sync your reading list across devices.</p> : null}
         </div>
       </div>
 
+      {syncError ? <SavedCollectionStatus message={`Your reading list could not be synced: ${syncError}`} /> : null}
+      {capError ? <SavedCollectionStatus message={`Your reading-list limit could not be loaded: ${capError}`} /> : null}
       {ids.length > 0 && isLoading ? <ContentLoadingState compact label="Loading your saved articles" /> : null}
       {ids.length > 0 && error ? (
         <SavedCollectionStatus message={`Your saved articles could not be loaded: ${error.message}`} />

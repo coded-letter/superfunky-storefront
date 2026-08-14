@@ -40,7 +40,7 @@ function useDropdown<T extends HTMLElement>() {
  * input, keeping every drawer item background-free/tinted instead of solid white. */
 function getTriggerClass(fullWidth: boolean) {
   return [
-    "inline-flex items-center gap-1.5 rounded-2xl border border-zinc-200 px-3.5 py-2 text-xs font-semibold text-zinc-700 no-underline transition hover:-translate-y-0.5 hover:border-brand-300 hover:text-brand-600 hover:shadow-soft dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300",
+    "inline-flex h-10 items-center gap-1.5 rounded-2xl border border-zinc-200 px-3.5 text-xs font-semibold text-zinc-700 no-underline transition hover:-translate-y-0.5 hover:border-brand-300 hover:text-brand-600 hover:shadow-soft dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300",
     fullWidth ? "bg-zinc-100/70" : "bg-white",
   ].join(" ");
 }
@@ -64,12 +64,14 @@ export type LanguageSwitcherProps = {
 };
 
 export function LanguageSwitcher({ className = "", fullWidth = false }: LanguageSwitcherProps) {
-  const { languageCode, languageOptions, setLanguageCode } = useLanguage();
+  const { canSwitchLanguage, languageCode, languageOptions, setLanguageCode } = useLanguage();
   const selected = languageOptions.find(({ code }) => code === languageCode) ?? languageOptions[0];
   const { isOpen, setIsOpen, containerRef } = useDropdown<HTMLDivElement>();
 
+  if (!canSwitchLanguage) return null;
+
   return (
-    <div ref={containerRef} className={`relative ${fullWidth ? "flex-1" : ""} ${className}`}>
+    <div ref={containerRef} className={`sf-language-switcher relative ${fullWidth ? "flex-1" : ""} ${className}`}>
       <button
         type="button"
         onClick={() => setIsOpen((previous) => !previous)}
@@ -120,7 +122,7 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
   const { isOpen, setIsOpen, containerRef } = useDropdown<HTMLDivElement>();
 
   return (
-    <div ref={containerRef} className={`relative ${fullWidth ? "flex-1" : ""} ${className}`}>
+    <div ref={containerRef} className={`sf-currency-switcher relative ${fullWidth ? "flex-1" : ""} ${className}`}>
       <button
         type="button"
         onClick={() => setIsOpen((previous) => !previous)}
@@ -128,7 +130,7 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
         aria-expanded={isOpen}
         className={`${getTriggerClass(fullWidth)} ${fullWidth ? "w-full justify-center" : ""}`}
       >
-        {selected.symbol} {selected.code}
+        {selected.icon ? <img src={selected.icon} alt="" className="h-4 w-4 object-contain" aria-hidden="true" /> : selected.symbol} {selected.code}
         <ChevronDown className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
       </button>
 
@@ -149,7 +151,7 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
                 className={`${optionClass} ${currency.code === selected.code ? "bg-zinc-100 dark:bg-zinc-800/70" : ""}`}
               >
                 <span className="w-5 shrink-0 text-center text-zinc-400" aria-hidden="true">
-                  {currency.symbol}
+                  {currency.icon ? <img src={currency.icon} alt="" className="mx-auto h-4 w-4 object-contain" /> : currency.symbol}
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-wide">{currency.code}</span>
               </button>

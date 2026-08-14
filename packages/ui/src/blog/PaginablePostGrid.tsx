@@ -3,6 +3,7 @@ import { LayoutList, RefreshCw } from "lucide-react";
 import { PostCard, type PostCardData, type PostCardVariant } from "./PostCard";
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
+import { createPaginationSequenceKey } from "../hooks/paginationState";
 
 export type PostGridVariant = "standard" | "compact" | "list";
 type LoadMode = "pages" | "infinite";
@@ -20,7 +21,10 @@ export type PaginablePostGridProps = {
   cardVariant?: PostCardVariant;
   gridVariant?: PostGridVariant;
   toolbarEnd?: ReactNode;
+  showFilters?: boolean;
 };
+
+type PostSort = "default" | "newest" | "oldest" | "title";
 
 /** Paginated post listing — mirrors `PaginableProductGrid`'s pagination + scroll-to-top
  * behaviour, and its "Pages vs Infinite scroll" toggle, so the blog and shop grids feel
@@ -33,19 +37,55 @@ export function PaginablePostGrid({
   cardVariant = "default",
   gridVariant = "standard",
   toolbarEnd,
+  showFilters = true,
 }: PaginablePostGridProps) {
   const [loadMode, setLoadMode] = useState<LoadMode>("pages");
   const [currentPage, setCurrentPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(pageSize);
-  const totalPages = Math.max(1, Math.ceil(posts.length / pageSize));
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [tag, setTag] = useState("");
+  const [author, setAuthor] = useState("");
+  const [sortBy, setSortBy] = useState<PostSort>("default");
   const sectionRef = useRef<HTMLElement | null>(null);
+
+  const categories = useMemo(
+    () => Array.from(new Map(posts.flatMap((post) => post.categories || []).map((term) => [term.slug, term.name])).entries()).sort((left, right) => left[1].localeCompare(right[1])),
+    [posts],
+  );
+  const tags = useMemo(
+    () => Array.from(new Map(posts.flatMap((post) => post.tags || []).map((term) => [term.slug, term.name])).entries()).sort((left, right) => left[1].localeCompare(right[1])),
+    [posts],
+  );
+  const authors = useMemo(
+    () => Array.from(new Set(posts.map((post) => post.author.name))).sort(),
+    [posts],
+  );
+  const filteredPosts = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = posts.filter((post) =>
+      (!normalizedQuery || [post.title, post.excerpt, post.author.name, ...(post.categories || []).map((term) => term.name), ...(post.tags || []).map((term) => term.name)]
+        .some((value) => value.toLocaleLowerCase().includes(normalizedQuery))) &&
+      (!category || post.categories?.some((term) => term.slug === category)) &&
+      (!tag || post.tags?.some((term) => term.slug === tag)) &&
+      (!author || post.author.name === author),
+    );
+    if (sortBy === "default") return filtered;
+    return [...filtered].sort((left, right) => {
+      if (sortBy === "title") return left.title.localeCompare(right.title);
+      const direction = sortBy === "oldest" ? 1 : -1;
+      return (Date.parse(left.date) - Date.parse(right.date)) * direction;
+    });
+  }, [author, category, posts, query, sortBy, tag]);
+  const totalPages = Math.max(1, Math.ceil(filteredPosts.length / pageSize));
+  const paginationSequenceKey = createPaginationSequenceKey(filteredPosts);
 
   // Reset both modes' progress when the underlying post list changes (e.g. a filter
   // upstream narrows the archive) so page 1 / the first batch is shown again.
   useEffect(() => {
     setCurrentPage(1);
     setVisibleCount(pageSize);
-  }, [posts, pageSize]);
+  }, [paginationSequenceKey, pageSize]);
 
   // Changes page and scrolls the grid back into view — without this, jumping to page 3+
   // on a long archive would leave the user staring at the footer with no visual feedback.
@@ -63,13 +103,13 @@ export function PaginablePostGrid({
   const pageItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
-    return posts.slice(start, end);
-  }, [currentPage, pageSize, posts]);
+    return filteredPosts.slice(start, end);
+  }, [currentPage, filteredPosts, pageSize]);
 
-  const infiniteItems = useMemo(() => posts.slice(0, visibleCount), [posts, visibleCount]);
-  const hasMoreInfinite = visibleCount < posts.length;
+  const infiniteItems = useMemo(() => filteredPosts.slice(0, visibleCount), [filteredPosts, visibleCount]);
+  const hasMoreInfinite = visibleCount < filteredPosts.length;
 
-  const sentinelRef = useInfiniteScrollTrigger(() => setVisibleCount((count) => Math.min(posts.length, count + pageSize)), {
+  const sentinelRef = useInfiniteScrollTrigger(() => setVisibleCount((count) => Math.min(filteredPosts.length, count + pageSize)), {
     enabled: loadMode === "infinite" && hasMoreInfinite,
   });
 
@@ -82,7 +122,7 @@ export function PaginablePostGrid({
   const visibleItems = loadMode === "infinite" ? infiniteItems : pageItems;
 
   return (
-    <section ref={sectionRef} className="grid gap-5 scroll-mt-24">
+    <section ref={sectionRef} className="sf-post-grid grid gap-5 scroll-mt-24">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div className="grid gap-1">
           <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
@@ -90,20 +130,71 @@ export function PaginablePostGrid({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            Showing <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> of {posts.length}
+            Showing <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> of {filteredPosts.length}
           </p>
           <ViewSwitch label="Browse" options={LOAD_MODE_OPTIONS} value={loadMode} onChange={handleModeChange} />
           {toolbarEnd}
         </div>
       </header>
 
-      <div className={getGridClassName(gridVariant)}>
-        {visibleItems.map((post, index) => (
-          <div key={post.id} className="animate-rise-in" style={{ animationDelay: `${index * 40}ms`, animationFillMode: "backwards" }}>
-            <PostCard post={post} variant={cardVariant} />
-          </div>
-        ))}
-      </div>
+      {showFilters ? (
+        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={`${title} filters`}>
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search posts" aria-label="Search posts" className={filterControlClass} />
+          {categories.length > 1 ? (
+            <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category" className={filterControlClass}>
+              <option value="">All categories</option>
+              {categories.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
+            </select>
+          ) : null}
+          {tags.length > 1 ? (
+            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label="Filter by tag" className={filterControlClass}>
+              <option value="">All tags</option>
+              {tags.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
+            </select>
+          ) : null}
+          {authors.length > 1 ? (
+            <select value={author} onChange={(event) => setAuthor(event.target.value)} aria-label="Filter by author" className={filterControlClass}>
+              <option value="">All authors</option>
+              {authors.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          ) : null}
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as PostSort)} aria-label="Sort posts" className={filterControlClass}>
+            <option value="default">Default order</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="title">Title</option>
+          </select>
+          {query || category || tag || author || sortBy !== "default" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setCategory("");
+                setTag("");
+                setAuthor("");
+                setSortBy("default");
+              }}
+              className="px-2 text-xs font-semibold text-zinc-500 underline-offset-2 hover:text-brand-600 hover:underline dark:text-zinc-400"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {visibleItems.length ? (
+        <div className={getGridClassName(gridVariant)}>
+          {visibleItems.map((post, index) => (
+            <div key={post.id} className="h-full min-w-0 animate-rise-in" style={{ animationDelay: `${index * 40}ms`, animationFillMode: "backwards" }}>
+              <PostCard post={post} variant={cardVariant} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+          No posts match these filters.
+        </p>
+      )}
 
       {loadMode === "pages" && totalPages > 1 ? (
         <nav aria-label={`${title} pagination`} className="flex flex-wrap justify-center gap-1.5 pt-2">
@@ -150,7 +241,7 @@ export function PaginablePostGrid({
             <span className="inline-flex items-center gap-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
               <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading more…
             </span>
-          ) : posts.length > pageSize ? (
+          ) : filteredPosts.length > pageSize ? (
             <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">You&apos;ve reached the end.</span>
           ) : null}
         </div>
@@ -161,6 +252,9 @@ export function PaginablePostGrid({
 
 const pageButtonClass =
   "inline-flex h-9 items-center rounded-full border border-zinc-200 bg-white text-xs font-semibold text-zinc-700 shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200";
+
+const filterControlClass =
+  "min-h-9 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-soft outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:focus:border-brand-500 dark:focus:ring-brand-900";
 
 function getGridClassName(variant: PostGridVariant): string {
   if (variant === "compact") {

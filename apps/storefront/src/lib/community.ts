@@ -1,8 +1,11 @@
-import { parseLocalizedPrice, type ProductCardData, type SocialPostCardData } from "@funky/ui";
+import { normalizeDisplayLabel, parseLocalizedPrice, type PostCardData, type ProductCardData, type SocialPostCardData, type SocialPostMedia } from "@funky/ui";
 import type { ProductReview } from "../pages/shared";
 import { authStore } from "./auth";
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest, type GraphqlResponse } from "@funky/sdk";
 import { filterTranslationCandidates } from "./translationCandidates";
+import { communityHandleFromUser } from "./communityProfiles";
+import { resolveCommerceProductType } from "@funky/commerce";
+import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings";
 
 export type CommunityMember = {
   databaseId: number;
@@ -15,14 +18,57 @@ export type CommunityMember = {
   followerCount: number;
   followingCount: number;
   isFollowedByViewer: boolean;
+  coverUrl?: string;
+  relationshipState: CommunityRelationshipState;
+  canAccess: boolean;
+  isLocked: boolean;
+};
+
+export type CommunityRelationshipState = "none" | "pending" | "accepted" | "owner";
+
+export type CommunityProfileConnection = {
+  nodes: CommunityMember[];
+  totalCount: number;
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
+export type CommunityProfileData = {
+  member: CommunityMember;
+  followers: CommunityProfileConnection;
+  following: CommunityProfileConnection;
+  pendingRequests: CommunityProfileConnection;
+  posts: CommunityPostData[];
+  followingFeed: CommunityPostData[];
+  products: ProductCardData[];
+  articles: PostCardData[];
 };
 
 export type CommunityPostData = SocialPostCardData & {
   databaseId: number;
+  title: string;
+  description: string;
+  media: SocialPostMedia[];
+  canEdit: boolean;
+  canDelete: boolean;
   likedByViewer: boolean;
+  tagSlugs: string[];
   ratingAverage?: number;
+  engagementRating: PublicEngagementRatingSummary;
   reviews: ProductReview[];
   contentHtml: string;
+};
+
+export type CommunityTagSummary = {
+  name: string;
+  slug: string;
+  postCount: number;
+};
+
+export type CommunityArchiveData = {
+  authors: CommunityMember[];
+  tags: CommunityTagSummary[];
+  posts: CommunityPostData[];
 };
 
 export type CommunityPostDetail = {
@@ -42,6 +88,7 @@ export type SeoFieldsInput = {
 };
 
 export type DownloadableFileInput = { name: string; fileDataUrl: string };
+export type MarketplaceProductType = "simple" | "variable" | "external";
 
 /** A candidate post/product for the "this is a translation of…" association UI. */
 export type TranslationCandidate = {
@@ -76,7 +123,7 @@ export type MarketplaceProductForEditing = {
   brand: string;
   upsellIds: number[];
   crossSellIds: number[];
-  productType: "simple" | "variable";
+  productType: MarketplaceProductType;
   sku: string;
   stockQuantity: number;
   priceLabel: string;
@@ -87,13 +134,21 @@ export type MarketplaceProductForEditing = {
   downloadLimit: number;
   downloadExpiryDays: number;
   existingDownloadNames: string[];
+  externalUrl: string;
+  buttonText: string;
   attributes: { name: string; options: string[] }[];
   variations: {
+    databaseId: number;
     attributes: { name: string; option: string }[];
     sku: string;
     priceLabel: string;
     compareAtPriceLabel: string;
     stockQuantity: number;
+    isVirtual: boolean;
+    isDownloadable: boolean;
+    downloadLimit: number;
+    downloadExpiryDays: number;
+    existingDownloadNames: string[];
   }[];
 };
 
@@ -126,6 +181,17 @@ type RawUser = {
   followerCount?: number | null;
   followingCount?: number | null;
   isFollowedByViewer?: boolean | null;
+  cover?: { url: string | null } | null;
+  communityCover?: { url: string | null } | null;
+  relationshipState?: string | null;
+  canAccess?: boolean | null;
+  isLocked?: boolean | null;
+};
+
+type RawCommunityProfileConnection = {
+  nodes: RawUser[];
+  totalCount: number;
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
 };
 
 type RawComment = {
@@ -134,6 +200,7 @@ type RawComment = {
   content: string | null;
   date: string | null;
   parentId: string | null;
+  parentDatabaseId: number | null;
   rating: number | null;
   author: { node: { name: string | null } | null } | null;
 };
@@ -142,26 +209,43 @@ type RawCommunityPost = {
   id: string;
   databaseId: number;
   uri: string | null;
+  title: string | null;
+  description: string | null;
   content: string | null;
   date: string | null;
   likesCount: number;
   likedByViewer: boolean;
-  ratingAverage: number | null;
+  engagementRating: PublicEngagementRatingSummary;
+  canEdit: boolean;
+  canDelete: boolean;
+  media: {
+    databaseId: number;
+    url: string;
+    mimeType: string;
+    mediaType: string;
+    altText: string;
+    width: number | null;
+    height: number | null;
+  }[];
   featuredImage: { node: { sourceUrl: string | null; mediaDetails: { width: number | null; height: number | null } | null } } | null;
-  communityTags: { nodes: { name: string | null }[] };
+  communityTags: { nodes: { name: string | null; slug: string | null }[] };
   author: { node: RawUser | null } | null;
-  comments: { nodes: RawComment[] };
+  comments: {
+    nodes: RawComment[];
+    pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+  };
 };
 
 type RawCommunityPostDetail = RawCommunityPost & {
   __typename: "CommunityPost";
   language: { code: string | null } | null;
-  translations: { databaseId: number; uri: string | null; language: { code: string | null } | null }[];
+  translations?: { databaseId: number; uri: string | null; language: { code: string | null } | null }[] | null;
 };
 
 type RawProduct = {
   __typename: string;
   id: string;
+  databaseId: number;
   name: string | null;
   slug: string | null;
   uri: string | null;
@@ -169,14 +253,15 @@ type RawProduct = {
   image: { sourceUrl: string | null } | null;
   productBrands: { nodes: { name: string | null; uri: string | null }[] };
   seller: RawUser | null;
-  averageRating: number | null;
-  reviewCount: number | null;
+  engagementRating: PublicEngagementRatingSummary;
   price?: string | null;
   regularPrice?: string | null;
   salePrice?: string | null;
+  externalUrl?: string | null;
   variations?: {
     nodes: {
       id: string;
+      databaseId: number;
       price: string | null;
       regularPrice: string | null;
       salePrice: string | null;
@@ -189,25 +274,73 @@ type RawProduct = {
 
 type CommunityQueryResult = {
   communityPosts: { nodes: RawCommunityPost[] };
-  communityMembers: (RawUser | null)[] | null;
   marketplaceProducts: (RawProduct | null)[] | null;
   viewerMarketplaceProducts?: (RawProduct | null)[] | null;
-  communityFollowersEnabled: boolean;
+};
+
+type CommunityArchiveMembersResult = {
+  communityMembers: (RawUser | null)[] | null;
+};
+
+type CommunityArchivePostsResult = {
+  communityPosts: {
+    nodes: RawCommunityPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  } | null;
+};
+
+type RawProfileArticle = {
+  id: string;
+  databaseId: number;
+  slug: string | null;
+  uri: string | null;
+  title: string | null;
+  excerpt: string | null;
+  date: string | null;
+  modified: string | null;
+  featuredImage: { node: { sourceUrl: string | null } | null } | null;
+};
+
+type RawCommunityProfile = RawUser & {
+  followers: RawCommunityProfileConnection;
+  following: RawCommunityProfileConnection;
+  posts: RawCommunityPost[];
+  followingFeed: RawCommunityPost[];
+  products?: RawProduct[];
+  articles: RawProfileArticle[];
 };
 
 const COMMUNITY_QUERY = /* GraphQL */ `
   query StorefrontCommunity($language: LanguageCodeFilterEnum, $languageSlug: String, $viewerSellerId: Int, $hasViewer: Boolean!) {
-    communityFollowersEnabled
     communityPosts(first: 100, where: { status: PUBLISH, language: $language }) {
       nodes {
         id
         databaseId
         uri
+        title(format: RENDERED)
+        description
         content(format: RENDERED)
         date
         likesCount
         likedByViewer
-        ratingAverage
+        engagementRating {
+          average
+          count
+          guestCount
+          authoredCount
+          histogram
+        }
+        canEdit
+        canDelete
+        media {
+          databaseId
+          url
+          mimeType
+          mediaType
+          altText
+          width
+          height
+        }
         featuredImage {
           node {
             sourceUrl(size: LARGE)
@@ -220,6 +353,7 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         communityTags {
           nodes {
             name
+            slug
           }
         }
         author {
@@ -231,17 +365,19 @@ const COMMUNITY_QUERY = /* GraphQL */ `
             avatar(size: 192) {
               url
             }
+            communityCover { url }
             communityRole
             communityProfilePublic
           }
         }
-        comments(first: 100, where: { parent: 0, statusIn: [APPROVE] }) {
+        comments(first: 100, where: { statusIn: [APPROVE] }) {
           nodes {
             id
             databaseId
             content(format: RENDERED)
             date
             parentId
+            parentDatabaseId
             rating
             author {
               node {
@@ -249,26 +385,14 @@ const COMMUNITY_QUERY = /* GraphQL */ `
               }
             }
           }
+          pageInfo { hasNextPage endCursor }
         }
       }
-    }
-    communityMembers {
-      databaseId
-      name
-      communityHandle
-      description
-      avatar(size: 192) {
-        url
-      }
-      communityRole
-      communityProfilePublic
-      followerCount
-      followingCount
-      isFollowedByViewer
     }
     marketplaceProducts(first: 48, language: $languageSlug) {
       __typename
       id
+      databaseId
       name
       slug
       uri
@@ -293,8 +417,13 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         communityRole
         communityProfilePublic
       }
-      averageRating
-      reviewCount
+      engagementRating {
+        average
+        count
+        guestCount
+        authoredCount
+        histogram
+      }
       ... on SimpleProduct {
         price
         regularPrice
@@ -307,6 +436,7 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         variations(first: 50) {
           nodes {
             id
+            databaseId
             price
             regularPrice
             salePrice
@@ -323,11 +453,23 @@ const COMMUNITY_QUERY = /* GraphQL */ `
             }
           }
         }
+      }
+      ... on ExternalProduct {
+        price
+        regularPrice
+        salePrice
+        externalUrl
+      }
+      ... on GroupProduct {
+        price
+        regularPrice
+        salePrice
       }
     }
     viewerMarketplaceProducts: marketplaceProducts(first: 48, language: $languageSlug, sellerId: $viewerSellerId) @include(if: $hasViewer) {
       __typename
       id
+      databaseId
       name
       slug
       uri
@@ -352,8 +494,13 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         communityRole
         communityProfilePublic
       }
-      averageRating
-      reviewCount
+      engagementRating {
+        average
+        count
+        guestCount
+        authoredCount
+        histogram
+      }
       ... on SimpleProduct {
         price
         regularPrice
@@ -366,6 +513,7 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         variations(first: 50) {
           nodes {
             id
+            databaseId
             price
             regularPrice
             salePrice
@@ -382,6 +530,17 @@ const COMMUNITY_QUERY = /* GraphQL */ `
             }
           }
         }
+      }
+      ... on ExternalProduct {
+        price
+        regularPrice
+        salePrice
+        externalUrl
+      }
+      ... on GroupProduct {
+        price
+        regularPrice
+        salePrice
       }
     }
   }
@@ -392,11 +551,30 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
     id
     databaseId
     uri
+    title(format: RENDERED)
+    description
     content(format: RENDERED)
     date
     likesCount
     likedByViewer
-    ratingAverage
+    engagementRating {
+      average
+      count
+      guestCount
+      authoredCount
+      histogram
+    }
+    canEdit
+    canDelete
+    media {
+      databaseId
+      url
+      mimeType
+      mediaType
+      altText
+      width
+      height
+    }
     language {
       code
     }
@@ -419,6 +597,7 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
     communityTags {
       nodes {
         name
+        slug
       }
     }
     author {
@@ -434,13 +613,14 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
         communityProfilePublic
       }
     }
-    comments(first: 100, where: { parent: 0, statusIn: [APPROVE] }) {
+    comments(first: 100, where: { statusIn: [APPROVE] }) {
       nodes {
         id
         databaseId
         content(format: RENDERED)
         date
         parentId
+        parentDatabaseId
         rating
         author {
           node {
@@ -448,8 +628,115 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
           }
         }
       }
+      pageInfo { hasNextPage endCursor }
     }
   }
+`;
+
+const COMMUNITY_PROFILE_MEMBER_FIELDS = /* GraphQL */ `
+  fragment StorefrontCommunityProfileMemberFields on CommunityMemberProfile {
+    databaseId
+    name
+    nicename
+    communityHandle
+    description
+    avatar(size: 192) { url }
+    cover { url }
+    communityRole
+    communityProfilePublic
+    followerCount
+    followingCount
+    isFollowedByViewer
+    relationshipState
+    canAccess
+    isLocked
+  }
+`;
+
+const COMMUNITY_PROFILE_QUERY = /* GraphQL */ `
+  query StorefrontCommunityProfile($handle: String!, $connectionFirst: Int!, $followersAfter: String, $followingAfter: String) {
+    communityProfileByHandle(handle: $handle) {
+      ...StorefrontCommunityProfileMemberFields
+      followers(first: $connectionFirst, after: $followersAfter) {
+        nodes { ...StorefrontCommunityProfileMemberFields }
+        totalCount
+        pageInfo { hasNextPage endCursor }
+      }
+      following(first: $connectionFirst, after: $followingAfter) {
+        nodes { ...StorefrontCommunityProfileMemberFields }
+        totalCount
+        pageInfo { hasNextPage endCursor }
+      }
+      posts { ...StorefrontCommunityPostFields }
+      followingFeed { ...StorefrontCommunityPostFields }
+      products {
+        __typename
+        id
+        databaseId
+        name
+        slug
+        uri
+        shortDescription(format: RENDERED)
+        image { sourceUrl(size: MEDIUM_LARGE) }
+        productBrands { nodes { name uri } }
+        engagementRating {
+          average
+          count
+          guestCount
+          authoredCount
+          histogram
+        }
+        ... on SimpleProduct { price regularPrice salePrice }
+        ... on VariableProduct { price regularPrice salePrice }
+        ... on ExternalProduct { price regularPrice salePrice externalUrl }
+        ... on GroupProduct { price regularPrice salePrice }
+      }
+      articles {
+        id
+        databaseId
+        slug
+        uri
+        title(format: RENDERED)
+        excerpt(format: RENDERED)
+        date
+        modified
+        featuredImage { node { sourceUrl(size: MEDIUM_LARGE) } }
+      }
+    }
+  }
+  ${COMMUNITY_PROFILE_MEMBER_FIELDS}
+  ${COMMUNITY_POST_FIELDS}
+`;
+
+const COMMUNITY_ARCHIVE_MEMBERS_QUERY = /* GraphQL */ `
+  query StorefrontCommunityArchiveMembers {
+    communityMembers {
+      databaseId
+      name
+      communityHandle
+      description
+      avatar(size: 192) {
+        url
+      }
+      communityRole
+      communityProfilePublic
+    }
+  }
+`;
+
+const COMMUNITY_ARCHIVE_POSTS_QUERY = /* GraphQL */ `
+  query StorefrontCommunityArchivePosts(
+    $language: LanguageCodeFilterEnum
+    $after: String
+  ) {
+    communityPosts(first: 100, after: $after, where: { status: PUBLISH, language: $language }) {
+      nodes {
+        ...StorefrontCommunityPostFields
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+  ${COMMUNITY_POST_FIELDS}
 `;
 
 const COMMUNITY_POST_QUERY = /* GraphQL */ `
@@ -472,35 +759,72 @@ const COMMUNITY_POST_BY_URI_QUERY = /* GraphQL */ `
   ${COMMUNITY_POST_FIELDS}
 `;
 
+const COMMUNITY_POST_COMMENTS_QUERY = /* GraphQL */ `
+  query StorefrontCommunityPostComments($id: ID!, $after: String) {
+    contentNode(id: $id, idType: DATABASE_ID) {
+      __typename
+      ... on CommunityPost {
+        comments(first: 100, after: $after, where: { statusIn: [APPROVE] }) {
+          nodes {
+            id
+            databaseId
+            content(format: RENDERED)
+            date
+            parentId
+            parentDatabaseId
+            rating
+            author {
+              node {
+                name
+              }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
 export async function getCommunityData(languageCode: string, backendLanguageCode: string): Promise<CommunityData> {
   const auth = authStore.load();
-  const { data, errors } = await graphqlRequest<CommunityQueryResult>(
-    COMMUNITY_QUERY,
-    {
-      language: backendLanguageCode,
-      languageSlug: languageCode.toLowerCase(),
-      viewerSellerId: auth?.user?.databaseId || null,
-      hasViewer: Boolean(auth?.user?.databaseId),
-    },
-    auth?.authToken,
-  );
+  const [{ data, errors }, rawMembers, profilesPublicEnabled, followersEnabled] = await Promise.all([
+    graphqlRequest<CommunityQueryResult>(
+      COMMUNITY_QUERY,
+      {
+        language: backendLanguageCode,
+        languageSlug: languageCode.toLowerCase(),
+        viewerSellerId: auth?.user?.databaseId || null,
+        hasViewer: Boolean(auth?.user?.databaseId),
+      },
+      auth?.authToken,
+    ),
+    getCommunityMembers(auth?.authToken),
+    getCommunityFeatureFlag("communityProfilesPublicEnabled", auth?.authToken),
+    getCommunityFeatureFlag("communityFollowersEnabled", auth?.authToken),
+  ]);
   if (errors?.length) {
-    // If only the followers fields are missing (schema not yet updated), degrade gracefully.
-    const nonFollowerErrors = errors.filter(({ message }) =>
-      !message.includes('"followerCount"') && !message.includes('"followingCount"') && !message.includes('"isFollowedByViewer"') && !message.includes('"communityFollowersEnabled"')
-    );
-    if (nonFollowerErrors.length) throw new Error(nonFollowerErrors.map(({ message }) => message).join("; "));
+    throw new Error(errors.map(({ message }) => message).join("; "));
   }
-  if (!data) throw new Error("The community query returned no data");
-  const profilesPublicEnabled = await getCommunityProfilesPublicEnabled(auth?.authToken);
-  const followersEnabled = data.communityFollowersEnabled !== false;
 
-  const members = (data.communityMembers || []).filter((member): member is RawUser => Boolean(member)).map(mapMember);
+  if (!data) throw new Error("The community query returned no data");
+
+  const members = rawMembers.map(mapMember);
   const membersById = new Map(members.map((member) => [member.databaseId, member]));
+  const includePublicAuthor = (user: RawUser): CommunityMember => {
+    const existing = membersById.get(user.databaseId);
+    if (existing) return existing;
+    const member = mapMember(user);
+    if (member.isPublic || member.databaseId === auth?.user?.databaseId) {
+      members.push(member);
+      membersById.set(member.databaseId, member);
+    }
+    return member;
+  };
   const posts = data.communityPosts.nodes.flatMap((post) => {
     const author = post.author?.node;
     if (!author) return [];
-    const member = membersById.get(author.databaseId) || mapMember(author);
+    const member = includePublicAuthor(author);
     return [mapCommunityPost(post, member)];
   });
 
@@ -511,7 +835,7 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
     seenProductIds.add(product.id);
     const owner = product.seller;
     if (!owner) return [];
-    const vendor = membersById.get(owner.databaseId) || mapMember(owner);
+    const vendor = includePublicAuthor(owner);
     const brand = product.productBrands.nodes.find(({ name }) => name);
     const variations = (product.variations?.nodes || []).flatMap((variation) => {
       const priceAmount = parseLocalizedPrice(variation.price || variation.salePrice || variation.regularPrice || "");
@@ -519,6 +843,7 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
       const regularPriceAmount = parseLocalizedPrice(variation.regularPrice || "");
       return [{
         id: variation.id,
+        databaseId: variation.databaseId,
         attributes: Object.fromEntries(
           (variation.attributes?.nodes || []).flatMap(({ name, label, value }) => {
             const attributeName = label || name;
@@ -546,10 +871,12 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
     );
     const variablePriceAmounts = variations.map(({ priceAmount }) => priceAmount).filter((amount): amount is number => amount !== undefined);
     const fallbackPriceAmount = parseLocalizedPrice(product.price || product.salePrice || product.regularPrice || "") ?? undefined;
+    const engagementRating = mapPublicEngagementRating(product.engagementRating);
     return [{
       vendor,
       product: {
         id: product.id,
+        databaseId: product.databaseId,
         name: product.name || "Untitled listing",
         subtitle: stripHtml(product.shortDescription || "") || undefined,
         category: "Marketplace",
@@ -557,13 +884,14 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
         priceAmount: variablePriceAmounts.length ? Math.min(...variablePriceAmounts) : fallbackPriceAmount,
         compareAtPriceLabel: product.salePrice ? product.regularPrice || undefined : undefined,
         compareAtPriceAmount: product.salePrice ? parseLocalizedPrice(product.regularPrice || "") ?? undefined : undefined,
-        rating: product.averageRating ?? undefined,
-        reviewCount: product.reviewCount ?? undefined,
+        rating: engagementRating.average ?? undefined,
+        reviewCount: engagementRating.count,
         imageUrl: product.image?.sourceUrl || undefined,
         brand: brand?.name || undefined,
         brandHref: brand?.uri || undefined,
         href: product.uri || (product.slug ? `/shop/${product.slug}` : "/shop"),
-        productType: product.__typename === "VariableProduct" ? "variable" as const : "simple" as const,
+        productType: resolveCommerceProductType(product.__typename),
+        externalUrl: product.__typename === "ExternalProduct" ? product.externalUrl || undefined : undefined,
         variations: variations.length ? variations : undefined,
         variationOptions: variationOptions.length ? variationOptions : undefined,
       },
@@ -573,20 +901,231 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
   return { posts, members, marketplaceItems, profilesPublicEnabled, followersEnabled };
 }
 
-async function getCommunityProfilesPublicEnabled(token?: string): Promise<boolean> {
-  const { data, errors } = await graphqlRequest<{ communityProfilesPublicEnabled: boolean }>(
-    `query StorefrontCommunityProfileAvailability {
-      communityProfilesPublicEnabled
+const COMMUNITY_MEMBERS_QUERY = /* GraphQL */ `
+  query StorefrontCommunityMembers {
+    communityMembers {
+      databaseId
+      name
+      nicename
+      communityHandle
+      description
+      avatar(size: 192) { url }
+      communityRole
+      communityProfilePublic
+      followerCount
+      followingCount
+      isFollowedByViewer
+    }
+  }
+`;
+
+const LEGACY_COMMUNITY_MEMBERS_QUERY = /* GraphQL */ `
+  query StorefrontLegacyCommunityMembers {
+    communityMembers {
+      databaseId
+      name
+      nicename
+      communityHandle
+      description
+      avatar(size: 192) { url }
+      communityRole
+      communityProfilePublic
+    }
+  }
+`;
+
+async function getCommunityMembers(token?: string): Promise<RawUser[]> {
+  const response = await graphqlRequest<{ communityMembers: (RawUser | null)[] | null }>(COMMUNITY_MEMBERS_QUERY, undefined, token);
+  if (!response.errors?.length) return (response.data?.communityMembers || []).filter((member): member is RawUser => Boolean(member));
+  const missingMemberField = response.errors.some(({ message }) => message.includes('Cannot query field "communityMembers"'));
+  if (missingMemberField) return [];
+  const followerCompatibilityError = response.errors.every(({ message }) =>
+    ["followerCount", "followingCount", "isFollowedByViewer"].some((field) => message.includes(`"${field}"`))
+  );
+  if (!followerCompatibilityError) throw new Error(response.errors.map(({ message }) => message).join("; "));
+  const legacy = await graphqlRequest<{ communityMembers: (RawUser | null)[] | null }>(LEGACY_COMMUNITY_MEMBERS_QUERY, undefined, token);
+  if (legacy.errors?.length) throw new Error(legacy.errors.map(({ message }) => message).join("; "));
+  return (legacy.data?.communityMembers || []).filter((member): member is RawUser => Boolean(member));
+}
+
+export async function getCommunityProfile(handle: string): Promise<CommunityProfileData | null> {
+  const auth = authStore.load();
+  const { data, errors } = await graphqlRequest<{ communityProfileByHandle: RawCommunityProfile | null }>(
+    COMMUNITY_PROFILE_QUERY,
+    { handle, connectionFirst: 20, followersAfter: null, followingAfter: null },
+    auth?.authToken,
+  );
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  const profile = data?.communityProfileByHandle;
+  if (!profile) return null;
+  const member = mapMember(profile);
+  const mapPosts = (posts: RawCommunityPost[]) => posts.flatMap((post) => {
+    const author = post.author?.node;
+    return author ? [mapCommunityPost(post, mapMember(author))] : [];
+  });
+  return {
+    member,
+    followers: mapProfileConnection(profile.followers),
+    following: mapProfileConnection(profile.following),
+    pendingRequests: emptyProfileConnection(),
+    posts: mapPosts(profile.posts || []),
+    followingFeed: mapPosts(profile.followingFeed || []),
+    products: (profile.products || []).map((product) => mapProfileProduct(product)),
+    articles: (profile.articles || []).map((article) => mapProfileArticle(article, member)),
+  };
+}
+
+export async function getCommunityProfileConnection(
+  handle: string,
+  direction: "followers" | "following" | "pendingFollowRequests",
+  after: string | null,
+): Promise<CommunityProfileConnection> {
+  const token = authStore.load()?.authToken;
+  const query = `query StorefrontCommunityProfileConnection($handle: String!, $after: String) {
+    communityProfileByHandle(handle: $handle) {
+      ${direction}(first: 20, after: $after) {
+        nodes {
+          databaseId name nicename communityHandle description
+          avatar(size: 192) { url }
+          cover { url }
+          communityRole communityProfilePublic followerCount followingCount
+          isFollowedByViewer relationshipState canAccess isLocked
+        }
+        totalCount
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }`;
+  const { data, errors } = await graphqlRequest<{
+    communityProfileByHandle: Record<"followers" | "following" | "pendingFollowRequests", RawCommunityProfileConnection> | null;
+  }>(query, { handle, after }, token);
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  return data?.communityProfileByHandle ? mapProfileConnection(data.communityProfileByHandle[direction]) : emptyProfileConnection();
+}
+
+export async function getCommunityProfileDashboard(handle: string): Promise<{
+  pendingRequests: CommunityProfileConnection;
+  followers: CommunityProfileConnection;
+}> {
+  const token = authStore.load()?.authToken;
+  const { data, errors } = await graphqlRequest<{
+    communityProfileByHandle: {
+      pendingFollowRequests: RawCommunityProfileConnection;
+      followers: RawCommunityProfileConnection;
+    } | null;
+  }>(
+    `query StorefrontCommunityProfileDashboard($handle: String!) {
+      communityProfileByHandle(handle: $handle) {
+        pendingFollowRequests(first: 20) {
+          nodes { databaseId name nicename communityHandle description avatar(size: 192) { url } cover { url } communityRole communityProfilePublic followerCount followingCount isFollowedByViewer relationshipState canAccess isLocked }
+          totalCount pageInfo { hasNextPage endCursor }
+        }
+        followers(first: 20) {
+          nodes { databaseId name nicename communityHandle description avatar(size: 192) { url } cover { url } communityRole communityProfilePublic followerCount followingCount isFollowedByViewer relationshipState canAccess isLocked }
+          totalCount pageInfo { hasNextPage endCursor }
+        }
+      }
     }`,
+    { handle },
+    token,
+  );
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  const profile = data?.communityProfileByHandle;
+  return {
+    pendingRequests: profile ? mapProfileConnection(profile.pendingFollowRequests) : emptyProfileConnection(),
+    followers: profile ? mapProfileConnection(profile.followers) : emptyProfileConnection(),
+  };
+}
+
+export async function getCommunityArchiveData(backendLanguageCode: string): Promise<CommunityArchiveData> {
+  const auth = authStore.load();
+  const { data: memberData, errors: memberErrors } = await graphqlRequest<CommunityArchiveMembersResult>(
+    COMMUNITY_ARCHIVE_MEMBERS_QUERY,
+    {},
+    auth?.authToken,
+  );
+  if (memberErrors?.length) throw new Error(memberErrors.map(({ message }) => message).join("; "));
+  if (!memberData) throw new Error("The community author directory query returned no data");
+
+  const members = (memberData.communityMembers || [])
+    .filter((member): member is RawUser =>
+      Boolean(
+        member?.communityProfilePublic === true
+        && member.communityHandle?.trim()
+        && !member.communityHandle.includes("/"),
+      )
+    )
+    .map(mapMember)
+    .filter(({ role }) => role === "creator" || role === "collaborator");
+  const membersById = new Map(members.map((member) => [member.databaseId, member]));
+  const rawPosts: RawCommunityPost[] = [];
+  let after: string | null = null;
+
+  do {
+    const response: GraphqlResponse<CommunityArchivePostsResult> = await graphqlRequest<CommunityArchivePostsResult>(
+      COMMUNITY_ARCHIVE_POSTS_QUERY,
+      { language: backendLanguageCode, after },
+      auth?.authToken,
+    );
+    const pageData: CommunityArchivePostsResult | null = response.data;
+    const errors = response.errors;
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    if (!pageData?.communityPosts) throw new Error("The community tag archive query returned no data");
+
+    rawPosts.push(...pageData.communityPosts.nodes);
+    if (!pageData.communityPosts.pageInfo.hasNextPage) break;
+    if (!pageData.communityPosts.pageInfo.endCursor) {
+      throw new Error("The community tag archive query returned an incomplete pagination cursor");
+    }
+    after = pageData.communityPosts.pageInfo.endCursor;
+  } while (after);
+
+  const posts = rawPosts.flatMap((post) => {
+    const author = post.author?.node;
+    if (!author) return [];
+    const eligibleAuthor = membersById.get(author.databaseId);
+    return eligibleAuthor?.isPublic && (eligibleAuthor.role === "creator" || eligibleAuthor.role === "collaborator")
+      ? [mapCommunityPost(post, eligibleAuthor)]
+      : [];
+  });
+  const tags = new Map<string, CommunityTagSummary>();
+  posts.forEach((post) => {
+    post.tags.forEach((name, index) => {
+      const slug = post.tagSlugs[index];
+      if (!name || !slug) return;
+      const existing = tags.get(slug);
+      if (existing) {
+        existing.postCount += 1;
+      } else {
+        tags.set(slug, { name, slug, postCount: 1 });
+      }
+    });
+  });
+
+  return {
+    authors: members
+      .sort((left, right) => left.displayName.localeCompare(right.displayName)),
+    tags: [...tags.values()].sort((left, right) =>
+      right.postCount - left.postCount || left.name.localeCompare(right.name)
+    ),
+    posts,
+  };
+}
+
+async function getCommunityFeatureFlag(
+  field: "communityProfilesPublicEnabled" | "communityFollowersEnabled",
+  token?: string,
+): Promise<boolean> {
+  const { data, errors } = await graphqlRequest<Record<string, boolean>>(
+    `query StorefrontCommunityFeatureFlag { ${field} }`,
     undefined,
     token,
   );
   if (errors?.length) {
-    const fieldIsUnavailable = errors.every(({ message }) => message.includes('Cannot query field "communityProfilesPublicEnabled"'));
-    if (fieldIsUnavailable) return true;
+    if (errors.every(({ message }) => message.includes(`Cannot query field "${field}"`))) return true;
     throw new Error(errors.map(({ message }) => message).join("; "));
   }
-  return data?.communityProfilesPublicEnabled !== false;
+  return data?.[field] !== false;
 }
 
 export async function getCommunityPostByDatabaseId(postId: string): Promise<CommunityPostDetail | null> {
@@ -598,7 +1137,10 @@ export async function getCommunityPostByDatabaseId(postId: string): Promise<Comm
     authStore.load()?.authToken,
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  return mapCommunityPostDetail(data?.contentNode || null, postId);
+  const node = data?.contentNode || null;
+  if (!node || node.__typename !== "CommunityPost") return null;
+  const completeNode = await loadRemainingCommunityPostComments(node as RawCommunityPostDetail);
+  return mapCommunityPostDetail(completeNode, postId);
 }
 
 export async function getCommunityPostByUri(uri: string): Promise<CommunityPostDetail | null> {
@@ -609,7 +1151,52 @@ export async function getCommunityPostByUri(uri: string): Promise<CommunityPostD
     authStore.load()?.authToken,
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  return mapCommunityPostDetail(data?.nodeByUri || null, normalizedUri);
+  const node = data?.nodeByUri || null;
+  if (!node || node.__typename !== "CommunityPost") return null;
+  const completeNode = await loadRemainingCommunityPostComments(node as RawCommunityPostDetail);
+  return mapCommunityPostDetail(completeNode, normalizedUri);
+}
+
+async function loadRemainingCommunityPostComments(
+  post: RawCommunityPostDetail,
+): Promise<RawCommunityPostDetail> {
+  const comments = [...post.comments.nodes];
+  let pageInfo = post.comments.pageInfo;
+  const token = authStore.load()?.authToken;
+
+  while (pageInfo?.hasNextPage) {
+    if (!pageInfo.endCursor) {
+      throw new Error("The community discussion query returned an incomplete pagination cursor");
+    }
+    const { data, errors } = await graphqlRequest<{
+      contentNode: {
+        __typename: "CommunityPost";
+        comments: {
+          nodes: RawComment[];
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
+      } | { __typename: string } | null;
+    }>(
+      COMMUNITY_POST_COMMENTS_QUERY,
+      { id: String(post.databaseId), after: pageInfo.endCursor },
+      token,
+    );
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    if (!data?.contentNode || data.contentNode.__typename !== "CommunityPost" || !("comments" in data.contentNode)) {
+      throw new Error("The community discussion pagination query returned no post");
+    }
+
+    comments.push(...data.contentNode.comments.nodes);
+    pageInfo = data.contentNode.comments.pageInfo;
+  }
+
+  return {
+    ...post,
+    comments: {
+      nodes: comments,
+      pageInfo: pageInfo || { hasNextPage: false, endCursor: null },
+    },
+  };
 }
 
 function mapCommunityPostDetail(
@@ -627,7 +1214,7 @@ function mapCommunityPostDetail(
     author,
     languageCode: rawPost.language?.code?.toLowerCase() || "en",
     uri: rawPost.uri || "",
-    translations: rawPost.translations.flatMap((translation) => {
+    translations: (rawPost.translations || []).flatMap((translation) => {
       const languageCode = translation.language?.code?.toLowerCase();
       return languageCode ? [{ databaseId: translation.databaseId, languageCode, uri: translation.uri || "" }] : [];
     }),
@@ -645,6 +1232,7 @@ const VIEWER_QUERY = /* GraphQL */ `
       avatar(size: 192) {
         url
       }
+      communityCover { url }
       communityRole
       communityProfilePublic
       followerCount
@@ -662,16 +1250,81 @@ export async function getCommunityViewer(): Promise<CommunityViewer | null> {
   return { ...mapMember(data.funkycommerceViewer), capabilities: data.funkycommerceViewer.capabilities || [] };
 }
 
-export async function createCommunityPost(input: { caption: string; tags: string[]; imageDataUrl: string; language: string }): Promise<void> {
-  await authenticatedMutation(
-    `mutation PublishCommunityPost($caption: String!, $tags: [String], $imageDataUrl: String!, $language: String) {
-      publishCommunityPost(input: { caption: $caption, tags: $tags, imageDataUrl: $imageDataUrl, language: $language }) {
+export type CommunityPostMediaInput = {
+  attachmentId?: number;
+  dataUrl?: string;
+};
+
+export type CommunityPostMutationInput = {
+  title: string;
+  description: string;
+  tags: string[];
+  media: CommunityPostMediaInput[];
+  translationOfId?: number;
+};
+
+export async function createCommunityPost(input: CommunityPostMutationInput & { language: string }): Promise<number> {
+  const result = await authenticatedMutation<{ publishCommunityPost: { communityPost: { databaseId: number } } }>(
+    `mutation PublishCommunityPost(
+      $title: String!
+      $description: String
+      $tags: [String]
+      $media: [FunkycommerceCommunityMediaInput]
+      $language: String
+      $translationOfId: Int
+    ) {
+      publishCommunityPost(input: {
+        title: $title
+        description: $description
+        tags: $tags
+        media: $media
+        language: $language
+        translationOfId: $translationOfId
+      }) {
         communityPost { databaseId }
       }
     }`,
     input,
     "publishCommunityPost",
   );
+  return result.publishCommunityPost.communityPost.databaseId;
+}
+
+export async function updateCommunityPost(postId: number, input: CommunityPostMutationInput): Promise<void> {
+  await authenticatedMutation(
+    `mutation UpdateStorefrontCommunityPost(
+      $postId: Int!
+      $title: String!
+      $description: String
+      $tags: [String]
+      $media: [FunkycommerceCommunityMediaInput]
+      $translationOfId: Int
+    ) {
+      updateStorefrontCommunityPost(input: {
+        postId: $postId
+        title: $title
+        description: $description
+        tags: $tags
+        media: $media
+        translationOfId: $translationOfId
+      }) {
+        communityPost { databaseId }
+      }
+    }`,
+    { postId, ...input },
+    "updateStorefrontCommunityPost",
+  );
+}
+
+export async function deleteCommunityPost(postId: number): Promise<number> {
+  const result = await authenticatedMutation<{ deleteStorefrontCommunityPost: { deletedPostId: number } }>(
+    `mutation DeleteStorefrontCommunityPost($postId: Int!) {
+      deleteStorefrontCommunityPost(input: { postId: $postId }) { deletedPostId }
+    }`,
+    { postId },
+    "deleteStorefrontCommunityPost",
+  );
+  return result.deleteStorefrontCommunityPost.deletedPostId;
 }
 
 export async function toggleCommunityPostLike(postId: number): Promise<{ liked: boolean; likesCount: number }> {
@@ -694,6 +1347,29 @@ export async function updateCommunityProfileVisibility(isPublic: boolean): Promi
     "updateCommunityProfileVisibility",
   );
   return result.updateCommunityProfileVisibility.isPublic;
+}
+
+export async function uploadCommunityProfileCover(dataUrl: string): Promise<string | undefined> {
+  const result = await authenticatedMutation<{
+    uploadCommunityProfileCover: { cover: { url: string | null } | null };
+  }>(
+    `mutation UploadCommunityProfileCover($dataUrl: String!) {
+      uploadCommunityProfileCover(input: { dataUrl: $dataUrl }) { cover { url } }
+    }`,
+    { dataUrl },
+    "uploadCommunityProfileCover",
+  );
+  return result.uploadCommunityProfileCover.cover?.url || undefined;
+}
+
+export async function removeCommunityProfileCover(): Promise<void> {
+  await authenticatedMutation(
+    `mutation RemoveCommunityProfileCover {
+      removeCommunityProfileCover(input: {}) { removed }
+    }`,
+    {},
+    "removeCommunityProfileCover",
+  );
 }
 
 /** Shared GraphQL input fields for both `createCollaboratorPost` and `updateCollaboratorPost`. */
@@ -787,6 +1463,17 @@ export async function updateCollaboratorPost(input: CollaboratorPostInput & { po
   );
 }
 
+export async function deleteCollaboratorPost(postId: number): Promise<number> {
+  const result = await authenticatedMutation<{ deleteCollaboratorPost: { deletedPostId: number } }>(
+    `mutation DeleteCollaboratorPost($postId: Int!) {
+      deleteCollaboratorPost(input: { postId: $postId }) { deletedPostId }
+    }`,
+    { postId },
+    "deleteCollaboratorPost",
+  );
+  return result.deleteCollaboratorPost.deletedPostId;
+}
+
 const COLLABORATOR_POST_FOR_EDITING_QUERY = /* GraphQL */ `
   query StorefrontCollaboratorPostForEditing($id: ID!) {
     post(id: $id, idType: DATABASE_ID) {
@@ -856,6 +1543,14 @@ const TRANSLATION_CANDIDATES_QUERY = /* GraphQL */ `
   }
 `;
 
+const COMMUNITY_TRANSLATION_CANDIDATES_QUERY = /* GraphQL */ `
+  query StorefrontCommunityTranslationCandidates($search: String!) {
+    communityPosts(first: 10, where: { search: $search }) {
+      nodes { databaseId title(format: RAW) uri language { code } }
+    }
+  }
+`;
+
 /**
  * Searches existing posts to populate the "this article is a translation of…" picker.
  * Results in the current post's own language or matching the post being edited are
@@ -872,6 +1567,23 @@ export async function searchTranslationCandidatePosts(search: string, excludeLan
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   return filterTranslationCandidates(data?.posts.nodes || [], excludeLanguageCode, excludePostId);
+}
+
+export async function searchTranslationCandidateCommunityPosts(
+  search: string,
+  excludeLanguageCode: string,
+  excludePostId?: number,
+): Promise<TranslationCandidate[]> {
+  const trimmed = search.trim();
+  if (trimmed.length < 2) return [];
+  const token = authStore.load()?.authToken;
+  const { data, errors } = await graphqlRequest<{
+    communityPosts: {
+      nodes: { databaseId: number; title: string | null; uri: string | null; language: { code: string | null } | null }[];
+    };
+  }>(COMMUNITY_TRANSLATION_CANDIDATES_QUERY, { search: trimmed }, token);
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  return filterTranslationCandidates(data?.communityPosts.nodes || [], excludeLanguageCode, excludePostId);
 }
 
 /** Shared GraphQL input fields for both `createMarketplaceProduct` and `updateMarketplaceProduct`. */
@@ -894,14 +1606,22 @@ type MarketplaceProductInput = {
   downloadableFiles: DownloadableFileInput[];
   downloadLimit?: number;
   downloadExpiryDays?: number;
+  externalUrl?: string;
+  buttonText?: string;
   attributes: { name: string; options: string[] }[];
   variations: {
+    variationId?: number;
     attributes: { name: string; option: string }[];
     sku: string;
     price: number;
     regularPrice?: number;
     stockQuantity: number;
     imageIndex: number;
+    isVirtual: boolean;
+    isDownloadable: boolean;
+    downloadableFiles: DownloadableFileInput[];
+    downloadLimit?: number;
+    downloadExpiryDays?: number;
   }[];
 };
 
@@ -924,6 +1644,8 @@ const MARKETPLACE_PRODUCT_MUTATION_VARIABLES = `
       $downloadableFiles: [FunkycommerceDownloadableFileInput]
       $downloadLimit: Int
       $downloadExpiryDays: Int
+      $externalUrl: String
+      $buttonText: String
       $attributes: [FunkycommerceMarketplaceAttributeInput]
       $variations: [FunkycommerceMarketplaceVariationInput]
 `;
@@ -947,11 +1669,13 @@ const MARKETPLACE_PRODUCT_MUTATION_FIELDS = `
         downloadableFiles: $downloadableFiles
         downloadLimit: $downloadLimit
         downloadExpiryDays: $downloadExpiryDays
+        externalUrl: $externalUrl
+        buttonText: $buttonText
         attributes: $attributes
         variations: $variations
 `;
 
-export async function createMarketplaceProduct(input: MarketplaceProductInput & { productType: "simple" | "variable"; language: string }): Promise<void> {
+export async function createMarketplaceProduct(input: MarketplaceProductInput & { productType: MarketplaceProductType; language: string }): Promise<void> {
   await authenticatedMutation(
     `mutation CreateMarketplaceProduct(
       ${MARKETPLACE_PRODUCT_MUTATION_VARIABLES}
@@ -989,7 +1713,7 @@ export async function updateMarketplaceProduct(input: MarketplaceProductInput & 
   );
 }
 
-const MARKETPLACE_PRODUCT_FOR_EDITING_QUERY = /* GraphQL */ `
+export const MARKETPLACE_PRODUCT_FOR_EDITING_QUERY = /* GraphQL */ `
   query StorefrontMarketplaceProductForEditing($id: ID!) {
     product(id: $id, idType: DATABASE_ID) {
       __typename
@@ -1004,8 +1728,8 @@ const MARKETPLACE_PRODUCT_FOR_EDITING_QUERY = /* GraphQL */ `
       productCategories(first: 1) { nodes { name } }
       productBrands(first: 1) { nodes { name } }
       upsell(first: 20) { nodes { databaseId } }
-      crossSell(first: 20) { nodes { databaseId } }
       ... on SimpleProduct {
+        crossSell(first: 20) { nodes { databaseId } }
         price(format: RAW)
         regularPrice(format: RAW)
         stockQuantity
@@ -1016,27 +1740,36 @@ const MARKETPLACE_PRODUCT_FOR_EDITING_QUERY = /* GraphQL */ `
         downloads { name file }
       }
       ... on VariableProduct {
+        crossSell(first: 20) { nodes { databaseId } }
         virtual
-        downloadable
-        downloadLimit
-        downloadExpiry
-        downloads { name file }
         attributes { nodes { name options } }
         variations(first: 100) {
           nodes {
+            databaseId
             sku
             price(format: RAW)
             regularPrice(format: RAW)
             stockQuantity
+            virtual
+            downloadable
+            downloadLimit
+            downloadExpiry
+            downloads { name file }
             attributes { nodes { name value } }
           }
         }
+      }
+      ... on ExternalProduct {
+        price(format: RAW)
+        regularPrice(format: RAW)
+        externalUrl
+        buttonText
       }
     }
   }
 `;
 
-type RawMarketplaceProductForEditing = {
+export type RawMarketplaceProductForEditing = {
   __typename: string;
   databaseId: number;
   name: string | null;
@@ -1048,7 +1781,7 @@ type RawMarketplaceProductForEditing = {
   productCategories: { nodes: { name: string | null }[] };
   productBrands: { nodes: { name: string | null }[] };
   upsell: { nodes: { databaseId: number }[] };
-  crossSell: { nodes: { databaseId: number }[] };
+  crossSell?: { nodes: { databaseId: number }[] };
   price?: string | null;
   regularPrice?: string | null;
   stockQuantity?: number | null;
@@ -1057,13 +1790,21 @@ type RawMarketplaceProductForEditing = {
   downloadLimit?: number | null;
   downloadExpiry?: number | null;
   downloads?: { name: string | null; file: string | null }[];
+  externalUrl?: string | null;
+  buttonText?: string | null;
   attributes?: { nodes: { name: string | null; options: string[] | null }[] };
   variations?: {
     nodes: {
+      databaseId: number;
       sku: string | null;
       price: string | null;
       regularPrice: string | null;
       stockQuantity: number | null;
+      virtual?: boolean | null;
+      downloadable?: boolean | null;
+      downloadLimit?: number | null;
+      downloadExpiry?: number | null;
+      downloads?: { name: string | null; file: string | null }[];
       attributes: { nodes: { name: string | null; value: string | null }[] };
     }[];
   };
@@ -1080,7 +1821,15 @@ export async function getMarketplaceProductForEditing(productId: number): Promis
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   const product = data?.product;
   if (!product) return null;
-  const isVariable = product.__typename === "VariableProduct";
+  return mapMarketplaceProductForEditing(product);
+}
+
+export function mapMarketplaceProductForEditing(product: RawMarketplaceProductForEditing): MarketplaceProductForEditing {
+  const productType: MarketplaceProductType = product.__typename === "VariableProduct"
+    ? "variable"
+    : product.__typename === "ExternalProduct"
+      ? "external"
+      : "simple";
   return {
     databaseId: product.databaseId,
     name: product.name || "",
@@ -1089,8 +1838,8 @@ export async function getMarketplaceProductForEditing(productId: number): Promis
     category: product.productCategories.nodes[0]?.name || "",
     brand: product.productBrands.nodes[0]?.name || "",
     upsellIds: product.upsell.nodes.map(({ databaseId }) => databaseId),
-    crossSellIds: product.crossSell.nodes.map(({ databaseId }) => databaseId),
-    productType: isVariable ? "variable" : "simple",
+    crossSellIds: (product.crossSell?.nodes || []).map(({ databaseId }) => databaseId),
+    productType,
     sku: product.sku || "",
     stockQuantity: product.stockQuantity ?? 0,
     priceLabel: product.price || "",
@@ -1101,13 +1850,21 @@ export async function getMarketplaceProductForEditing(productId: number): Promis
     downloadLimit: product.downloadLimit ?? 0,
     downloadExpiryDays: product.downloadExpiry ?? 0,
     existingDownloadNames: (product.downloads || []).flatMap((download) => (download.name ? [download.name] : [])),
+    externalUrl: product.externalUrl || "",
+    buttonText: product.buttonText || "",
     attributes: (product.attributes?.nodes || []).flatMap((attribute) => (attribute.name && attribute.options?.length ? [{ name: attribute.name, options: attribute.options }] : [])),
     variations: (product.variations?.nodes || []).map((variation) => ({
+      databaseId: variation.databaseId,
       attributes: variation.attributes.nodes.flatMap(({ name, value }) => (name && value ? [{ name, option: value }] : [])),
-      sku: variation.sku || "",
+      sku: variation.sku && variation.sku !== product.sku ? variation.sku : "",
       priceLabel: variation.price || "",
       compareAtPriceLabel: variation.regularPrice && variation.regularPrice !== variation.price ? variation.regularPrice : "",
       stockQuantity: variation.stockQuantity ?? 0,
+      isVirtual: variation.virtual ?? false,
+      isDownloadable: variation.downloadable ?? false,
+      downloadLimit: variation.downloadLimit ?? 0,
+      downloadExpiryDays: variation.downloadExpiry ?? 0,
+      existingDownloadNames: (variation.downloads || []).flatMap((download) => (download.name ? [download.name] : [])),
     })),
   };
 }
@@ -1125,10 +1882,10 @@ async function authenticatedMutation<T = Record<string, unknown>>(
   return data;
 }
 
-export async function toggleFollowUser(userId: number): Promise<{ isFollowed: boolean; followerCount: number }> {
-  const result = await authenticatedMutation<{ toggleFollowUser: { isFollowed: boolean; followerCount: number } }>(
+export async function toggleFollowUser(userId: number): Promise<{ isFollowed: boolean; followerCount: number; relationshipState: CommunityRelationshipState }> {
+  const result = await authenticatedMutation<{ toggleFollowUser: { isFollowed: boolean; followerCount: number; relationshipState: CommunityRelationshipState } }>(
     `mutation ToggleFollowUser($userId: Int!) {
-      toggleFollowUser(input: { userId: $userId }) { isFollowed followerCount }
+      toggleFollowUser(input: { userId: $userId }) { isFollowed followerCount relationshipState }
     }`,
     { userId },
     "toggleFollowUser",
@@ -1136,10 +1893,56 @@ export async function toggleFollowUser(userId: number): Promise<{ isFollowed: bo
   return result.toggleFollowUser;
 }
 
+export async function followCommunityProfile(userId: number): Promise<{ relationshipState: CommunityRelationshipState; followerCount: number }> {
+  const result = await authenticatedMutation<{
+    followCommunityProfile: { relationshipState: CommunityRelationshipState; followerCount: number };
+  }>(
+    `mutation FollowCommunityProfile($userId: Int!) {
+      followCommunityProfile(input: { userId: $userId }) { relationshipState followerCount }
+    }`,
+    { userId },
+    "followCommunityProfile",
+  );
+  return result.followCommunityProfile;
+}
+
+export async function unfollowCommunityProfile(userId: number): Promise<{ relationshipState: CommunityRelationshipState; followerCount: number }> {
+  const result = await authenticatedMutation<{
+    unfollowCommunityProfile: { relationshipState: CommunityRelationshipState; followerCount: number };
+  }>(
+    `mutation UnfollowCommunityProfile($userId: Int!) {
+      unfollowCommunityProfile(input: { userId: $userId }) { relationshipState followerCount }
+    }`,
+    { userId },
+    "unfollowCommunityProfile",
+  );
+  return result.unfollowCommunityProfile;
+}
+
+export async function manageCommunityFollower(
+  followerUserId: number,
+  action: "approve" | "decline" | "remove",
+): Promise<void> {
+  await authenticatedMutation(
+    `mutation ManageCommunityFollower($followerUserId: Int!, $action: String!) {
+      manageCommunityFollower(input: { followerUserId: $followerUserId, action: $action }) {
+        relationshipState followerCount
+      }
+    }`,
+    { followerUserId, action },
+    "manageCommunityFollower",
+  );
+}
+
 function mapMember(user: RawUser): CommunityMember {
+  const relationshipState = user.relationshipState === "pending"
+    || user.relationshipState === "accepted"
+    || user.relationshipState === "owner"
+    ? user.relationshipState
+    : "none";
   return {
     databaseId: user.databaseId,
-    handle: user.communityHandle || user.nicename || `member-${user.databaseId}`,
+    handle: communityHandleFromUser(user),
     displayName: user.name || user.nicename || "Community member",
     bio: user.description || "",
     avatarUrl: user.avatar?.url || undefined,
@@ -1152,26 +1955,128 @@ function mapMember(user: RawUser): CommunityMember {
     followerCount: user.followerCount ?? 0,
     followingCount: user.followingCount ?? 0,
     isFollowedByViewer: user.isFollowedByViewer ?? false,
+    coverUrl: user.cover?.url || user.communityCover?.url || undefined,
+    relationshipState,
+    canAccess: user.canAccess ?? user.communityProfilePublic !== false,
+    isLocked: user.isLocked ?? user.communityProfilePublic === false,
+  };
+}
+
+function emptyProfileConnection(): CommunityProfileConnection {
+  return { nodes: [], totalCount: 0, hasNextPage: false, endCursor: null };
+}
+
+function mapProfileConnection(connection: RawCommunityProfileConnection | null | undefined): CommunityProfileConnection {
+  if (!connection) return emptyProfileConnection();
+  return {
+    nodes: (connection.nodes || []).map(mapMember),
+    totalCount: connection.totalCount ?? 0,
+    hasNextPage: connection.pageInfo?.hasNextPage ?? false,
+    endCursor: connection.pageInfo?.endCursor ?? null,
+  };
+}
+
+function mapProfileProduct(product: RawProduct): ProductCardData {
+  const brand = product.productBrands?.nodes?.find(({ name }) => name);
+  const engagementRating = mapPublicEngagementRating(product.engagementRating);
+  return {
+    id: product.id,
+    databaseId: product.databaseId,
+    name: product.name || "Untitled listing",
+    subtitle: stripHtml(product.shortDescription || "") || undefined,
+    category: "Marketplace",
+    priceLabel: product.price || product.salePrice || product.regularPrice || "",
+    priceAmount: parseLocalizedPrice(product.price || product.salePrice || product.regularPrice || "") ?? undefined,
+    compareAtPriceLabel: product.salePrice ? product.regularPrice || undefined : undefined,
+    compareAtPriceAmount: product.salePrice ? parseLocalizedPrice(product.regularPrice || "") ?? undefined : undefined,
+    rating: engagementRating.average ?? undefined,
+    reviewCount: engagementRating.count,
+    imageUrl: product.image?.sourceUrl || undefined,
+    brand: brand?.name || undefined,
+    brandHref: brand?.uri || undefined,
+    href: product.uri || (product.slug ? `/shop/${product.slug}` : "/shop"),
+    productType: resolveCommerceProductType(product.__typename),
+    externalUrl: product.__typename === "ExternalProduct" ? product.externalUrl || undefined : undefined,
+  };
+}
+
+function mapProfileArticle(article: RawProfileArticle, member: CommunityMember): PostCardData {
+  const title = stripHtml(article.title || "") || "Untitled article";
+  const excerpt = stripHtml(article.excerpt || "");
+  const words = `${title} ${excerpt}`.trim().split(/\s+/).filter(Boolean).length;
+  return {
+    id: article.id,
+    databaseId: article.databaseId,
+    authorDatabaseId: member.databaseId,
+    slug: article.slug || String(article.databaseId),
+    title,
+    excerpt,
+    imageUrl: article.featuredImage?.node?.sourceUrl || undefined,
+    date: article.date || new Date(0).toISOString(),
+    lastEditedDate: article.modified || undefined,
+    author: { name: member.displayName, avatarUrl: member.avatarUrl, slug: member.handle },
+    wordCount: words,
+    readingTimeMinutes: Math.max(1, Math.ceil(words / 220)),
+    href: article.uri || `/community/${member.handle}/articles/${article.slug || article.databaseId}`,
   };
 }
 
 function mapCommunityPost(post: RawCommunityPost, member: CommunityMember): CommunityPostData {
-  const width = post.featuredImage?.node.mediaDetails?.width || 4;
-  const height = post.featuredImage?.node.mediaDetails?.height || 5;
+  const media: SocialPostMedia[] = post.media.flatMap((item) =>
+    item?.url && (item.mediaType === "image" || item.mediaType === "video")
+      ? [{
+          databaseId: item.databaseId,
+          url: item.url,
+          mimeType: item.mimeType,
+          mediaType: item.mediaType,
+          altText: item.altText || "",
+          width: item.width || undefined,
+          height: item.height || undefined,
+        }]
+      : [],
+  );
+  if (!media.length && post.featuredImage?.node.sourceUrl) {
+    media.push({
+      databaseId: 0,
+      url: post.featuredImage.node.sourceUrl,
+      mimeType: "image/jpeg",
+      mediaType: "image",
+      altText: stripHtml(post.title || ""),
+      width: post.featuredImage.node.mediaDetails?.width || undefined,
+      height: post.featuredImage.node.mediaDetails?.height || undefined,
+    });
+  }
+  const primaryMedia = media[0];
+  const width = primaryMedia?.width || post.featuredImage?.node.mediaDetails?.width || 4;
+  const height = primaryMedia?.height || post.featuredImage?.node.mediaDetails?.height || 5;
+  const tags = post.communityTags.nodes.flatMap(({ name, slug }) =>
+    name && slug ? [{ name, slug }] : []
+  );
+  const title = stripHtml(post.title || "") || "Community post";
+  const descriptionHtml = post.description ?? post.content ?? "";
+  const description = stripHtml(descriptionHtml);
+  const engagementRating = mapPublicEngagementRating(post.engagementRating);
   return {
     id: String(post.databaseId),
     href: post.uri || `/community/post/${post.databaseId}`,
     databaseId: post.databaseId,
-    image: post.featuredImage?.node.sourceUrl || "",
+    image: media.find((item) => item.mediaType === "image")?.url || "",
     aspect: `${width}/${height}`,
-    caption: stripHtml(post.content || ""),
-    contentHtml: post.content || "",
-    tags: post.communityTags.nodes.flatMap(({ name }) => name ? [name] : []),
+    title,
+    description,
+    caption: description || title,
+    media,
+    contentHtml: descriptionHtml,
+    tags: tags.map(({ name }) => name),
+    tagSlugs: tags.map(({ slug }) => slug),
     likes: post.likesCount,
     comments: post.comments.nodes.length,
     createdAt: post.date || new Date(0).toISOString(),
     likedByViewer: post.likedByViewer,
-    ratingAverage: post.ratingAverage ?? undefined,
+    canEdit: post.canEdit,
+    canDelete: post.canDelete,
+    ratingAverage: engagementRating.average ?? undefined,
+    engagementRating,
     author: {
       handle: member.handle,
       displayName: member.displayName,
@@ -1190,9 +2095,10 @@ function mapComment(comment: RawComment): ProductReview {
     date: comment.date || new Date(0).toISOString(),
     content: stripHtml(comment.content || ""),
     parentId: comment.parentId,
+    parentDatabaseId: comment.parentDatabaseId,
   };
 }
 
 function stripHtml(value: string): string {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return normalizeDisplayLabel(value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
 }

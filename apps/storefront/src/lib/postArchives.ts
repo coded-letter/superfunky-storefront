@@ -1,5 +1,8 @@
 import type { PostCardData } from "@funky/ui";
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
+import { MALFORMED_POST_ARCHIVE_RULE } from "./postArchiveGraphqlCompatibility";
 import {
   mapScript,
   mapSeo,
@@ -9,6 +12,11 @@ import {
   type RawCmsScript,
   type RawCmsSeo,
 } from "./pages";
+import { normalizeFeaturedImage, type RawFeaturedImage } from "@funky/cms";
+import {
+  createCorePostArchiveQuery,
+  shouldPreferCoreGraphqlQueries,
+} from "./profileGraphqlCompatibility";
 
 export type PostTaxonomy = "category" | "tag";
 export type TaxonomyIdentifierType = "URI" | "SLUG";
@@ -56,7 +64,7 @@ export type RawBlogPost = {
   date: string | null;
   modified: string | null;
   language: { code: string | null } | null;
-  translations: ({ id: string; language: { code: string | null } | null } | null)[] | null;
+  translations: ({ id: string; databaseId: number; language: { code: string | null } | null } | null)[] | null;
   author: {
     node: {
       id: string;
@@ -68,10 +76,10 @@ export type RawBlogPost = {
       avatar: { url: string | null } | null;
     };
   } | null;
-  featuredImage: { node: { sourceUrl: string | null } } | null;
+  featuredImage: RawFeaturedImage;
   categories: { nodes: RawBlogTerm[] } | null;
   tags: { nodes: RawBlogTerm[] } | null;
-  seo: { readingTime: number | null } | null;
+  seo: { readingTime: number | null; schema: { raw: string | null } | null } | null;
 };
 
 type RawTaxonomySeo = Omit<RawCmsSeo, "schema"> & {
@@ -116,6 +124,7 @@ export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
     }
     translations {
       id
+      databaseId
       language {
         code
       }
@@ -136,6 +145,12 @@ export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
     featuredImage {
       node {
         sourceUrl
+        altText
+        srcSet
+        mediaDetails {
+          width
+          height
+        }
       }
     }
     categories {
@@ -162,6 +177,9 @@ export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
     }
     seo {
       readingTime
+      schema {
+        raw
+      }
     }
   }
   pageInfo {
@@ -216,6 +234,7 @@ const TAXONOMY_SEO_FIELDS = /* GraphQL */ `
   }
   opengraphModifiedTime
   opengraphPublishedTime
+  opengraphPublisher
   opengraphSiteName
   opengraphTitle
   opengraphType
@@ -316,12 +335,21 @@ export async function getPostTaxonomyArchive(
   idType: TaxonomyIdentifierType,
 ): Promise<CmsPostArchive | null> {
   const query = taxonomy === "category" ? CATEGORY_ARCHIVE_QUERY : TAG_ARCHIVE_QUERY;
-  const { data, errors } = await graphqlRequest<TaxonomyArchiveResult>(query, { id: identifier, idType });
+  const initialQuery = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCorePostArchiveQuery(query)
+    : query;
+  const { data, errors } = await requestGraphqlWithCompatibility<TaxonomyArchiveResult>(
+    graphqlRequest,
+    initialQuery,
+    { id: identifier, idType },
+    [MALFORMED_POST_ARCHIVE_RULE, ...BLOG_DATA_COMPATIBILITY_RULES],
+  );
 
-  if (errors?.length) {
-    throw new Error(errors.map(({ message }) => message).join("; "));
-  }
+  // Only treat GraphQL errors as fatal when no usable data came back — a term with
+  // zero published posts still resolves normally and shouldn't be downgraded to an
+  // "unavailable" error page by unrelated, non-fatal resolver warnings.
   if (!data) {
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
     throw new Error(`The ${taxonomy} archive query returned no data`);
   }
   if (!data.archive) {
@@ -363,12 +391,13 @@ export function mapBlogPost(post: RawBlogPost): PostCardData {
   const wordCount = contentText ? contentText.split(/\s+/).length : 0;
   const readingTime = post.seo?.readingTime;
   const languageCode = post.language?.code?.toLowerCase();
+  const featuredImage = normalizeFeaturedImage(post.featuredImage, post.seo?.schema ?? null);
 
   const translations: Record<string, string> = {};
   post.translations?.forEach((translation) => {
     if (!translation) return;
     const code = translation.language?.code?.toLowerCase();
-    if (code && translation.id) translations[code] = translation.id;
+    if (code && translation.databaseId) translations[code] = String(translation.databaseId);
   });
 
   return {
@@ -377,7 +406,7 @@ export function mapBlogPost(post: RawBlogPost): PostCardData {
     href: post.uri || undefined,
     title: post.title?.trim() || "Untitled post",
     excerpt: htmlToText(post.excerpt || ""),
-    imageUrl: post.featuredImage?.node.sourceUrl || undefined,
+    imageUrl: featuredImage?.sourceUrl || undefined,
     date: post.date || "",
     lastEditedDate: post.modified || undefined,
     databaseId: post.databaseId,

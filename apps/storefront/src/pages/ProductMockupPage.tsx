@@ -1,58 +1,69 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
+  calculateDiscountPercent,
   ProductCard,
   ProductGallery,
   Seo,
   resolveVariationSwatchColor,
+  savedListEntityId,
   useCart,
   useCurrency,
-  useLanguage,
+  useLayoutPreferences,
   useWishlist,
   type ProductGalleryImage,
+  type ProductPageLayout,
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { useIncrementalData } from "../lib/incrementalData";
-import { getProductByUriOrSlug, normalizeProductDetail, type CmsProductDetail } from "../lib/commerce";
+import { GuestStarRating } from "../components/GuestStarRating";
+import { ProductInquiryForm } from "../components/ProductInquiryForm";
+import { renderCmsContent } from "../components/CmsPageContent";
+import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
+import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortcodeRenderers";
+import { useIncrementalData } from "@funky/sdk/react";
+import { getProductByUriOrSlug, normalizeProductDetail, resolveProductPriceMode, type CmsProductDetail } from "../lib/commerce";
 import { createReview } from "../lib/comments";
+import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
+import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
+import { DEFAULT_STOREFRONT_CONFIGURATION } from "../lib/navigation";
 import { useStorefrontPath } from "../lib/storefrontPaths";
+import { useNavigationData } from "../state/navigationData";
 import { CommentsSection, summarizeReviews } from "./CommentThread";
 import type { ProductVariationCombo } from "./shared";
 
 export function ProductMockupPage() {
   const { pathname } = useLocation();
   const { slug } = useParams();
-  const navigate = useNavigate();
-  const { languageCode, hasLanguagePreference, syncLanguageCode } = useLanguage();
   const identifier = pathname.startsWith("/shop/") && slug ? slug : pathname;
-  const { data: product, isLoading, error } = useIncrementalData(
+  const { data: product, isLoading, isRevalidating, error } = useIncrementalData(
     `product:${identifier}`,
     () => getProductByUriOrSlug(identifier),
   );
   const normalizedProduct = product ? normalizeProductDetail(product) : null;
 
-  useEffect(() => {
-    if (!normalizedProduct) return;
-    if (!hasLanguagePreference) {
-      syncLanguageCode(normalizedProduct.languageCode);
-      return;
-    }
-    if (normalizedProduct.languageCode.toLowerCase() === languageCode.toLowerCase()) return;
-    const translation = normalizedProduct.translations.find((item) => item.languageCode.toLowerCase() === languageCode.toLowerCase());
-    if (translation?.uri && translation.uri !== pathname) navigate(translation.uri);
-  }, [hasLanguagePreference, languageCode, navigate, normalizedProduct, pathname, syncLanguageCode]);
+  useCanonicalContentLanguage(
+    normalizedProduct?.languageCode,
+    normalizedProduct?.translations || [],
+    pathname,
+    !isLoading && !isRevalidating,
+  );
 
   if (isLoading) return <ContentLoadingState label="Loading product" />;
   if (error) return <ProductStatus title="Product unavailable" message={error.message} />;
-  if (!normalizedProduct) return <ProductStatus title="Product not found" message={`WooCommerce has no published product matching “${identifier}”.`} />;
+  if (!normalizedProduct) return <ProductStatus title="Product not found" message={`The store has no published product matching “${identifier}”.`} />;
 
   return <ProductTemplate key={normalizedProduct.id} product={normalizedProduct} />;
 }
 
 function ProductTemplate({ product }: { product: CmsProductDetail }) {
+  const contentRef = useRef<HTMLDivElement>(null);
   const shopPath = useStorefrontPath("shop", "/shop");
   const { formatBaseAmount, currencyCode, convertSelectedToBase } = useCurrency();
+  const { productPageLayout, discussionLayout } = useLayoutPreferences();
+  const { data: navigationData } = useNavigationData();
+  const productPresentation = navigationData?.storefrontConfig.productPresentation
+    ?? DEFAULT_STOREFRONT_CONFIGURATION.productPresentation;
 
   /** Returns the display price for the given base amount.
    *  When a manual per-currency override exists in currencyPrices, it takes
@@ -67,6 +78,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
 
   const { addItem, openDrawer } = useCart();
   const { has, toggle } = useWishlist();
+  const wishlistId = savedListEntityId(product.card);
   const [quantity, setQuantity] = useState(1);
   const defaultVariation = product.variationCombos.find((combo) => combo.inStock) || product.variationCombos[0];
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() =>
@@ -84,6 +96,27 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   const canPurchase = isVariable ? Boolean(selectedVariation?.inStock) : Boolean(product.card.inStock);
   const priceAmount = selectedVariation?.priceAmount ?? product.card.priceAmount;
   const price = formatProductPrice(priceAmount) ?? selectedVariation?.priceLabel ?? product.card.priceLabel;
+  // External and grouped products always resolve their own price/link presentation,
+  // so the inquiry-vs-free resolution only applies to simple and variable products.
+  const priceMode = !isExternal && !isGrouped
+    ? resolveProductPriceMode(priceAmount, product.priceBehavior, productPresentation.noPriceBehavior)
+    : "purchase";
+  const isInquiry = priceMode === "inquiry";
+  const compareAtPriceAmount = selectedVariation
+    ? selectedVariation.compareAtPriceAmount
+    : product.card.compareAtPriceAmount;
+  const compareAtPriceLabel = selectedVariation
+    ? selectedVariation.compareAtPriceLabel
+    : product.card.compareAtPriceLabel;
+  const regularPrice = compareAtPriceAmount !== undefined
+    ? formatBaseAmount(compareAtPriceAmount)
+    : compareAtPriceLabel;
+  const discountPercent = calculateDiscountPercent(price, regularPrice);
+  const badgeLabel = discountPercent !== null
+    ? `−${discountPercent}%`
+    : selectedVariation && product.card.badge?.toLowerCase() === "sale"
+      ? undefined
+      : product.card.badge;
   const gallery = mapGallery(product);
   const selectedGalleryImageId = selectedVariation?.imageUrl
     ? gallery.find((image) => image.src === selectedVariation.imageUrl)?.id
@@ -96,6 +129,11 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   ];
   const reviewSummary = summarizeReviews(product.reviews);
 
+  useEffect(() => {
+    if (!contentRef.current) return;
+    return mountCmsBehaviors(contentRef.current);
+  }, [product.id]);
+
   const selectVariationOption = (label: string, value: string) => {
     const nextOptions = { ...selectedOptions, [label]: value };
     const exactMatch = product.variationCombos.find((combo) => matchesSelection(combo, nextOptions));
@@ -106,7 +144,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   };
 
   const addToCart = () => {
-    if (!canPurchase) return;
+    if (!canPurchase || isExternal || isGrouped) return;
     const variantLabel = Object.values(selectedOptions).filter(Boolean).join(" / ") || undefined;
     addItem(
       {
@@ -126,7 +164,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   };
 
   return (
-    <div className="grid gap-12">
+    <div ref={contentRef} className="grid gap-12">
       <Seo
         title={product.seo.title || product.name}
         description={product.seo.description || product.seo.opengraphDescription || stripHtml(product.shortDescriptionHtml)}
@@ -135,11 +173,18 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
         keywords={product.seo.keywords || undefined}
         siteName={product.seo.siteName || undefined}
         appendSiteName={false}
-        robots={product.seo.robots}
+        robots="index, follow"
         opengraphType="product"
         opengraphTitle={product.seo.opengraphTitle || product.name}
         opengraphDescription={product.seo.opengraphDescription || undefined}
-        opengraphImage={product.seo.opengraphImage || product.card.imageUrl}
+        image={product.card.imageUrl
+          ? {
+              url: product.card.imageUrl,
+              alt: product.gallery.find((galleryImage) => galleryImage.sourceUrl === product.card.imageUrl)?.altText || product.name,
+            }
+          : product.seo.opengraphImage
+            ? { url: product.seo.opengraphImage, alt: product.name }
+            : undefined}
         twitterTitle={product.seo.twitterTitle || undefined}
         twitterDescription={product.seo.twitterDescription || undefined}
         schema={{ pageType: product.seo.pageType || "ItemPage" }}
@@ -151,14 +196,18 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
       />
       <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
 
-      <section className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
-        <ProductGallery images={gallery} selectedImageId={selectedGalleryImageId} />
-
-        <div className="grid content-start gap-6">
+      <ProductPageLayoutShell
+        layout={productPageLayout}
+        gallery={<ProductGallery images={gallery} selectedImageId={selectedGalleryImageId} />}
+        summary={(
+          <div className="grid content-start gap-6">
           <div className="flex flex-wrap items-center gap-2">
-            {product.card.badge ? (
-              <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                {product.card.badge}
+            {badgeLabel ? (
+              <span
+                className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                title={discountPercent !== null ? `${discountPercent}% off` : undefined}
+              >
+                {badgeLabel}
               </span>
             ) : null}
             <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${canPurchase ? "text-emerald-600" : "text-rose-500"}`}>
@@ -168,21 +217,31 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
 
           <div className="grid gap-3">
             <h1 className="m-0 font-display text-4xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{product.name}</h1>
-            {(product.card.rating || 0) > 0 ? (
-              <a href="#product-reviews" className="w-fit no-underline">
-                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                  ★ {product.card.rating?.toFixed(1)} ({product.card.reviewCount || 0} reviews)
-                </span>
-              </a>
-            ) : null}
-            <p className="m-0 text-2xl font-bold text-zinc-950 dark:text-zinc-50">{price || "Price unavailable"}</p>
+            <GuestStarRating
+              targetType="product"
+              targetId={product.databaseId}
+              initialSummary={product.card.engagementRating}
+            />
+            <div className="flex flex-wrap items-baseline gap-2">
+              {!isInquiry ? (
+                <>
+                  <p className="m-0 text-2xl font-bold text-zinc-950 dark:text-zinc-50">{price || "Price unavailable"}</p>
+                  {discountPercent !== null && regularPrice ? (
+                    <del className="text-base font-medium text-zinc-400 dark:text-zinc-500">{regularPrice}</del>
+                  ) : null}
+                </>
+              ) : (
+                <p className="m-0 text-sm font-semibold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
+                  {productPresentation.inquiryHeading}
+                </p>
+              )}
+            </div>
           </div>
 
           {product.shortDescriptionHtml ? (
-            <div
-              className="prose prose-zinc max-w-none text-sm dark:prose-invert"
-              dangerouslySetInnerHTML={{ __html: product.shortDescriptionHtml }}
-            />
+            <div className="prose prose-zinc max-w-none text-sm dark:prose-invert">
+              {renderProductContent(product.shortDescriptionHtml)}
+            </div>
           ) : null}
 
           {product.variationOptions.map((option) => (
@@ -225,6 +284,24 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             </fieldset>
           ))}
 
+          {isInquiry ? (
+            <div className="grid gap-3">
+              <ProductInquiryForm
+                product={{ databaseId: product.databaseId, name: product.name, uri: product.uri, sku: product.sku || undefined }}
+                heading={productPresentation.inquiryHeading}
+                buttonLabel={productPresentation.inquiryButtonLabel}
+                copy={productPresentation.inquiryCopy}
+              />
+              <button
+                type="button"
+                aria-pressed={has(wishlistId)}
+                onClick={() => toggle(wishlistId)}
+                className="justify-self-start rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+              >
+                {has(wishlistId) ? "Saved to wishlist" : "Add to wishlist"}
+              </button>
+            </div>
+          ) : (
           <div className="flex flex-wrap gap-3">
             {!isExternal && !isGrouped ? (
               <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
@@ -239,15 +316,25 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 />
               </label>
             ) : null}
-            {isExternal && product.card.externalUrl ? (
-              <a
-                href={product.card.externalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white no-underline hover:bg-brand-700"
-              >
-                {product.externalButtonText || "Buy product"}
-              </a>
+            {isExternal ? (
+              product.card.externalUrl ? (
+                <a
+                  href={product.card.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white no-underline hover:bg-brand-700"
+                >
+                  {product.externalButtonText || "Buy product"}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white opacity-50"
+                >
+                  Product link unavailable
+                </button>
+              )
             ) : (
               <button
                 type="button"
@@ -260,13 +347,14 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             )}
             <button
               type="button"
-              aria-pressed={has(product.card.id)}
-              onClick={() => toggle(product.card.id)}
+              aria-pressed={has(wishlistId)}
+              onClick={() => toggle(wishlistId)}
               className="self-end rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
             >
-              {has(product.card.id) ? "Saved to wishlist" : "Add to wishlist"}
+              {has(wishlistId) ? "Saved to wishlist" : "Add to wishlist"}
             </button>
           </div>
+          )}
 
           <dl className="grid gap-2 border-t border-zinc-200 pt-5 text-sm dark:border-zinc-800">
             {product.sku ? <MetaRow label="SKU" value={product.sku} /> : null}
@@ -278,15 +366,18 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             ) : null}
             {product.tags.length ? <MetaLinks label="Tags" items={product.tags.map((item) => ({ name: item.name, uri: item.uri }))} /> : null}
           </dl>
-        </div>
-      </section>
-
-      {product.descriptionHtml || product.attributes.length ? (
-        <section className="grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          </div>
+        )}
+        details={product.descriptionHtml || product.attributes.length ? (
+          <section className={`grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 ${
+            productPageLayout === "classic" ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
+          }`}>
           <div>
             <h2 className="font-display text-2xl font-bold">Product details</h2>
             {product.descriptionHtml ? (
-              <div className="prose prose-zinc max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: product.descriptionHtml }} />
+              <div className="prose prose-zinc max-w-none dark:prose-invert">
+                {renderProductContent(product.descriptionHtml)}
+              </div>
             ) : null}
           </div>
           {product.attributes.length ? (
@@ -296,49 +387,121 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
               ))}
             </dl>
           ) : null}
-        </section>
-      ) : null}
-
-      <CommentsSection
-        anchorId="product-reviews"
-        heading="Customer reviews"
-        initialReviews={product.reviews}
-        averageRating={product.card.rating || undefined}
-        ratingHistogram={reviewSummary.averageRating ? reviewSummary.histogram : undefined}
-        totalCountOverride={product.card.reviewCount || 0}
-        formTitle="Review this product"
-        onSubmitReview={(review) => createReview({
-          commentOn: product.databaseId,
-          author: review.author,
-          authorEmail: review.email,
-          content: review.content,
-          rating: review.rating,
-        })}
-        onSubmitReply={(parent, reply) => {
-          if (!parent.databaseId) throw new Error("This review cannot be replied to because its WordPress ID is unavailable.");
-          return createReview({
-            commentOn: product.databaseId,
-            author: reply.author,
-            authorEmail: reply.email,
-            content: reply.content,
-            parent: parent.databaseId,
-          });
-        }}
+          </section>
+        ) : null}
+        reviews={(
+          <CommentsSection
+            anchorId="product-reviews"
+            contentKey={`product:${product.databaseId}`}
+            heading="Customer reviews"
+            initialReviews={product.reviews}
+            averageRating={reviewSummary.averageRating}
+            ratingHistogram={reviewSummary.averageRating ? reviewSummary.histogram : undefined}
+            totalCountOverride={product.reviews.length}
+            formTitle="Review this product"
+            discussionLayout={discussionLayout}
+            onSubmitReview={(review) => createReview({
+              commentOn: product.databaseId,
+              author: review.author,
+              authorEmail: review.email,
+              content: review.content,
+              rating: review.rating,
+            })}
+            onSubmitReply={(parent, reply) => {
+              if (!parent.databaseId) throw new Error("This review cannot be replied to because its content ID is unavailable.");
+              return createReview({
+                commentOn: product.databaseId,
+                author: reply.author,
+                authorEmail: reply.email,
+                content: reply.content,
+                parent: parent.databaseId,
+              });
+            }}
+          />
+        )}
+        connections={(
+          <>
+            <ProductConnections title="Related products" products={product.related} compact={productPageLayout === "studio"} />
+            <ProductConnections title="You may also like" products={product.upsells} compact={productPageLayout === "studio"} />
+            <ProductConnections title="Frequently bought together" products={product.crossSells} compact={productPageLayout === "studio"} />
+          </>
+        )}
       />
-
-      <ProductConnections title="Related products" products={product.related} />
-      <ProductConnections title="You may also like" products={product.upsells} />
-      <ProductConnections title="Frequently bought together" products={product.crossSells} />
     </div>
   );
 }
 
-function ProductConnections({ title, products }: { title: string; products: CmsProductDetail["related"] }) {
+function ProductPageLayoutShell({
+  layout,
+  gallery,
+  summary,
+  details,
+  reviews,
+  connections,
+}: {
+  layout: ProductPageLayout;
+  gallery: ReactNode;
+  summary: ReactNode;
+  details: ReactNode;
+  reviews: ReactNode;
+  connections: ReactNode;
+}) {
+  if (layout === "classic") {
+    return (
+      <>
+        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
+          {gallery}
+          {summary}
+        </section>
+        {details}
+        {reviews}
+        {connections}
+      </>
+    );
+  }
+
+  return (
+    <section
+      data-product-page-layout="studio"
+      className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(28rem,0.95fr)] lg:items-start"
+    >
+      <div className="lg:sticky lg:top-28 lg:self-start">{gallery}</div>
+      <div
+        role="region"
+        aria-label="Product information"
+        tabIndex={0}
+        className="grid gap-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto lg:pr-4"
+      >
+        {summary}
+        {details}
+        {reviews}
+        {connections}
+      </div>
+    </section>
+  );
+}
+
+function renderProductContent(html: string) {
+  return renderCmsContent(
+    sanitizeCmsHtml(html),
+    { ...WORDPRESS_SHORTCODE_RENDERERS, ...APPLICATION_SHORTCODE_RENDERERS },
+  );
+}
+
+function ProductConnections({
+  title,
+  products,
+  compact = false,
+}: {
+  title: string;
+  products: CmsProductDetail["related"];
+  compact?: boolean;
+}) {
   if (!products.length) return null;
   return (
     <section className="grid gap-6">
       <h2 className="m-0 font-display text-2xl font-bold text-zinc-950 dark:text-zinc-50">{title}</h2>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-6 sm:grid-cols-2 ${compact ? "" : "lg:grid-cols-4"}`}>
         {products.map((product) => <ProductCard key={product.id} product={product} />)}
       </div>
     </section>

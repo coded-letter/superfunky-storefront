@@ -1,8 +1,14 @@
 import type { ProductReview } from "../pages/shared";
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import {
+  missingGraphqlFieldRule,
+  requestGraphqlWithCompatibility,
+  unsupportedRenderedFormatRule,
+} from "./graphqlFieldFallback";
 import {
   mapScript,
   mapSeo,
+  emptyThemeStyles,
   type CmsPageScript,
   type CmsPageSeo,
   type CmsPageTranslation,
@@ -11,6 +17,13 @@ import {
   type CmsThemeStyles,
   THEME_STYLES_FIELDS,
 } from "./pages";
+import { normalizeFeaturedImage, type CmsFeaturedImage, type RawFeaturedImage } from "@funky/cms";
+import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings";
+import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility";
+import {
+  createCorePostQuery,
+  shouldPreferCoreGraphqlQueries,
+} from "./profileGraphqlCompatibility";
 
 export type CmsPostTerm = {
   id: string;
@@ -42,7 +55,8 @@ export type CmsPost = {
   };
   categories: CmsPostTerm[];
   tags: CmsPostTerm[];
-  featuredImage: { sourceUrl: string; altText: string } | null;
+  featuredImage: CmsFeaturedImage | null;
+  engagementRating: PublicEngagementRatingSummary;
   comments: ProductReview[];
   seo: CmsPageSeo;
   scripts: CmsPageScript[];
@@ -65,6 +79,7 @@ type PostByUriResult = {
     uri: string | null;
     title: string | null;
     content: string | null;
+    headlessContent?: string | null;
     excerpt: string | null;
     date: string | null;
     modified: string | null;
@@ -81,7 +96,8 @@ type PostByUriResult = {
     } | null;
     categories: { nodes: RawPostTerm[] } | null;
     tags: { nodes: RawPostTerm[] } | null;
-    featuredImage: { node: { sourceUrl: string | null; altText: string | null } } | null;
+    featuredImage: RawFeaturedImage;
+    engagementRating: PublicEngagementRatingSummary;
     comments: {
       nodes: {
         id: string;
@@ -89,13 +105,15 @@ type PostByUriResult = {
         content: string | null;
         date: string | null;
         parentId: string | null;
+        parentDatabaseId: number | null;
         rating: number | null;
         author: { node: { name: string | null } } | null;
       }[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
     } | null;
     enqueuedScripts: { nodes: RawCmsScript[] } | null;
     seo: RawCmsSeo | null;
-    themeStyles: CmsThemeStyles;
+    themeStyles?: CmsThemeStyles | null;
   } | null;
 };
 
@@ -111,9 +129,17 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
       }
       title
       content(format: RENDERED)
+      headlessContent
       excerpt(format: RENDERED)
       date
       modified
+      engagementRating {
+        average
+        count
+        guestCount
+        authoredCount
+        histogram
+      }
       translations {
         databaseId
         uri
@@ -158,15 +184,21 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
         node {
           sourceUrl
           altText
+          srcSet
+          mediaDetails {
+            width
+            height
+          }
         }
       }
-      comments(first: 100) {
+      comments(first: 100, where: { statusIn: [APPROVE] }) {
         nodes {
           id
           databaseId
           content
           date
           parentId
+          parentDatabaseId
           rating
           author {
             node {
@@ -174,6 +206,7 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
             }
           }
         }
+        pageInfo { hasNextPage endCursor }
       }
       enqueuedScripts(first: 100) {
         nodes {
@@ -221,6 +254,7 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
         }
         opengraphModifiedTime
         opengraphPublishedTime
+        opengraphPublisher
         opengraphSiteName
         opengraphTitle
         opengraphType
@@ -229,6 +263,7 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
         schema {
           articleType
           pageType
+          raw
         }
         title
         twitterDescription
@@ -241,8 +276,54 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
   }
 `;
 
+const POST_COMPATIBILITY_RULES = [
+  ...POST_GRAPHQL_COMPATIBILITY_RULES,
+  missingGraphqlFieldRule("headlessContent"),
+  missingGraphqlFieldRule("themeStyles"),
+  missingGraphqlFieldRule("enqueuedScripts"),
+  missingGraphqlFieldRule("engagementRating"),
+  missingGraphqlFieldRule("rating"),
+  missingGraphqlFieldRule("language"),
+  missingGraphqlFieldRule("translations"),
+  missingGraphqlFieldRule("seo"),
+  unsupportedRenderedFormatRule,
+] as const;
+
+const POST_COMMENTS_QUERY = /* GraphQL */ `
+  query StorefrontPostComments($id: ID!, $after: String) {
+    post(id: $id, idType: DATABASE_ID) {
+      comments(first: 100, after: $after, where: { statusIn: [APPROVE] }) {
+        nodes {
+          id
+          databaseId
+          content
+          date
+          parentId
+          parentDatabaseId
+          rating
+          author {
+            node {
+              name
+            }
+          }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+`;
+
 export async function getPostByUri(uri: string): Promise<CmsPost | null> {
-  const { data, errors } = await graphqlRequest<PostByUriResult>(POST_BY_URI_QUERY, { uri });
+  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCorePostQuery(POST_BY_URI_QUERY)
+    : POST_BY_URI_QUERY;
+  const response = await requestGraphqlWithCompatibility<PostByUriResult>(
+    graphqlRequest,
+    query,
+    { uri },
+    POST_COMPATIBILITY_RULES,
+  );
+  const { data, errors } = response;
 
   if (errors?.length) {
     throw new Error(errors.map(({ message }) => message).join("; "));
@@ -254,7 +335,7 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     return null;
   }
 
-  const { post } = data;
+  const post = await loadRemainingPostComments(data.post);
   const author = post.author?.node;
   const contentText = htmlToText(post.content || "");
   const wordCount = contentText ? contentText.split(/\s+/).length : 0;
@@ -266,7 +347,7 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     slug: post.slug || "",
     uri: post.uri || uri,
     title: post.title?.trim() || "Untitled post",
-    content: post.content || "",
+    content: post.headlessContent || post.content || "",
     excerpt: htmlToText(post.excerpt || ""),
     date: post.date || "",
     modified: post.modified,
@@ -292,12 +373,8 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     },
     categories: mapTerms(post.categories?.nodes, post.language?.code),
     tags: mapTerms(post.tags?.nodes, post.language?.code),
-    featuredImage: post.featuredImage?.node.sourceUrl
-      ? {
-          sourceUrl: post.featuredImage.node.sourceUrl,
-          altText: post.featuredImage.node.altText || "",
-        }
-      : null,
+    featuredImage: normalizeFeaturedImage(post.featuredImage, post.seo?.schema),
+    engagementRating: mapPublicEngagementRating(post.engagementRating),
     comments:
       post.comments?.nodes.map((comment) => ({
         id: comment.id,
@@ -306,11 +383,48 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
         date: comment.date || "",
         content: htmlToText(comment.content || ""),
         parentId: comment.parentId,
+        parentDatabaseId: comment.parentDatabaseId,
         rating: normalizeRating(comment.rating),
       })) || [],
     seo: mapSeo(post.seo),
     scripts: post.enqueuedScripts?.nodes.map(mapScript) || [],
-    themeStyles: post.themeStyles,
+    themeStyles: post.themeStyles || emptyThemeStyles(),
+  };
+}
+
+async function loadRemainingPostComments(
+  post: NonNullable<PostByUriResult["post"]>,
+): Promise<NonNullable<PostByUriResult["post"]>> {
+  if (!post.comments) return post;
+
+  const comments = [...post.comments.nodes];
+  let pageInfo = post.comments.pageInfo;
+
+  while (pageInfo.hasNextPage) {
+    if (!pageInfo.endCursor) {
+      throw new Error("The post discussion query returned an incomplete pagination cursor");
+    }
+    const { data, errors } = await graphqlRequest<{
+      post: Pick<NonNullable<PostByUriResult["post"]>, "comments"> | null;
+    }>(POST_COMMENTS_QUERY, {
+      id: String(post.databaseId),
+      after: pageInfo.endCursor,
+    });
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    if (!data?.post?.comments) {
+      throw new Error("The post discussion pagination query returned no post");
+    }
+
+    comments.push(...data.post.comments.nodes);
+    pageInfo = data.post.comments.pageInfo;
+  }
+
+  return {
+    ...post,
+    comments: {
+      nodes: comments,
+      pageInfo,
+    },
   };
 }
 

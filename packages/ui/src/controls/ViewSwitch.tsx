@@ -27,9 +27,9 @@ export type ViewSwitchProps<TValue extends string> = {
  */
 export function ViewSwitch<TValue extends string>({ label, options, value, onChange }: ViewSwitchProps<TValue>) {
   return (
-    <div className="flex flex-wrap items-center gap-2.5 text-xs">
+    <div className="sf-view-switch flex flex-wrap items-center gap-2.5 text-xs">
       <span className="font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{label}</span>
-      <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-full border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
+      <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-control border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
         {options.map((option) => {
           const Icon = option.icon;
           const isActive = option.value === value;
@@ -40,7 +40,7 @@ export function ViewSwitch<TValue extends string>({ label, options, value, onCha
               role="tab"
               aria-selected={isActive}
               onClick={() => onChange(option.value)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 font-semibold transition ${
                 isActive
                   ? "bg-brand-gradient text-white shadow-glow"
                   : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"

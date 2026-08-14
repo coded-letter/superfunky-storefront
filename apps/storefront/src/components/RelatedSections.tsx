@@ -65,7 +65,7 @@ function RelatedSection({ kind }: { kind: Exclude<RelatedSectionKind, "none"> })
     return (
       <PaginableProductGrid
         title="You might also like"
-        subtitle="Products from the shared WooCommerce catalog feed."
+        subtitle="Products from the shared store catalog."
         products={commerce.products}
         pageSize={4}
         cardVariant="default"
@@ -81,7 +81,7 @@ function RelatedSection({ kind }: { kind: Exclude<RelatedSectionKind, "none"> })
     return (
       <PaginablePostGrid
         title="Related reading"
-        subtitle="The latest posts from the shared WordPress blog feed."
+        subtitle="The latest posts from the shared site journal."
         posts={blog.posts}
         pageSize={3}
         cardVariant="default"
@@ -96,7 +96,7 @@ function RelatedSection({ kind }: { kind: Exclude<RelatedSectionKind, "none"> })
 
   function RelatedContentStatus({ message, isError = false }: { message: string; isError?: boolean }) {
     return (
-      <section className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-4 text-sm dark:border-zinc-800 dark:bg-zinc-900/40">
+      <section className="sf-related-status rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-4 text-sm dark:border-zinc-800 dark:bg-zinc-900/40">
         <p className={`m-0 ${isError ? "text-rose-600 dark:text-rose-400" : "text-zinc-500 dark:text-zinc-400"}`}>{message}</p>
       </section>
     );
@@ -104,7 +104,7 @@ function RelatedSection({ kind }: { kind: Exclude<RelatedSectionKind, "none"> })
 
   // kind === "testimonials"
   return (
-    <section className="grid gap-5">
+    <section className="sf-related-testimonials grid gap-5">
       <div className="grid gap-1 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">What customers say</h2>
         <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">The `[testimonials]` shortcode — a rotating trust-builder slot.</p>
@@ -167,6 +167,9 @@ function CommunityRelatedSection() {
           id: post.id,
           image: post.image,
           aspect: post.aspect,
+          title: post.title,
+          description: post.description,
+          media: post.media,
           caption: post.caption,
           tags: post.tags,
           likes: post.likes,

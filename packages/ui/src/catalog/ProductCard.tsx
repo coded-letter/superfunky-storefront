@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { ExternalLink, Heart } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ResponsiveImage } from "../media";
 import { useCart, useSoundUX, useToast, useWishlist } from "../state";
-import { useCurrency } from "../locale";
+import { savedListEntityId } from "../state/savedListSync";
+import { calculateDiscountPercent, useCurrency } from "../locale";
 import { ProductQuickViewModal } from "./ProductQuickViewModal";
+import { hasProductCardPrice } from "./productCardPrice";
 
 export type ProductCardVariant = "default" | "minimal" | "editorial" | "gallery" | "simple" | "variation" | "expandable";
 
@@ -14,10 +16,8 @@ export type ProductCardVariant = "default" | "minimal" | "editorial" | "gallery"
  * changing anything else about the card. `"auto"` (the default) defers to the variant. */
 export type ProductCardImageAspect = "auto" | "1/1" | "4/3";
 
-/** Mirrors WooCommerce's core product types closely enough to drive card CTA/pricing —
- * "external" (affiliate) products link out instead of adding to cart, "variable"
- * products show a price range and require picking options before they can be added. */
-export type ProductType = "simple" | "external" | "variable";
+/** Mirrors WooCommerce's core product types closely enough to drive card CTA/pricing. */
+export type ProductType = "simple" | "external" | "variable" | "grouped";
 
 export type ProductCardVariationValue = {
   label: string;
@@ -111,32 +111,38 @@ export type ProductCardProps = {
   imageAspect?: ProductCardImageAspect;
 };
 
-/** Parses a formatted price label ("€79.00", "$1,299") down to a plain number for the
- * auto-computed discount badge — best-effort, mockup-grade parsing only. */
-function parsePriceValue(label: string | undefined): number | null {
-  if (!label) return null;
-  const numeric = label.replace(/[^0-9.,]/g, "").replace(/,(?=\d{3}\b)/g, "").replace(",", ".");
-  const value = Number.parseFloat(numeric);
-  return Number.isFinite(value) ? value : null;
+const ProductCardPreferencesContext = createContext({ quickViewEnabled: true });
+
+export function ProductCardPreferencesProvider({
+  children,
+  quickViewEnabled = true,
+}: {
+  children: ReactNode;
+  quickViewEnabled?: boolean;
+}) {
+  return (
+    <ProductCardPreferencesContext.Provider value={{ quickViewEnabled }}>
+      {children}
+    </ProductCardPreferencesContext.Provider>
+  );
 }
 
-/** Rounds to the nearest whole percentage — e.g. a €95→€79 markdown becomes "-17%", not
- * "-16.8%" — matching how most storefronts round promotional badges. */
-function computeDiscountPercent(priceLabel: string, compareAtPriceLabel?: string): number | null {
-  if (!compareAtPriceLabel) return null;
-  const price = parsePriceValue(priceLabel);
-  const compareAt = parsePriceValue(compareAtPriceLabel);
-  if (price === null || compareAt === null || compareAt <= price) return null;
-  return Math.round((1 - price / compareAt) * 100);
-}
-
-export function ProductCard({ product, variant = "default", allowPurchaseActions = true, imageLoading, imageAspect = "auto" }: ProductCardProps) {
+export function ProductCard({
+  product,
+  variant = "default",
+  allowPurchaseActions = true,
+  imageLoading,
+  imageAspect = "auto",
+}: ProductCardProps) {
   const { formatBaseAmount } = useCurrency();
+  const navigate = useNavigate();
+  const { quickViewEnabled } = useContext(ProductCardPreferencesContext);
   const { has, toggle } = useWishlist();
   const { playAction } = useSoundUX();
   const { addItem, openDrawer } = useCart();
   const { showToast } = useToast();
-  const isWishlisted = has(product.id);
+  const wishlistId = savedListEntityId(product);
+  const isWishlisted = has(wishlistId);
   const isVariation = variant === "variation";
   const isGallery = variant === "gallery" || isVariation;
   const isSimple = variant === "simple";
@@ -153,6 +159,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
           : variant === "minimal"
             ? "aspect-square"
             : "aspect-[4/5]";
+  const imageSizingClass = isExpandable ? "object-cover p-4 pt-12" : "object-cover";
 
   const defaultVariation = product.variations?.find((variation) => variation.inStock) || product.variations?.[0];
   const previewImages = [
@@ -185,10 +192,24 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
   const convertedRangeLabel = variationAmounts.length
     ? `${formatBaseAmount(Math.min(...variationAmounts))} – ${formatBaseAmount(Math.max(...variationAmounts))}`
     : product.priceRangeLabel;
+  const hasPrice = hasProductCardPrice({
+    priceAmount: selectedPriceAmount,
+    priceLabel: selectedPriceLabel,
+    priceRangeLabel: convertedRangeLabel,
+    variationPriceAmounts: variationAmounts,
+  });
+  const usesAddToCartAction =
+    product.productType !== "external" &&
+    product.productType !== "grouped" &&
+    !(product.productType === "variable" && !product.variations?.length);
+  const showLearnMore = usesAddToCartAction && !hasPrice;
 
   const discountPercent = convertedRangeLabel && !selectedVariation
     ? null
-    : computeDiscountPercent(selectedPriceLabel, selectedCompareAtPriceLabel);
+    : calculateDiscountPercent(
+        selectedPriceAmount ?? selectedPriceLabel,
+        selectedCompareAtPriceAmount ?? selectedCompareAtPriceLabel,
+      );
   const expandablePills = [
     {
       label: product.inStock === false ? "Sold out" : "Available",
@@ -206,7 +227,18 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
         : null,
   ].filter((pill): pill is { label: string; className: string } => Boolean(pill)).slice(0, 3);
 
-  const ctaLabel = product.productType === "external" ? "Buy now" : "Add to cart";
+  const ctaLabel =
+    showLearnMore
+      ? "Learn more"
+      : product.productType === "external"
+      ? product.externalUrl
+        ? "Buy now"
+        : "View product"
+      : product.productType === "grouped"
+        ? "View products"
+        : product.productType === "variable" && !product.variations?.length
+          ? "Choose options"
+        : "Add to cart";
 
   const selectVariationOption = (label: string, value: string, imageIndex?: number) => {
     const nextOptions = { ...selectedOptions, [label]: value };
@@ -228,9 +260,15 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
   };
 
   const handleAddToCart = () => {
+    if (!hasPrice || product.productType === "external" || product.productType === "grouped") return;
     playAction("add-to-cart");
     if (product.productType === "variable" && !product.variations?.length) {
-      setIsQuickViewOpen(true);
+      if (quickViewEnabled) {
+        setIsQuickViewOpen(true);
+      } else {
+        playAction("navigation");
+        navigate(product.href ?? `/shop/${encodeURIComponent(product.id)}`);
+      }
       return;
     }
     if (product.productType === "variable" && (!selectedVariation || !selectedVariation.inStock)) {
@@ -263,7 +301,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
   return (
     <article className={getCardClassName(variant)}>
       <div
-        className={`group/media relative overflow-hidden ${
+        className={`group/media relative isolate overflow-hidden [transform:translateZ(0)] ${
           isExpandable
             ? "rounded-xl bg-white dark:bg-zinc-900"
             : "rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900"
@@ -275,7 +313,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
             draggable={false}
             aria-label={`View ${product.name}`}
             onClick={() => playAction("navigation")}
-            className="block h-full w-full no-underline"
+            className="relative block h-full w-full overflow-hidden rounded-[inherit] no-underline"
           >
             {activeImageUrl ? (
               <ResponsiveImage
@@ -284,9 +322,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
                 priority={imageLoading === "eager"}
                 draggable={false}
                 sizes="(min-width: 1280px) 20vw, (min-width: 768px) 33vw, 50vw"
-                className={`block h-full w-full transition-transform duration-500 group-hover/media:scale-105 ${
-                  isExpandable ? "object-contain p-4 pt-12" : "object-cover"
-                }`}
+                className={`absolute inset-0 block !h-full !w-full max-w-none rounded-[inherit] ${imageSizingClass}`}
               />
             ) : (
               <span className="grid h-full w-full place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">
@@ -301,9 +337,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
             priority={imageLoading === "eager"}
             draggable={false}
             sizes="(min-width: 1280px) 20vw, (min-width: 768px) 33vw, 50vw"
-            className={`block h-full w-full transition-transform duration-500 group-hover/media:scale-105 ${
-              isExpandable ? "object-contain p-4 pt-12" : "object-cover"
-            }`}
+            className={`absolute inset-0 block !h-full !w-full max-w-none rounded-[inherit] ${imageSizingClass}`}
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">
@@ -348,8 +382,8 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
             type="button"
             aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
             aria-pressed={isWishlisted}
-            onClick={() => toggle(product.id)}
-            className={`absolute right-3 top-3 inline-grid h-9 w-9 place-items-center rounded-full shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${
+            onClick={() => toggle(wishlistId)}
+            className={`absolute right-3 top-3 inline-grid h-9 w-9 place-items-center rounded-control shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${
               isWishlisted
                 ? "bg-rose-500 text-white opacity-100"
                 : `bg-white/90 text-zinc-700 hover:text-rose-500 dark:bg-zinc-950/80 dark:text-zinc-200 ${
@@ -361,7 +395,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
           </button>
         ) : null}
 
-        {variant !== "minimal" && !isSimple && !isExpandable ? (
+        {quickViewEnabled && variant !== "minimal" && !isSimple && !isExpandable ? (
           <button
             type="button"
             onClick={(event) => {
@@ -369,7 +403,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
               event.preventDefault();
               setIsQuickViewOpen(true);
             }}
-            className="absolute inset-x-3 bottom-3 translate-y-3 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-900 opacity-0 shadow-soft backdrop-blur transition-all duration-300 group-hover/media:translate-y-0 group-hover/media:opacity-100 dark:bg-zinc-950/90 dark:text-zinc-100"
+            className="absolute inset-x-3 bottom-3 translate-y-3 rounded-control bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-900 opacity-0 shadow-soft backdrop-blur transition-all duration-300 group-hover/media:translate-y-0 group-hover/media:opacity-100 dark:bg-zinc-950/90 dark:text-zinc-100"
           >
             Quick view
           </button>
@@ -444,8 +478,8 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
         <h3
           className={
             variant === "editorial"
-              ? "m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100"
-              : "m-0 text-base font-semibold text-zinc-900 dark:text-zinc-100"
+              ? "m-0 line-clamp-2 h-[3.25rem] break-words font-display text-lg font-semibold leading-6 text-zinc-900 dark:text-zinc-100"
+              : "m-0 line-clamp-2 h-[3.25rem] break-words text-base font-semibold leading-6 text-zinc-900 dark:text-zinc-100"
           }
         >
           {product.href ? (
@@ -536,22 +570,30 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
 
       {!isSimple ? (
         <div className="mt-auto flex gap-2 pt-1">
-          {product.productType === "external" ? (
+          {product.productType === "external" && product.externalUrl ? (
             <a
-              href={product.externalUrl ?? "#"}
+              href={product.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => playAction("navigation")}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
             >
               {ctaLabel}
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
+          ) : showLearnMore || product.productType === "external" || product.productType === "grouped" ? (
+            <Link
+              to={product.href ?? `/shop/${encodeURIComponent(product.id)}`}
+              onClick={() => playAction("navigation")}
+              className="flex flex-1 items-center justify-center rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+            >
+              {ctaLabel}
+            </Link>
           ) : (
             <button
               type="button"
               onClick={handleAddToCart}
-              className="flex-1 rounded-full bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+              className="flex-1 rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
             >
               {ctaLabel}
             </button>
@@ -559,7 +601,7 @@ export function ProductCard({ product, variant = "default", allowPurchaseActions
         </div>
       ) : null}
 
-      {isQuickViewOpen ? <ProductQuickViewModal product={product} onClose={() => setIsQuickViewOpen(false)} /> : null}
+      {quickViewEnabled && isQuickViewOpen ? <ProductQuickViewModal product={product} onClose={() => setIsQuickViewOpen(false)} /> : null}
     </article>
   );
 }
@@ -588,7 +630,7 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 function getCardClassName(variant: ProductCardVariant): string {
-  const base = `funky-product-card funky-product-card--${variant} group grid h-full gap-3 rounded-3xl transition-all duration-300`;
+  const base = `sf-product-card funky-product-card funky-product-card--${variant} group grid h-full gap-3 rounded-3xl transition-all duration-300`;
 
   if (variant === "minimal" || variant === "simple") {
     return `${base} bg-transparent p-1`;

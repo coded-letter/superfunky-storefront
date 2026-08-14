@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>FunkyCommerce Storefront Mockups</title>
-    <meta name="description" content="A modern storefront experience — shop, journal, and account, installable as an app." />
+    <title>FunkyCommerce</title>
+    <meta name="description" content="Shop, read, and connect with the FunkyCommerce community." />
 
     <!-- PWA manifest + icons. Real PNGs live in /public/icons/app (generated from the
          brand sparkle mark); the manifest also lists the scalable SVG source as an
@@ -23,14 +23,192 @@
     <meta name="apple-mobile-web-app-title" content="FunkyCommerce" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <style>
+      :root {
+        --storefront-bootstrap-bg: var(--wp--preset--color--contrast, #09090b);
+        --crystal-color: var(--wp--preset--color--primary, var(--color-brand-500, rgb(var(--brand-500))));
+        --crystal-size: 30px;
+        --crystal-speed: 1;
+      }
+      html,
+      body { background: var(--storefront-bootstrap-bg); }
+      #root[inert] { visibility: hidden; }
+      #storefront-bootstrap {
+        align-items: center;
+        background: var(--storefront-bootstrap-bg);
+        display: flex;
+        inset: 0;
+        justify-content: center;
+        opacity: 1;
+        pointer-events: auto;
+        position: fixed;
+        transition: opacity 200ms ease, visibility 200ms ease;
+        visibility: visible;
+        z-index: 2147483647;
+        animation: storefront-bootstrap-fail-open 200ms ease 3s forwards;
+      }
+      #storefront-bootstrap.is-ready {
+        animation: none;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .funky-crystal-preloader {
+        --crystal-tone-light: color-mix(in srgb, currentColor 80%, white);
+        --crystal-tone-base: currentColor;
+        --crystal-tone-deep: color-mix(in srgb, currentColor 80%, black);
+        color: var(--crystal-color);
+        display: block;
+        height: var(--crystal-size);
+        perspective: calc(var(--crystal-size) * 7.3333);
+        perspective-origin: center;
+        position: relative;
+        width: calc(var(--crystal-size) * .6667);
+      }
+      .funky-crystal-preloader__motion {
+        animation: storefront-crystal-float calc(2.8s / var(--crystal-speed)) ease-in-out infinite;
+        inset: 0;
+        isolation: isolate;
+        position: absolute;
+        transform-origin: center;
+        transform-style: preserve-3d;
+        will-change: transform;
+      }
+      .funky-crystal-preloader__glow {
+        animation: storefront-crystal-glow calc(2.8s / var(--crystal-speed)) ease-in-out infinite;
+        background: radial-gradient(circle at center, var(--crystal-glow-color, currentColor) 0 32%, transparent 72%);
+        border-radius: 50%;
+        filter: blur(5px);
+        inset: 8% -55%;
+        opacity: var(--crystal-glow-opacity, .16);
+        position: absolute;
+        transform: scale(.96);
+        transform-origin: center;
+        will-change: transform, opacity;
+        z-index: 0;
+      }
+      .funky-crystal-preloader__solid {
+        animation: storefront-crystal-turn calc(3s / var(--crystal-speed)) linear infinite;
+        inset: 0;
+        position: absolute;
+        transform-origin: center;
+        transform-style: preserve-3d;
+        will-change: transform;
+        z-index: 1;
+      }
+      .funky-crystal-preloader__face {
+        backface-visibility: hidden;
+        background: currentColor;
+        background: var(--face-tone, currentColor);
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+        height: 60.0925%;
+        left: 0;
+        position: absolute;
+        transform: rotateY(var(--face-turn)) translateZ(calc(var(--crystal-size) * .33335)) rotateX(33.69deg);
+        transform-origin: 50% 100%;
+        transform-style: preserve-3d;
+        width: 100%;
+      }
+      .funky-crystal-preloader__face--upper {
+        bottom: 50%;
+      }
+      .funky-crystal-preloader__face--lower {
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        top: 50%;
+        transform: rotateY(var(--face-turn)) translateZ(calc(var(--crystal-size) * .33335)) rotateX(-33.69deg);
+        transform-origin: 50% 0;
+      }
+      .funky-crystal-preloader__face--north {
+        --face-turn: 0deg;
+        --face-tone: var(--crystal-tone-light, currentColor);
+      }
+      .funky-crystal-preloader__face--east {
+        --face-turn: 90deg;
+        --face-tone: var(--crystal-tone-base, currentColor);
+      }
+      .funky-crystal-preloader__face--south {
+        --face-turn: 180deg;
+        --face-tone: var(--crystal-tone-deep, currentColor);
+      }
+      .funky-crystal-preloader__face--west {
+        --face-turn: 270deg;
+        --face-tone: var(--crystal-tone-base, currentColor);
+      }
+      .funky-crystal-preloader__face--lower.funky-crystal-preloader__face--north,
+      .funky-crystal-preloader__face--lower.funky-crystal-preloader__face--south {
+        --face-tone: var(--crystal-tone-base, currentColor);
+      }
+      .funky-crystal-preloader__face--lower.funky-crystal-preloader__face--east {
+        --face-tone: var(--crystal-tone-deep, currentColor);
+      }
+      .funky-crystal-preloader__face--lower.funky-crystal-preloader__face--west {
+        --face-tone: var(--crystal-tone-light, currentColor);
+      }
+      .storefront-bootstrap-label {
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+      }
+      @keyframes storefront-crystal-turn {
+        from { transform: rotateY(0deg); }
+        to { transform: rotateY(360deg); }
+      }
+      @keyframes storefront-crystal-float {
+        0%, 100% { transform: translateY(-4px) scale(.98); }
+        50% { transform: translateY(5px) scale(1.02); }
+      }
+      @keyframes storefront-crystal-glow {
+        0%, 100% {
+          opacity: var(--crystal-glow-opacity, .16);
+          transform: scale(.96);
+        }
+        50% {
+          opacity: min(1, calc(var(--crystal-glow-opacity, .16) * 1.5));
+          transform: scale(1.08);
+        }
+      }
+      @keyframes storefront-bootstrap-fail-open {
+        to { opacity: 0; visibility: hidden; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #storefront-bootstrap {
+          transition: none;
+        }
+        .funky-crystal-preloader__motion,
+        .funky-crystal-preloader__solid {
+          animation: none;
+        }
+        .funky-crystal-preloader__glow {
+          animation: none;
+          opacity: .18;
+          transform: scale(1);
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="storefront-bootstrap" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">
+      <span class="funky-crystal-preloader" aria-hidden="true" data-crystal-axis="y">
+        <span class="funky-crystal-preloader__motion">
+          <span class="funky-crystal-preloader__glow"></span>
+          <span class="funky-crystal-preloader__solid">
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--upper funky-crystal-preloader__face--north"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--upper funky-crystal-preloader__face--east"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--upper funky-crystal-preloader__face--south"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--upper funky-crystal-preloader__face--west"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--lower funky-crystal-preloader__face--north"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--lower funky-crystal-preloader__face--east"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--lower funky-crystal-preloader__face--south"></span>
+            <span class="funky-crystal-preloader__face funky-crystal-preloader__face--lower funky-crystal-preloader__face--west"></span>
+          </span>
+        </span>
+      </span>
+      <span class="storefront-bootstrap-label">Preparing storefront</span>
+    </div>
+    <noscript><style>#storefront-bootstrap { display: none; }</style></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

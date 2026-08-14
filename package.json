@@ -2,10 +2,16 @@
   "name": "superfunky-storefront",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "pnpm@9.15.0",
+  "description": "Open-source React storefront and package workspace for headless WordPress and WooCommerce.",
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "dev": "pnpm --filter @funky/storefront dev",
     "build": "pnpm --filter @funky/storefront build",
-    "preview": "pnpm --filter @funky/storefront preview"
+    "preview": "pnpm --filter @funky/storefront preview",
+    "test": "node --test scripts/*.test.mjs apps/storefront/scripts/*.test.mjs && node --experimental-strip-types --test apps/storefront/src/lib/*.test.ts packages/cms/src/*.test.ts packages/commerce/src/*.test.ts packages/sdk/src/*.test.ts packages/shared/src/*.test.ts packages/ui/src/*/*.test.ts",
+    "test:ai-assistant": "node --experimental-strip-types --test apps/storefront/src/lib/aiAssistant.test.ts apps/storefront/src/lib/navigation.test.ts"
   }
 }

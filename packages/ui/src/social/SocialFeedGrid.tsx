@@ -7,6 +7,7 @@ import { useTagInterests } from "../state";
 
 export type SocialFeedLayout = "masonry" | "grid-3" | "grid-4" | "list" | "compact";
 export type SocialFeedLoadMode = "manual" | "infinite";
+type SocialFeedSort = "newest" | "oldest" | "popular";
 
 const LOAD_MODE_OPTIONS = [
   { value: "manual" as const, label: "Load more", icon: LayoutList },
@@ -71,6 +72,9 @@ export function SocialFeedGrid({
 }: SocialFeedGridProps) {
   const [layout, setLayout] = useState<SocialFeedLayout>(defaultLayout);
   const [loadMode, setLoadMode] = useState<SocialFeedLoadMode>(defaultLoadMode);
+  const [query, setQuery] = useState("");
+  const [author, setAuthor] = useState("");
+  const [sortBy, setSortBy] = useState<SocialFeedSort>("newest");
   // "Tags I'm interested in" persists to localStorage exactly like the wishlist/reading
   // list do, so a visitor's filter selection on the community feed survives reloads.
   const { ids: interestedTags, has: hasInterest, toggle: toggleInterest } = useTagInterests();
@@ -105,11 +109,25 @@ export function SocialFeedGrid({
   // selection — a profile's own feed shouldn't silently narrow based on someone else's
   // saved interests.
   const activeTagFilter = availableTags.length ? interestedTags.filter((tag) => availableTags.includes(tag)) : [];
+  const authors = useMemo(
+    () => Array.from(new Map(posts.map((post) => [post.author.handle, post.author.displayName])).entries()).sort((left, right) => left[1].localeCompare(right[1])),
+    [posts],
+  );
 
   const filteredPosts = useMemo(() => {
-    if (!activeTagFilter.length) return posts;
-    return posts.filter((post) => post.tags.some((tag) => activeTagFilter.includes(tag)));
-  }, [posts, activeTagFilter]);
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = posts.filter((post) =>
+      (!activeTagFilter.length || post.tags.some((tag) => activeTagFilter.includes(tag))) &&
+      (!author || post.author.handle === author) &&
+      (!normalizedQuery || [post.title || "", post.description || "", post.caption, post.author.displayName, post.author.handle, ...post.tags]
+        .some((value) => value.toLocaleLowerCase().includes(normalizedQuery))),
+    );
+    return [...filtered].sort((left, right) => {
+      if (sortBy === "popular") return right.likes - left.likes;
+      const direction = sortBy === "oldest" ? 1 : -1;
+      return (Date.parse(left.createdAt) - Date.parse(right.createdAt)) * direction;
+    });
+  }, [activeTagFilter, author, posts, query, sortBy]);
 
   const visiblePosts = filteredPosts.slice(0, visibleCount);
   const hasMore = visibleCount < filteredPosts.length;
@@ -125,7 +143,7 @@ export function SocialFeedGrid({
 
 
   return (
-    <section ref={sectionRef} className="grid gap-5 scroll-mt-24">
+    <section ref={sectionRef} className="sf-social-feed grid gap-5 scroll-mt-24">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div className="grid gap-1">
           <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
@@ -159,7 +177,19 @@ export function SocialFeedGrid({
       </header>
 
       {availableTags.length ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={`${title} filters`}>
+          <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setVisibleCount(pageSize); }} placeholder="Search feed" aria-label="Search feed" className={filterControlClass} />
+          {authors.length > 1 ? (
+            <select value={author} onChange={(event) => { setAuthor(event.target.value); setVisibleCount(pageSize); }} aria-label="Filter by author" className={filterControlClass}>
+              <option value="">All authors</option>
+              {authors.map(([handle, name]) => <option key={handle} value={handle}>{name}</option>)}
+            </select>
+          ) : null}
+          <select value={sortBy} onChange={(event) => { setSortBy(event.target.value as SocialFeedSort); setVisibleCount(pageSize); }} aria-label="Sort feed" className={filterControlClass}>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="popular">Most liked</option>
+          </select>
           <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Interested in</span>
           {availableTags.map((tag) => {
             const isActive = activeTagFilter.includes(tag);
@@ -178,13 +208,18 @@ export function SocialFeedGrid({
               </button>
             );
           })}
-          {activeTagFilter.length ? (
+          {activeTagFilter.length || query || author || sortBy !== "newest" ? (
             <button
               type="button"
-              onClick={clearTags}
+              onClick={() => {
+                clearTags();
+                setQuery("");
+                setAuthor("");
+                setSortBy("newest");
+              }}
               className="text-xs font-semibold text-zinc-400 underline-offset-2 hover:text-brand-600 hover:underline dark:text-zinc-500 dark:hover:text-brand-400"
             >
-              Clear
+              Clear filters
             </button>
           ) : null}
         </div>
@@ -235,6 +270,9 @@ export function SocialFeedGrid({
   );
 }
 
+const filterControlClass =
+  "min-h-9 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-soft outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:focus:border-brand-500 dark:focus:ring-brand-900";
+
 function getLayoutClassName(layout: SocialFeedLayout): string {
   if (layout === "masonry") {
     return "columns-2 gap-4 sm:columns-3 lg:columns-4";
@@ -249,5 +287,5 @@ function getLayoutClassName(layout: SocialFeedLayout): string {
     return "grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6";
   }
   // "list"
-  return "grid gap-4";
+  return "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3";
 }

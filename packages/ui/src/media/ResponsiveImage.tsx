@@ -47,6 +47,8 @@ export type ResponsiveImageProps = {
    * doesn't apply. */
   width?: number;
   height?: number;
+  /** Backend-provided responsive candidates. Preferred over provider-specific generation. */
+  srcSet?: string;
   /** Sizes hint for the srcset — defaults to a common responsive-card guess.
    * Override for known layouts (e.g. a full-bleed hero should pass `"100vw"`). */
   sizes?: string;
@@ -67,6 +69,7 @@ export function ResponsiveImage({
   alt,
   width,
   height,
+  srcSet: providedSrcSet,
   sizes = "(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw",
   priority = false,
   loading = "lazy",
@@ -75,7 +78,7 @@ export function ResponsiveImage({
   draggable = true,
   "aria-hidden": ariaHidden,
 }: ResponsiveImageProps) {
-  const srcSet = buildSrcSet(src);
+  const srcSet = providedSrcSet || buildSrcSet(src);
 
   return (
     <img
@@ -92,7 +95,7 @@ export function ResponsiveImage({
       draggable={draggable}
       aria-hidden={ariaHidden}
       style={style}
-      className={className}
+      className={["sf-responsive-image", className].filter(Boolean).join(" ")}
     />
   );
 }

@@ -1,8 +1,9 @@
 import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ProductCard, useWishlist, type ProductCardVariant } from "@funky/ui";
+import { ProductCard, savedListEntityId, useWishlist, type ProductCardVariant } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useCommerceData } from "../state/commerceData";
 
@@ -20,9 +21,10 @@ export function WishlistMockupPage() {
   useEmbeddedApplicationShortcode();
   const config = useApplicationShortcode(["funkycommerce_wishlist"], { "card-variant": "default" });
   const shopPath = useStorefrontPath("shop", "/shop");
-  const { ids, clear } = useWishlist();
+  const { ids, clear, syncError } = useWishlist();
   const { data: commerce, isLoading, error } = useCommerceData();
-  const items = (commerce?.products || []).filter((product) => ids.includes(product.id));
+  const { cap, error: capError, isLoggedIn } = useSavedListCap("wishlist");
+  const items = (commerce?.products || []).filter((product) => ids.includes(savedListEntityId(product)));
   const configuredVariant = CARD_STYLE_OPTIONS.some(({ value }) => value === config["card-variant"]) ? config["card-variant"] as ProductCardVariant : "default";
   const cardStyle = configuredVariant;
 
@@ -32,10 +34,14 @@ export function WishlistMockupPage() {
         <div className="grid gap-1">
           <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Wishlist</h1>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            {ids.length} saved {ids.length === 1 ? "product" : "products"} · persisted locally in this browser.
+            {ids.length} saved {ids.length === 1 ? "product" : "products"}
+            {cap ? ` of ${cap}` : ""} · {isLoggedIn ? "synced to your account" : "persisted locally in this browser"}.
           </p>
+          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">Sign in</Link> to sync your wishlist across devices.</p> : null}
         </div>
       </div>
+      {syncError ? <SavedCollectionStatus message={`Your wishlist could not be synced: ${syncError}`} /> : null}
+      {capError ? <SavedCollectionStatus message={`Your wishlist limit could not be loaded: ${capError}`} /> : null}
       {ids.length > 0 && isLoading ? <ContentLoadingState compact label="Loading your saved products" /> : null}
       {ids.length > 0 && error ? (
         <SavedCollectionStatus message={`Your saved products could not be loaded: ${error.message}`} />

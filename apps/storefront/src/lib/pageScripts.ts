@@ -1,83 +1,77 @@
 import type { CmsPageScript } from "./pages";
 
-const warnedMissingDependencies = new Set<string>();
+const CMS_SCRIPT_SELECTOR = 'script[data-wp-block-html="js"]';
+const EXECUTED_ATTRIBUTE = "data-funky-cms-executed";
+const BUNDLED_SCRIPT_HANDLES = new Set([
+  "funkycommerce-google-maps-locations",
+  "wc-add-to-cart",
+  "woocommerce",
+]);
+const warnedScripts = new Set<string>();
 
-export function executeContentScripts(container: HTMLElement): void {
-  container.querySelectorAll("script").forEach((oldScript) => {
-    const newScript = document.createElement("script");
-    Array.from(oldScript.attributes).forEach(({ name, value }) => newScript.setAttribute(name, value));
-    newScript.textContent = oldScript.textContent;
-    oldScript.replaceWith(newScript);
+function decodeHtmlEntities(value: string): string {
+  const decoder = document.createElement("textarea");
+  return value.replace(/&(?:#\d+|#x[\da-f]+|[a-z][\w-]+);/gi, (entity) => {
+    decoder.innerHTML = entity;
+    return decoder.value;
   });
+}
+
+function executeCmsScript(source: HTMLScriptElement): void {
+  if (source.hasAttribute(EXECUTED_ATTRIBUTE)) return;
+
+  const executable = document.createElement("script");
+  for (const attribute of Array.from(source.attributes)) {
+    executable.setAttribute(attribute.name, attribute.value);
+  }
+  executable.setAttribute(EXECUTED_ATTRIBUTE, "true");
+
+  if (source.src && !source.hasAttribute("async")) {
+    executable.async = false;
+  } else if (!source.src) {
+    executable.text = decodeHtmlEntities(source.textContent ?? "");
+  }
+
+  source.replaceWith(executable);
+}
+
+function executeCmsScriptsIn(node: ParentNode): void {
+  if (node instanceof HTMLScriptElement && node.matches(CMS_SCRIPT_SELECTOR)) {
+    executeCmsScript(node);
+    return;
+  }
+
+  for (const script of node.querySelectorAll<HTMLScriptElement>(CMS_SCRIPT_SELECTOR)) {
+    executeCmsScript(script);
+  }
+}
+
+export function mountCmsScripts(root: HTMLElement): () => void {
+  executeCmsScriptsIn(root);
+
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of Array.from(record.addedNodes)) {
+        if (node instanceof HTMLElement) {
+          executeCmsScriptsIn(node);
+        }
+      }
+    }
+  });
+  observer.observe(root, { childList: true, subtree: true });
+
+  return () => observer.disconnect();
 }
 
 export function mountEnqueuedScripts(scripts: CmsPageScript[]): () => void {
-  const mounted: HTMLScriptElement[] = [];
-  const loading = new Map<string, Promise<void>>();
-  let active = true;
-
-  const appendInline = (script: CmsPageScript, code: string) => {
-    if (!active) return;
-    const element = document.createElement("script");
-    element.dataset.wpHandle = script.handle || script.id;
-    element.textContent = code;
-    getTarget(script).appendChild(element);
-    mounted.push(element);
-  };
-
-  const loadScript = (script: CmsPageScript): Promise<void> => {
-    const existing = loading.get(script.id);
-    if (existing) return existing;
-
-    const promise = (async () => {
-      if (script.src && script.dependencies === null) {
-        const identifier = script.handle || script.id;
-        if (!warnedMissingDependencies.has(identifier)) {
-          warnedMissingDependencies.add(identifier);
-          console.warn(`Skipping WordPress script "${identifier}" because its dependency metadata is unavailable.`);
-        }
-        return;
-      }
-
-      await Promise.all((script.dependencies || []).map(loadScript));
-      if (!active) return;
-
-      script.before.forEach((code) => appendInline(script, code));
-
-      if (script.src) {
-        const src = script.src;
-        await new Promise<void>((resolve, reject) => {
-          const element = document.createElement("script");
-          element.dataset.wpHandle = script.handle || script.id;
-          element.src = src;
-          element.async = script.strategy === "ASYNC";
-          element.defer = script.strategy === "DEFER";
-          element.addEventListener("load", () => resolve(), { once: true });
-          element.addEventListener("error", () => reject(new Error(`Failed to load WordPress script "${script.handle || script.id}"`)), {
-            once: true,
-          });
-          getTarget(script).appendChild(element);
-          mounted.push(element);
-        });
-      }
-
-      script.after.forEach((code) => appendInline(script, code));
-    })();
-
-    loading.set(script.id, promise);
-    return promise;
-  };
-
   scripts.forEach((script) => {
-    void loadScript(script).catch((error: Error) => console.error(error.message));
+    const identifier = script.handle || script.id;
+    if (BUNDLED_SCRIPT_HANDLES.has(identifier)) return;
+    if (warnedScripts.has(identifier)) return;
+    warnedScripts.add(identifier);
+    console.warn(
+      `[CMS content] Ignoring WordPress script "${identifier}". CMS scripts require a reviewed, bundled behavior or an explicit URL and integrity allowlist.`,
+    );
   });
-
-  return () => {
-    active = false;
-    mounted.forEach((element) => element.remove());
-  };
-}
-
-function getTarget(script: CmsPageScript): HTMLElement {
-  return script.groupLocation === "HEADER" ? document.head : document.body;
+  return () => undefined;
 }

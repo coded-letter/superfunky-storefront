@@ -1,17 +1,28 @@
 /** Checkout utilities — shipping, taxes, coupons, and related calculations. */
 
-import { useEffect, useState } from "react";
-import { isBackendConfigured } from "./env";
+import { useCallback, useEffect, useState } from "react";
+import type { CartLineItem } from "@funky/ui";
+import { syncCartToBackend } from "./backendCart";
+import { isBackendConfigured } from "@funky/sdk";
 import {
   applyCoupon,
   calculateTaxes,
+  getCart,
   getShippingMethods,
   removeCoupon,
+  selectShippingMethod,
+  updateCartCustomer,
   type StoreApiAddress,
+  type StoreApiCart,
   type StoreApiCouponResponse,
-  type StoreApiShippingMethod,
   type StoreApiShippingOption,
 } from "./wcStoreApi";
+export {
+  DEFAULT_FREE_SHIPPING_METHOD,
+  findFreeShippingMethod,
+  mapShippingOptionsToDisplayMethods,
+} from "./shippingRates";
+export type { DisplayShippingMethod } from "./shippingRates";
 
 export interface CheckoutState {
   shippingMethods: StoreApiShippingOption[];
@@ -22,17 +33,6 @@ export interface CheckoutState {
   isLoading: boolean;
   error: string | null;
 }
-
-export type DisplayShippingMethod = {
-  id: string;
-  label: string;
-  eta: string;
-  price: number;
-  packageId?: number;
-  rateId?: string;
-  selected?: boolean;
-  disabled?: boolean;
-};
 
 export type StorefrontFreeShippingZone = {
   countryCode: string;
@@ -47,6 +47,95 @@ export type ResolvedFreeShippingThreshold = {
   matchedCountryCode: string | null;
   usedFallbackCountry: boolean;
 };
+
+export function useCheckoutCart(
+  billingAddress: StoreApiAddress | null,
+  shippingAddress: StoreApiAddress | null = billingAddress,
+  cartRevision = "",
+  frontendCart: CartLineItem[] = [],
+) {
+  const [state, setState] = useState<{
+    cart: StoreApiCart | null;
+    loading: boolean;
+    error: string | null;
+  }>({ cart: null, loading: false, error: null });
+  const addressKey = [billingAddress, shippingAddress]
+    .map((address) => address
+      ? [
+          address.first_name,
+          address.last_name,
+          address.address_1,
+          address.address_2 ?? "",
+          address.city,
+          address.state ?? "",
+          address.postcode,
+          address.country,
+          address.email ?? "",
+          address.phone ?? "",
+        ].join("|")
+      : "")
+    .concat(cartRevision)
+    .join("::");
+
+  useEffect(() => {
+    if (!isBackendConfigured || !billingAddress || !shippingAddress) {
+      setState({ cart: null, loading: false, error: null });
+      return;
+    }
+
+    let cancelled = false;
+    setState((previous) => ({ ...previous, loading: true, error: null }));
+    void syncCartToBackend(frontendCart, {
+      force: true,
+      verifyForCheckout: true,
+      ignoreSuspension: true,
+    }).then(async (syncResult) => {
+      if (cancelled) return;
+      if (!syncResult.ok) {
+        setState({ cart: null, loading: false, error: syncResult.error });
+        return;
+      }
+      const result = await updateCartCustomer(billingAddress, shippingAddress);
+      if (cancelled) return;
+      if (!result.ok) {
+        setState({ cart: null, loading: false, error: result.error });
+        return;
+      }
+      const refreshed = await getCart();
+      if (cancelled) return;
+      setState(refreshed.ok
+        ? { cart: refreshed.data, loading: false, error: null }
+        : { cart: result.data, loading: false, error: refreshed.error });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [addressKey]);
+
+  const adoptCart = useCallback((cart: StoreApiCart) => {
+    setState({ cart, loading: false, error: null });
+  }, []);
+
+  const selectMethod = useCallback(async (packageId: number, rateId: string) => {
+    setState((previous) => ({ ...previous, loading: true, error: null }));
+    const result = await selectShippingMethod({ package_id: packageId, rate_id: rateId });
+    if (result.ok) {
+      setState({ cart: result.data, loading: false, error: null });
+    } else {
+      setState((previous) => ({ ...previous, loading: false, error: result.error }));
+    }
+    return result;
+  }, []);
+
+  return {
+    ...state,
+    methods: state.cart?.shipping_rates ?? [],
+    totals: state.cart?.totals ?? null,
+    coupons: state.cart?.coupons ?? [],
+    adoptCart,
+    selectMethod,
+  };
+}
 
 /** Hook for fetching available shipping methods based on address. */
 export function useShippingMethods(address: StoreApiAddress | null) {
@@ -189,59 +278,17 @@ export async function checkoutApplyCoupon(code: string): Promise<{
 export async function checkoutRemoveCoupon(code: string): Promise<{
   ok: boolean;
   error?: string;
+  totals?: StoreApiCouponResponse;
 }> {
   if (!isBackendConfigured) {
     return { ok: false, error: "Backend not configured" };
   }
 
   const result = await removeCoupon(code);
-  return result.ok ? { ok: true } : { ok: false, error: result.error };
+  return result.ok ? { ok: true, totals: result.data } : { ok: false, error: result.error };
 }
 
-/** Finds the first free-shipping eligible method from the available methods, if any. */
-export function findFreeShippingMethod(
-  methods: StoreApiShippingOption[]
-): StoreApiShippingMethod | null {
-  for (const pkg of methods) {
-    for (const method of pkg.shipping_methods) {
-      if (method.price === "0" || parseFloat(method.price) === 0) {
-        return method;
-      }
-    }
-  }
-  return null;
-}
-
-/** Returns true if all cart items are virtual (non-shippable). */
-export function isCartVirtual(cartItems: Array<{ virtual?: boolean }>): boolean {
-  if (!cartItems.length) return false;
-  return cartItems.every((item) => item.virtual === true);
-}
-
-/** Flattens Store API shipping packages into UI-friendly methods. */
-export function mapShippingOptionsToDisplayMethods(
-  backendOptions: StoreApiShippingOption[] | null | undefined,
-  fallbackMethods: DisplayShippingMethod[] = [],
-): DisplayShippingMethod[] {
-  if (!backendOptions?.length) {
-    return fallbackMethods;
-  }
-
-  const allMethods = backendOptions.flatMap((pkg) =>
-    pkg.shipping_methods.map((method) => ({
-      id: method.rate || method.id,
-      label: method.name,
-      eta: method.delivery_time || "Estimated delivery time",
-      price: Number.parseFloat(method.price) || 0,
-      packageId: pkg.package_id,
-      rateId: method.rate || method.id,
-      selected: method.selected === true,
-      disabled: method.choice_disabled,
-    })),
-  );
-
-  return allMethods.length > 0 ? allMethods : fallbackMethods;
-}
+export { isCartVirtual, isDigitalOnlyCart } from "./cartShippingMode";
 
 /** Resolves the applicable free-shipping threshold for a country, with store-default and
  * legacy-static fallbacks when runtime zone metadata is not yet available. */

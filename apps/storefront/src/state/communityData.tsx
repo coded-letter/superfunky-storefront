@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCommunityData, getCommunityViewer, type CommunityData, type CommunityViewer } from "../lib/community";
-import { useIncrementalData, type IncrementalDataState } from "../lib/incrementalData";
+import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 import { authStore } from "../lib/auth";
 import { useLanguage } from "@funky/ui";
 
@@ -13,7 +13,7 @@ type CommunityDataContextValue = IncrementalDataState<CommunityData> & {
 
 const CommunityDataContext = createContext<CommunityDataContextValue | null>(null);
 
-export function CommunityDataProvider({ children }: { children?: ReactNode }) {
+export function CommunityDataProvider({ children, enabled = true }: { children?: ReactNode; enabled?: boolean }) {
   const { languageCode, languageBackendCode } = useLanguage();
   const [userId, setUserId] = useState(() => authStore.load()?.user?.databaseId || 0);
   const [revision, setRevision] = useState(0);
@@ -22,10 +22,15 @@ export function CommunityDataProvider({ children }: { children?: ReactNode }) {
     [],
   );
   const rawDataState = useIncrementalData(
-    `community:v5:${languageCode}:${languageBackendCode}:${userId}:${revision}`,
+    `community:v8:${languageCode}:${languageBackendCode}:${userId}:${revision}`,
     () => getCommunityData(languageCode, languageBackendCode),
+    enabled,
   );
-  const rawViewerState = useIncrementalData(`community-viewer:v2:${userId}:${revision}`, getCommunityViewer);
+  const rawViewerState = useIncrementalData(
+    `community-viewer:v3:${userId}:${revision}`,
+    getCommunityViewer,
+    enabled,
+  );
   const dataState = useMemo<IncrementalDataState<CommunityData>>(() => ({
     ...rawDataState,
     data: rawDataState.data
@@ -34,6 +39,7 @@ export function CommunityDataProvider({ children }: { children?: ReactNode }) {
           members: Array.isArray(rawDataState.data.members) ? rawDataState.data.members : [],
           marketplaceItems: Array.isArray(rawDataState.data.marketplaceItems) ? rawDataState.data.marketplaceItems : [],
           profilesPublicEnabled: rawDataState.data.profilesPublicEnabled !== false,
+          followersEnabled: rawDataState.data.followersEnabled !== false,
         }
       : null,
   }), [rawDataState]);

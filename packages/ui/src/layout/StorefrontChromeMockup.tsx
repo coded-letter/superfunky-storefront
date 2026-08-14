@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import type { ProductCardData } from "../catalog/ProductCard";
+import { isSupportedSocialPlatform, socialIconSrc, type SocialLink } from "../locale";
 import { useLayoutPreferences, useSoundUX } from "../state";
 import { CartDrawer } from "./CartDrawer";
 import { CookieConsentBanner } from "./CookieConsentBanner";
@@ -19,7 +20,10 @@ export type StorefrontChromeMockupProps = {
   mobileNavigation?: HeaderNavItem[];
   footerColumns?: FooterColumn[];
   search?: SearchAutocompleteProps["search"];
-  onNewsletterSubscribe?: (email: string) => Promise<void>;
+  onNewsletterSubscribe?: (email: string, source?: "newsletter-popup" | "newsletter-footer") => Promise<void>;
+  onPushToggle?: () => void;
+  pushSubscribed?: boolean;
+  pushBusy?: boolean;
   /** Language-aware home path (e.g. `"/en"`, `"/pl"`) for the logo link. Defaults to `"/"`. */
   homePath?: string;
   storefrontConfig?: {
@@ -29,16 +33,42 @@ export type StorefrontChromeMockupProps = {
       tagline: string;
       logoUrl: string | null;
       iconUrl: string | null;
-      promoText: string;
+      promoHtml: string;
     };
     headerIcons: {
       search: string;
       theme: string;
       account: string;
+      push: string;
       readingList: string;
       wishlist: string;
       cart: string;
       menu: string;
+      assistant: string;
+    };
+    headerIconMedia?: Partial<Record<"search" | "theme" | "account" | "readingList" | "wishlist" | "cart" | "menu" | "assistant", string | null>>;
+    aiAssistant?: {
+      enabled?: boolean;
+      provider?: string;
+      placement?: "footer" | "header" | "fixed";
+      nativeProviderActive?: boolean;
+      iframeUrl?: string | null;
+      iframeTitle: string;
+      iframeSandbox: string;
+      iframeReferrerPolicy: string;
+    };
+    footer?: {
+      socialLinks: Array<{
+        id: string;
+        platform: string;
+        url: string;
+        label: string;
+      }>;
+      newsletterHeading?: string;
+      newsletterText?: string;
+      newsletterPrivacyLabel?: string;
+      extraHtml?: string;
+      copyrightText?: string;
     };
     features: {
       promo: boolean;
@@ -49,9 +79,16 @@ export type StorefrontChromeMockupProps = {
       wishlist: boolean;
       readingList: boolean;
       cart: boolean;
+      quickView: boolean;
+      push: boolean;
       crypto: boolean;
     };
   };
+  assistantPlacement?: "footer" | "header-command-overlay" | "fixed";
+  headerActionSlot?: ReactNode;
+  footerAssistantSlot?: ReactNode;
+  assistantOverlaySlot?: ReactNode;
+  floatingAssistantSlot?: ReactNode;
 };
 
 export function StorefrontChromeMockup(props: StorefrontChromeMockupProps) {
@@ -70,7 +107,25 @@ function ScrollToTop() {
   return null;
 }
 
-function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, mobileNavigation, footerColumns, search, onNewsletterSubscribe, homePath, storefrontConfig }: StorefrontChromeMockupProps) {
+function StorefrontChromeShell({
+  children,
+  featuredProduct,
+  primaryNavigation,
+  mobileNavigation,
+  footerColumns,
+  search,
+  onNewsletterSubscribe,
+  onPushToggle,
+  pushSubscribed,
+  pushBusy,
+  homePath,
+  storefrontConfig,
+  assistantPlacement,
+  headerActionSlot,
+  footerAssistantSlot,
+  assistantOverlaySlot,
+  floatingAssistantSlot,
+}: StorefrontChromeMockupProps) {
   const {
     showAnnouncementBar,
     announcementBarScrollEffect,
@@ -108,6 +163,17 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
     themeMaxWidthPx,
     themeRadiusPx,
   } = useLayoutPreferences();
+  const footerSocialLinks: SocialLink[] = (storefrontConfig?.footer?.socialLinks ?? []).flatMap((profile) =>
+    isSupportedSocialPlatform(profile.platform)
+      ? [{
+          id: profile.id,
+          platform: profile.platform,
+          label: profile.label,
+          href: profile.url,
+          icon: socialIconSrc(profile.platform),
+        }]
+      : [],
+  );
 
   useEffect(() => {
     const iconUrl = storefrontConfig?.branding.iconUrl;
@@ -140,12 +206,13 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
         primaryNavigation={primaryNavigation}
         mobileNavigation={mobileNavigation}
         homePath={homePath}
-        announcementText={storefrontConfig?.branding.promoText}
+        announcementHtml={storefrontConfig?.branding.promoHtml ?? ""}
         projectName={storefrontConfig?.branding.storeName}
         projectTagline={storefrontConfig?.branding.tagline}
         logoUrl={storefrontConfig?.branding.logoUrl || undefined}
         iconUrl={storefrontConfig?.branding.iconUrl || undefined}
         headerIcons={storefrontConfig?.headerIcons}
+        headerIconMedia={storefrontConfig?.headerIconMedia}
         showAnnouncementBar={showAnnouncementBar && storefrontConfig?.features.promo !== false}
         announcementScrollEffect={announcementBarScrollEffect}
         sticky={headerSticky}
@@ -157,16 +224,26 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
         showCurrencySwitcher={showHeaderCurrencySwitcher && storefrontConfig?.features.currencies !== false}
         showDarkModeToggle={showHeaderDarkModeToggle}
         showAccountLink={showHeaderAccountLink && storefrontConfig?.features.account !== false}
+        showPushAction={storefrontConfig?.features.push !== false}
+        onPushToggle={onPushToggle}
+        pushSubscribed={pushSubscribed}
+        pushBusy={pushBusy}
         showReadingListLink={showHeaderReadingListLink && storefrontConfig?.features.readingList !== false}
         showWishlistLink={showHeaderWishlistLink && storefrontConfig?.features.wishlist !== false}
         showCartIcon={showHeaderCartIcon && storefrontConfig?.features.cart !== false}
         cartTriggerVariant={cartTriggerVariant}
         search={search}
+        actionSlot={headerActionSlot}
       />
 
       <main
-        className="funky-main mx-auto w-full flex-1 rounded-[var(--theme-radius)] px-4 pb-16 sm:px-6 lg:px-8"
-        style={{ maxWidth: `${themeMaxWidthPx}px`, borderRadius: `${themeRadiusPx}px` }}
+        id="sf-main"
+        className="sf-main funky-main mx-auto w-full flex-1 rounded-[var(--theme-radius)] px-4 pb-16 sm:px-6 lg:px-8"
+        style={{
+          maxWidth: `${themeMaxWidthPx}px`,
+          borderRadius: `${themeRadiusPx}px`,
+          "--funky-content-max-width": `${themeMaxWidthPx}px`,
+        } as CSSProperties}
       >
         {/* Renders routed pages via <Outlet /> when used as a router layout route, or explicit children otherwise. */}
         {children ?? <Outlet />}
@@ -177,6 +254,9 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
           footerColumns={footerColumns}
           columnsLayout={footerColumnsLayout}
           newsletterLayout={footerNewsletterLayout}
+          newsletterTitle={storefrontConfig?.footer?.newsletterHeading || undefined}
+          newsletterDescription={storefrontConfig?.footer?.newsletterText || undefined}
+          privacyConsentLabel={storefrontConfig?.footer?.newsletterPrivacyLabel || undefined}
           showNewsletter={showFooterNewsletter}
           assistantSpotifyLayout={footerAssistantLayout}
           logoVariant={footerLogoVariant}
@@ -184,10 +264,13 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
           bottomBarLayout={footerBottomBarLayout}
           extraWrapperLayout={footerExtraWrapperLayout}
           showExtraWrapper={showFooterExtraWrapper}
+          extraWrapperHtml={storefrontConfig?.footer?.extraHtml ?? ""}
           showSpotifyPlayer={showFooterSpotifyPlayer}
-          showAssistantFrame={showFooterAssistantFrame}
+          spotifyPlayerProps={storefrontConfig?.footer?.spotifyPlaylistUrl ? { uri: storefrontConfig.footer.spotifyPlaylistUrl } : undefined}
+          showAssistantFrame={showFooterAssistantFrame && (!assistantPlacement || assistantPlacement === "footer")}
           showPaymentMethods={showFooterPaymentMethods}
           showSocialLinks={showFooterSocialLinks}
+          socialLinks={footerSocialLinks}
           showCopyright={showFooterCopyright}
           hiddenPaymentMethodKeys={[
             ...hiddenFooterPaymentMethodKeys,
@@ -197,16 +280,25 @@ function StorefrontChromeShell({ children, featuredProduct, primaryNavigation, m
           projectName={storefrontConfig?.branding.storeName}
           logoUrl={storefrontConfig?.branding.logoUrl || undefined}
           iconUrl={storefrontConfig?.branding.iconUrl || undefined}
-          copyrightText={storefrontConfig ? `© ${new Date().getFullYear()} ${storefrontConfig.branding.companyName}. All rights reserved.` : undefined}
+          copyrightText={storefrontConfig?.footer?.copyrightText ?? ""}
+          onNewsletterSubscribe={onNewsletterSubscribe}
+          assistantSlot={footerAssistantSlot}
         />
       ) : null}
 
-      <CookieConsentBanner />
-      <NewsletterSignupPopup onSubscribe={onNewsletterSubscribe} />
+      <CookieConsentBanner providerName={storefrontConfig?.branding.storeName || "Superfunky"} />
+      <NewsletterSignupPopup
+        title={storefrontConfig?.footer?.newsletterHeading || undefined}
+        description={storefrontConfig?.footer?.newsletterText || undefined}
+        privacyConsentLabel={storefrontConfig?.footer?.newsletterPrivacyLabel || undefined}
+        onSubscribe={(email) => onNewsletterSubscribe?.(email, "newsletter-popup") ?? Promise.resolve()}
+      />
       {cartTriggerVariant === "drawer" && storefrontConfig?.features.cart !== false ? (
         <CartDrawer featuredProduct={featuredProduct} showPromotedProduct={showCartDrawerPromotedProduct} />
       ) : null}
+      {assistantOverlaySlot}
       <ToastContainer />
+      {floatingAssistantSlot}
     </div>
   );
 }

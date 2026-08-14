@@ -1,22 +1,22 @@
-import { restUrl } from "./env";
+import { restUrl } from "@funky/sdk";
 
 export type StoreLocation = {
   id: number;
   slug: string;
   name: string;
   description: string;
-  address: string;
-  city: string;
-  region: string;
-  postalCode: string;
-  country: string;
-  latitude: number;
-  longitude: number;
-  phone: string;
-  email: string;
-  url: string;
-  hours: string;
-  markerImage: string;
+  address: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  phone: string | null;
+  email: string | null;
+  url: string | null;
+  hours: string | null;
+  markerImage: string | null;
 };
 
 export type LocationsPayload = {
@@ -47,7 +47,10 @@ export async function fetchLocations(): Promise<LocationsPayload> {
   return response.json() as Promise<LocationsPayload>;
 }
 
-export function distanceKm(from: { latitude: number; longitude: number }, location: StoreLocation): number {
+export function distanceKm(
+  from: { latitude: number; longitude: number },
+  location: StoreLocation & { latitude: number; longitude: number },
+): number {
   const radians = (degrees: number) => degrees * Math.PI / 180;
   const latitudeDelta = radians(location.latitude - from.latitude);
   const longitudeDelta = radians(location.longitude - from.longitude);

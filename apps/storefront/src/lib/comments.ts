@@ -1,5 +1,5 @@
 import type { ProductReview } from "../pages/shared";
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest } from "@funky/sdk";
 import { authStore } from "./auth";
 
 export type CreateReviewInput = {
@@ -19,6 +19,8 @@ type CreateReviewResult = {
       content: string | null;
       date: string | null;
       parentId: string | null;
+      parentDatabaseId: number | null;
+      status: string | null;
       rating: number | null;
       author: { node: { name: string | null } } | null;
     } | null;
@@ -34,6 +36,8 @@ const CREATE_REVIEW_MUTATION = /* GraphQL */ `
         content(format: RENDERED)
         date
         parentId
+        parentDatabaseId
+        status
         rating
         author {
           node {
@@ -60,8 +64,10 @@ export async function createReview(input: CreateReviewInput): Promise<ProductRev
       author: input.author,
       content: input.content,
       date: new Date().toISOString(),
-      parentId: input.parent ? String(input.parent) : null,
+      parentId: null,
+      parentDatabaseId: input.parent || 0,
       rating: input.rating,
+      isPending: true,
     };
   }
 
@@ -72,7 +78,9 @@ export async function createReview(input: CreateReviewInput): Promise<ProductRev
     content: htmlToText(comment.content || input.content),
     date: comment.date || new Date().toISOString(),
     parentId: comment.parentId,
+    parentDatabaseId: comment.parentDatabaseId,
     rating: normalizeRating(comment.rating),
+    isPending: comment.status !== "APPROVE",
   };
 }
 

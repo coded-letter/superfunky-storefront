@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
-import { useLayoutPreferences } from "@funky/ui";
+import { normalizeDisplayLabel, useLayoutPreferences } from "@funky/ui";
 
 export type BreadcrumbItem = {
   label: string;
@@ -53,10 +53,11 @@ export function Breadcrumbs({
   includeStructuredData?: boolean;
 }) {
   const { showBreadcrumbs } = useLayoutPreferences();
+  const normalizedItems = items.map((item) => ({ ...item, label: normalizeDisplayLabel(item.label) }));
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: items.map((item, index) => ({
+    itemListElement: normalizedItems.map((item, index) => ({
       "@type": "ListItem",
       position: index + 1,
       name: item.label,
@@ -69,10 +70,10 @@ export function Breadcrumbs({
       {showBreadcrumbs ? (
         <nav
           aria-label="Breadcrumb"
-          className={`funky-breadcrumbs pt-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 ${className}`}
+          className={`sf-breadcrumbs funky-breadcrumbs pt-3 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 ${className}`}
         >
-          {items.map((item, index) => {
-            const isLast = index === items.length - 1;
+          {normalizedItems.map((item, index) => {
+            const isLast = index === normalizedItems.length - 1;
             return (
               <Fragment key={`${item.label}-${index}`}>
                 {index > 0 ? (

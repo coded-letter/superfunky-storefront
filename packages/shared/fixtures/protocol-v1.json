@@ -1,0 +1,103 @@
+{
+  "shell": {
+    "schemaVersion": 1,
+    "artifactSchemaVersion": 1,
+    "siteKey": "superfunky-pro",
+    "shellVersion": "shell-2026.08.13",
+    "builtAt": "2026-08-13T12:00:00.000Z",
+    "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "template": "<!doctype html><html><head><!--storefront-artifact-head--><!--storefront-artifact-css--></head><body><!--storefront-artifact-content--><!--storefront-artifact-payload--></body></html>",
+    "assets": [
+      {
+        "kind": "script",
+        "url": "/assets/app-123.js"
+      },
+      {
+        "kind": "style",
+        "url": "/assets/app-123.css"
+      }
+    ],
+    "seedRoutes": [
+      {
+        "route": "/shop",
+        "locale": "en"
+      }
+    ]
+  },
+  "artifact": {
+    "schemaVersion": 1,
+    "identity": {
+      "siteKey": "superfunky-pro",
+      "locale": "en",
+      "route": "/shop",
+      "shellVersion": "shell-2026.08.13",
+      "variant": "public"
+    },
+    "state": "ready",
+    "statusCode": 200,
+    "redirectTo": null,
+    "sourceRevision": 42,
+    "generatedAt": "2026-08-13T12:01:00.000Z",
+    "validatedAt": "2026-08-13T12:01:00.000Z",
+    "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "etag": "\"artifact-bbbbbbbbbbbbbbbb\"",
+    "documentHtml": "<!doctype html><html><body><main>Shop</main></body></html>",
+    "semanticHtml": "<main><h1>Shop</h1></main>",
+    "routeCss": "[data-artifact-route=\"shop\"]{--route-gap:1rem}",
+    "seo": {
+      "title": "Shop | Superfunky",
+      "description": "Browse the catalog.",
+      "canonicalUrl": "https://superfunky.pro/shop",
+      "robots": "index, follow",
+      "structuredData": []
+    },
+    "hydration": {
+      "schemaVersion": 1,
+      "shellVersion": "shell-2026.08.13",
+      "contentRevision": 42,
+      "generatedAt": "2026-08-13T12:01:00.000Z",
+      "expiresAt": "2026-08-13T12:02:00.000Z",
+      "entries": [
+        {
+          "cacheKey": "catalog:en",
+          "value": {
+            "products": []
+          },
+          "dependencies": [
+            "archive:shop"
+          ]
+        }
+      ]
+    },
+    "dependencies": [
+      "archive:shop",
+      "menu:header",
+      "route:/shop",
+      "theme:global"
+    ],
+    "failure": null
+  },
+  "revision": {
+    "schemaVersion": 1,
+    "siteKey": "superfunky-pro",
+    "revision": 42,
+    "changedAt": "2026-08-13T12:01:00.000Z",
+    "dependencies": [
+      "archive:shop",
+      "product:456"
+    ],
+    "etag": "\"revision-42\""
+  },
+  "changeEvent": {
+    "schemaVersion": 1,
+    "eventId": "evt-20260813-0001",
+    "siteKey": "superfunky-pro",
+    "revision": 43,
+    "occurredAt": "2026-08-13T12:05:00.000Z",
+    "reason": "Product 456 published",
+    "dependencies": [
+      "archive:shop",
+      "product:456"
+    ]
+  }
+}

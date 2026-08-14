@@ -3,29 +3,46 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { ProductCard, ResponsiveImage, useCart, useCurrency } from "@funky/ui";
-import { CustomerShortcodePage } from "../components/CustomerShortcodePage";
-import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
-import { isCartVirtual, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, useShippingMethods, useTaxCalculation } from "../lib/checkout";
-import { isBackendConfigured } from "../lib/env";
+import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { useAbandonedCartRecovery } from "../lib/abandonedCart";
+import { DEFAULT_FREE_SHIPPING_METHOD, isCartVirtual, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, useCheckoutCart } from "../lib/checkout";
+import { isBackendConfigured } from "@funky/sdk";
+import { storeApiAmount } from "../lib/storeApiMoney";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { FREE_SHIPPING_THRESHOLD, MOCK_PRODUCTS, OrderSummaryCard, primaryActionButtonClass } from "./shared";
 import { type StoreApiAddress } from "../lib/wcStoreApi";
+import { useCommerceData } from "../state/commerceData";
 import { useNavigationData } from "../state/navigationData";
 
 type CartPageLayout = "classic" | "editorial";
 
 export function CartMockupPage() {
   const embedded = useEmbeddedApplicationShortcode();
+  const recoveryState = useAbandonedCartRecovery();
+  const recoveryNotice =
+    recoveryState.status === "loading" ? (
+      <div className="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
+        Restoring your saved cart…
+      </div>
+    ) : recoveryState.status === "partial" ? (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        {recoveryState.message}
+      </div>
+    ) : recoveryState.status === "error" ? (
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+        {recoveryState.message}
+      </div>
+    ) : null;
   if (!embedded) {
     return (
-      <CustomerShortcodePage
-        pageKey="cart"
-        defaultShortcode="cart"
-        defaultAttributes={{ layout: "classic", "summary-position": "sticky" }}
-      />
+      <div className="grid gap-4">
+        {recoveryNotice}
+        <StandaloneApplicationNotice shortcode="cart" />
+      </div>
     );
   }
   const { data: navigationData } = useNavigationData();
+  const { data: commerceData } = useCommerceData();
   const config = useApplicationShortcode(["funkycommerce_cart", "woocommerce_cart"], { layout: "classic", "summary-position": "sticky" });
   const shopPath = useStorefrontPath("shop", "/shop");
   const checkoutPath = useStorefrontPath("checkout", "/checkout");
@@ -70,14 +87,27 @@ export function CartMockupPage() {
     postcode: "",
     country: selectedCountry,
   };
+  const cartRevision = items.map((item) => `${item.id}:${item.quantity}`).join("|");
   
-  const { methods: backendShippingMethods } = useShippingMethods(isBackendConfigured ? mockAddress : null);
-  const { taxTotal } = useTaxCalculation(isBackendConfigured ? mockAddress : null);
+  const { cart: backendCart, methods: backendShippingMethods, totals: cartTotals } = useCheckoutCart(
+    isBackendConfigured ? mockAddress : null,
+    undefined,
+    cartRevision,
+    items,
+  );
   const cartIsVirtual = isCartVirtual(items);
-  const displayShippingMethods = mapShippingOptionsToDisplayMethods(backendShippingMethods, [
-    { id: "standard", label: "Standard shipping", eta: "3–5 business days", price: 7 },
-    { id: "express", label: "Express shipping", eta: "1–2 business days", price: 14 },
-  ]);
+  const displayShippingMethods = mapShippingOptionsToDisplayMethods(
+    backendShippingMethods,
+    isBackendConfigured
+      ? backendCart
+        ? [DEFAULT_FREE_SHIPPING_METHOD]
+        : []
+      : [
+          { id: "standard", label: "Standard shipping", eta: "3–5 business days", price: 7 },
+          { id: "express", label: "Express shipping", eta: "1–2 business days", price: 14 },
+        ],
+    cartTotals?.currency_minor_unit ?? 0,
+  );
   
   const selectedShipping = displayShippingMethods.find((method) => method.selected) ?? displayShippingMethods[0];
   const resolvedFreeShipping = resolveFreeShippingThreshold(
@@ -87,17 +117,33 @@ export function CartMockupPage() {
     FREE_SHIPPING_THRESHOLD,
   );
   const freeShippingThreshold = resolvedFreeShipping.threshold;
+  const authoritativeSubtotal = cartTotals?.total_items !== undefined
+    ? storeApiAmount(cartTotals.total_items, cartTotals)
+    : subtotalAmount;
+  const authoritativeSubtotalLabel = cartTotals ? formatBaseAmount(authoritativeSubtotal) : subtotalLabel;
   const freeShippingApplies =
     !cartIsVirtual &&
-    (selectedShipping?.price === 0 || (freeShippingThreshold !== null && subtotalAmount >= freeShippingThreshold));
-  const shippingValue = items.length === 0 || cartIsVirtual ? 0 : freeShippingApplies ? 0 : selectedShipping?.price ?? 0;
-  // Use backend tax value (as a string) or fall back to 10% mock calculation
-  const taxValue = taxTotal ? parseFloat(taxTotal) : subtotalAmount * 0.1;
-  const totalValue = subtotalAmount + shippingValue + taxValue;
-  const remainingForFreeShipping = freeShippingThreshold !== null ? freeShippingThreshold - subtotalAmount : null;
+    (selectedShipping?.price === 0 || (freeShippingThreshold !== null && authoritativeSubtotal >= freeShippingThreshold));
+  const shippingValue = cartTotals
+    ? storeApiAmount(cartTotals.total_shipping, cartTotals)
+    : items.length === 0 || cartIsVirtual
+      ? 0
+      : freeShippingApplies
+        ? 0
+        : selectedShipping?.price ?? 0;
+  const taxValue = cartTotals
+    ? storeApiAmount(cartTotals.total_tax, cartTotals)
+    : authoritativeSubtotal * 0.1;
+  const discountValue = cartTotals ? storeApiAmount(cartTotals.total_discount, cartTotals) : 0;
+  const totalValue = cartTotals
+    ? storeApiAmount(cartTotals.total_price, cartTotals)
+    : authoritativeSubtotal - discountValue + shippingValue + taxValue;
+  const remainingForFreeShipping = freeShippingThreshold !== null ? freeShippingThreshold - authoritativeSubtotal : null;
 
   if (items.length === 0) {
-    const featuredProducts = MOCK_PRODUCTS.slice(0, 4);
+    const featuredProducts = isBackendConfigured
+      ? commerceData?.products.slice(0, 4) ?? []
+      : MOCK_PRODUCTS.slice(0, 4);
     return (
       <div className="grid gap-10">
         <div className="grid place-items-center gap-4 rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-16 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
@@ -129,6 +175,7 @@ export function CartMockupPage() {
 
   return (
     <div className="grid gap-6">
+      {recoveryNotice}
       {layout === "editorial" ? (
         <div className="grid gap-8">
           <div className="grid gap-1">
@@ -152,7 +199,7 @@ export function CartMockupPage() {
                     <div className="relative grid gap-1">
                       <h2 className="m-0 font-display text-xl font-bold leading-tight">Ready to check out?</h2>
                       <p className="m-0 text-sm text-white/85">
-                        {items.length} item{items.length === 1 ? "" : "s"} · {subtotalLabel} subtotal
+                        {items.length} item{items.length === 1 ? "" : "s"} · {authoritativeSubtotalLabel} subtotal
                       </p>
                     </div>
                     <span className="relative inline-flex items-center gap-1.5 text-sm font-semibold">
@@ -289,7 +336,8 @@ export function CartMockupPage() {
                  : undefined
               }
               rows={[
-               { label: "Subtotal", value: subtotalLabel },
+               { label: "Subtotal", value: authoritativeSubtotalLabel },
+               ...(discountValue > 0 ? [{ label: "Discount", value: `-${formatBaseAmount(discountValue)}` }] : []),
                { label: "Shipping", value: cartIsVirtual ? "Digital delivery" : shippingValue === 0 ? "Free" : formatBaseAmount(shippingValue) },
                { label: "Tax", value: formatBaseAmount(taxValue) },
               ]}

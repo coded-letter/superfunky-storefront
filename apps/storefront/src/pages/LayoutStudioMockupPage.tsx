@@ -13,6 +13,7 @@ import {
   Maximize,
   Menu as MenuIcon,
   MessageCircle,
+  Newspaper,
   Palette,
   PanelBottom,
   Search,
@@ -21,6 +22,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Users,
+  UserSquare2,
 } from "lucide-react";
 import {
   BRAND_COLOR_STEPS,
@@ -31,7 +33,9 @@ import {
   SOCIAL_LINKS,
   ViewSwitch,
   useLayoutPreferences,
+  type ArchiveHeroLayout,
   type CartTriggerVariant,
+  type DiscussionLayout,
   type FooterAssistantLayout,
   type FooterBottomBarLayout,
   type FooterColumnsLayout,
@@ -41,9 +45,13 @@ import {
   type HeaderLogoVariant,
   type HeaderSearchVariant,
   type NewsletterPopupVariant,
+  type PostAuthorLayout,
+  type PostSharePosition,
+  type PostTocLayout,
+  type ProductPageLayout,
+  type ProfileHeaderLayout,
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
-import { useLayoutPreferencesSync } from "../lib/layoutPreferencesSync";
 
 const HEADER_SEARCH_OPTIONS: { value: HeaderSearchVariant; label: string }[] = [
   { value: "full-width", label: "Full-width bar" },
@@ -60,6 +68,11 @@ const NEWSLETTER_POPUP_VARIANT_OPTIONS: { value: NewsletterPopupVariant; label: 
   { value: "split", label: "Split (image + form)" },
   { value: "modern-card", label: "Modern corner card" },
   { value: "modern-center", label: "Modern centered" },
+];
+
+const PRODUCT_PAGE_LAYOUT_OPTIONS: { value: ProductPageLayout; label: string }[] = [
+  { value: "classic", label: "Classic" },
+  { value: "studio", label: "Studio" },
 ];
 
 /** The theme's `brand` color scale + gradient/shadow tokens — this section is a *live*
@@ -180,6 +193,45 @@ const CART_TRIGGER_OPTIONS: { value: CartTriggerVariant; label: string }[] = [
   { value: "dropdown", label: "Anchored dropdown" },
 ];
 
+const PROFILE_HEADER_LAYOUT_OPTIONS: { value: ProfileHeaderLayout; label: string }[] = [
+  { value: "card", label: "Gradient card" },
+  { value: "cover-banner", label: "Full-width cover banner" },
+  { value: "compact-list", label: "Compact single row" },
+  { value: "immersive", label: "Immersive" },
+  { value: "split", label: "Split" },
+  { value: "strip", label: "Strip" },
+];
+
+const ARCHIVE_HERO_LAYOUT_OPTIONS: { value: ArchiveHeroLayout; label: string }[] = [
+  { value: "split", label: "Split" },
+  { value: "fullbleed", label: "Full-bleed" },
+  { value: "minimal", label: "Minimal" },
+];
+
+const POST_TOC_LAYOUT_OPTIONS: { value: PostTocLayout; label: string }[] = [
+  { value: "current", label: "Sidebar (current)" },
+  { value: "hidden", label: "Hidden" },
+  { value: "above", label: "Above content" },
+];
+
+const POST_SHARE_POSITION_OPTIONS: { value: PostSharePosition; label: string }[] = [
+  { value: "above-toc", label: "Above table of contents" },
+  { value: "on-image", label: "On the featured image" },
+  { value: "below-toc-right", label: "Below TOC, right-aligned" },
+];
+
+const POST_AUTHOR_LAYOUT_OPTIONS: { value: PostAuthorLayout; label: string }[] = [
+  { value: "fullwidth", label: "Full width" },
+  { value: "compact", label: "Compact" },
+  { value: "editorial", label: "Editorial" },
+];
+
+const DISCUSSION_LAYOUT_OPTIONS: { value: DiscussionLayout; label: string }[] = [
+  { value: "stacked", label: "Stacked" },
+  { value: "split-left", label: "Split (form left)" },
+  { value: "split-right", label: "Split (form right)" },
+];
+
 type LivePageCard = {
   icon: typeof Heart;
   title: string;
@@ -210,22 +262,61 @@ const LIVE_PAGE_SWITCHES: LivePageCard[] = [
     href: "/wishlist",
     switchLabel: "Card style",
   },
-  {
-    icon: Users,
-    title: "Community profile",
-    description: "Gradient card (current), full-width cover banner, and a compact single-row header for member profiles.",
-    href: "/community/jordandoe",
-    switchLabel: "Header layout",
-  },
+];
+
+/** Backend Control Center settings that look like Studio-worthy layout switches but
+ *  are actually per-shortcode-instance attribute defaults (e.g. `[funkycommerce_cart
+ *  layout="classic"]`) — the real live pages that render them read from an embedded
+ *  WordPress shortcode via `useApplicationShortcode(...)`, completely independent of
+ *  `storefrontConfig.layout`. Deliberately NOT duplicated here as global live toggles
+ *  (that would silently do nothing on the live pages and misrepresent what the
+ *  setting actually controls) — see `business/superfunky.pro/docs/customisation/
+ *  shortcodes.md` for the authoritative per-shortcode attribute documentation. */
+type BackendOnlySetting = {
+  field: string;
+  description: string;
+  shortcode: string;
+};
+
+const BACKEND_ONLY_SETTINGS: BackendOnlySetting[] = [
+  { field: "homeHeroLayout", description: "Home page hero default layout.", shortcode: "Home page CMS blocks" },
+  { field: "shopProductCardVariant", description: "Shop archive default product card style.", shortcode: "Shop page CMS blocks" },
+  { field: "authLayout", description: "Login / register / forgot-password default layout.", shortcode: "[funkycommerce_auth] layout" },
+  { field: "readingListLayout", description: "Reading list default layout.", shortcode: "[funkycommerce_reading_list] layout" },
+  { field: "wishlistCardVariant", description: "Wishlist default product card style.", shortcode: "[funkycommerce_wishlist] card_variant" },
+  { field: "communityFeedLayout", description: "Community feed default layout.", shortcode: "[community-feed] layout" },
+  { field: "communityFeedLoadMode", description: "Community feed default load mode (paged / infinite).", shortcode: "[community-feed] load_mode" },
+  { field: "communityFeedPageSize", description: "Community feed default page size.", shortcode: "[community-feed] page_size" },
+  { field: "communityFeedFilters", description: "Community feed default filter visibility.", shortcode: "[community-feed] show_filters" },
+  { field: "cartLayout", description: "Cart page default layout.", shortcode: "[funkycommerce_cart] / [woocommerce_cart] layout" },
+  { field: "cartSummaryPosition", description: "Cart page default order-summary position.", shortcode: "[funkycommerce_cart] / [woocommerce_cart] summary-position" },
 ];
 
 /**
- * Design-review control panel for phase-.x layout switches — the header/footer
- * switches here drive the *real*, live site chrome (via `useLayoutPreferences`), so
- * flipping an option here and then scrolling up/down or navigating the site shows the
- * actual effect immediately, rather than an isolated preview. Auth/Reading-List/
- * Wishlist/Community-Profile already carry their own switches directly on their live
- * pages, so this page links out to them instead of duplicating those controls.
+ * Design-review control panel for the storefront's real-time layout switches — the
+ * header/footer/checkout/archive/post/discussion switches here drive the *real*,
+ * live site chrome and page templates (via `useLayoutPreferences`), so flipping an
+ * option here and then scrolling up/down or navigating the site shows the actual
+ * effect immediately, rather than an isolated preview.
+ *
+ * The backend WordPress Control Center remains the canonical source for each
+ * field's *initial* value — `LayoutPreferencesBackendSync` (in `App.tsx`) hydrates
+ * this same shared context from that config once per session/navigation load. Every
+ * change made in this Studio is a **session-local live preview only**: it overrides
+ * the in-memory context for the current browser tab and is never written back to
+ * the backend or to any per-user account — reloading the page reverts to the
+ * backend's canonical configuration. There is currently no secure admin-authenticated
+ * save API for these preferences, so none is invented here.
+ *
+ * Auth/Reading-List/Wishlist already carry their own switches directly on their live
+ * pages, so this page links out to them instead of duplicating those controls. Some
+ * Control Center fields are per-shortcode-instance attribute defaults rather than
+ * global settings — those are listed informationally near the bottom instead of
+ * being wired up as live global toggles (see `BACKEND_ONLY_SETTINGS` above).
+ *
+ * Access to this page (both the route and the "Layout Studio" link in Account →
+ * Storefront controls) is gated server-side on the authenticated viewer's WordPress
+ * `manage_options` capability — see `AdminCapabilityRoute` in `App.tsx`.
  */
 export function LayoutStudioMockupPage() {
   const {
@@ -311,6 +402,8 @@ export function LayoutStudioMockupPage() {
     setBrandPalette,
     brandGradientStyle,
     setBrandGradientStyle,
+    productPageLayout,
+    setProductPageLayout,
     checkoutStoreMode,
     setCheckoutStoreMode,
     checkoutCouponPosition,
@@ -329,8 +422,23 @@ export function LayoutStudioMockupPage() {
     setCheckoutShowTerms,
     checkoutShowPrivacy,
     setCheckoutShowPrivacy,
+    communityProfileHeaderLayout,
+    setCommunityProfileHeaderLayout,
+    authorProfileHeaderLayout,
+    setAuthorProfileHeaderLayout,
+    productArchiveHeroLayout,
+    setProductArchiveHeroLayout,
+    postArchiveHeroLayout,
+    setPostArchiveHeroLayout,
+    postTocLayout,
+    setPostTocLayout,
+    postSharePosition,
+    setPostSharePosition,
+    postAuthorLayout,
+    setPostAuthorLayout,
+    discussionLayout,
+    setDiscussionLayout,
   } = useLayoutPreferences();
-  useLayoutPreferencesSync();
 
   return (
     <div className="grid gap-12">
@@ -339,21 +447,44 @@ export function LayoutStudioMockupPage() {
       <section className="grid gap-3 rounded-3xl border border-zinc-200/80 bg-white p-8 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-10">
         <span className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-          Phase .x — layout studio
+          Admin only — layout studio
         </span>
         <h1 className="m-0 font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100">Layout &amp; view-switch studio</h1>
         <p className="m-0 max-w-2xl text-zinc-500 dark:text-zinc-400">
-          A single place to try every layout alternative introduced this round before backend mapping starts. The header and footer
-          switches below control the actual site chrome — change one, then scroll or browse to see it live. The remaining switches
-          already live on their own pages, so we link out to them instead of building a second copy here.
+          A single place to try every layout alternative before committing to a change in the backend Control Center. The
+          switches below control the actual site chrome and page templates for this browser session — change one, then
+          scroll or browse to see it live. Changes here are a session-local preview only: they are never saved back to the
+          backend or to any account, and reloading the page reverts to the Control Center's canonical configuration. A
+          couple of switches already live on their own pages, so we link out to them instead of building a second copy here.
         </p>
       </section>
+
+      <LayoutStudioSection
+        icon={<LayoutGrid className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Product"
+        title="Product page template"
+        description="Classic keeps the page in one document flow. Studio pins the gallery and gives the complete product information rail its own desktop scroll region, while retaining a single accessible flow on smaller screens."
+      >
+        <ViewSwitch
+          label="Product layout"
+          value={productPageLayout}
+          onChange={setProductPageLayout}
+          options={PRODUCT_PAGE_LAYOUT_OPTIONS}
+        />
+        <Link
+          to="/shop"
+          className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400"
+        >
+          Open the product catalog
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </LayoutStudioSection>
 
       <LayoutStudioSection
         icon={<CreditCard className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Checkout"
         title="Checkout layout and digital-only mode"
-        description="These controls now drive the live checkout route. Shortcodes can still override the same attributes when embedded in WordPress content."
+        description="These controls now drive the live checkout route. Shortcodes can still override the same attributes when embedded in site content."
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <ViewSwitch
@@ -417,7 +548,7 @@ export function LayoutStudioMockupPage() {
         icon={<SlidersHorizontal className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Theme"
         title="Border radius"
-        description="One proportional radius scale for cards, images, panels, inputs, sliders, and overlays. The 16px default preserves the current theme; lowering it sharpens every standard rounded token while raising it softens the whole storefront."
+        description="One proportional radius scale for cards, images, panels, inputs, sliders, overlays, and pill-shaped controls (view switches, product-card and reading-list toggles, auth/account buttons). The 16px default preserves the current theme; lowering it sharpens every standard rounded token while raising it softens the whole storefront."
       >
         <RangeControl
           label="Base radius"
@@ -428,8 +559,8 @@ export function LayoutStudioMockupPage() {
           step={1}
           unit="px"
         />
-        <div className="grid grid-cols-3 gap-3">
-          {["rounded-xl", "rounded-2xl", "rounded-3xl"].map((radiusClass) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {["rounded-xl", "rounded-2xl", "rounded-3xl", "rounded-control"].map((radiusClass) => (
             <div key={radiusClass} className={`${radiusClass} border border-brand-200 bg-brand-50 p-4 text-center text-xs font-semibold text-brand-700 dark:border-brand-800 dark:bg-brand-950 dark:text-brand-300`}>
               {radiusClass}
             </div>
@@ -715,7 +846,7 @@ export function LayoutStudioMockupPage() {
         icon={<CreditCard className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Footer"
         title="Payment icons, one by one"
-        description="Turn each individual payment provider on/off — useful once the real WooCommerce gateway list is known and only a subset should show (for example, hide the FunkyCommerce Crypto Wallet gateway or BLIK outside Poland)."
+        description="Turn each individual payment provider on/off — useful once the real WooCommerce gateway list is known and only a subset should show (for example, hide the Superfunky Crypto Wallet gateway or BLIK outside Poland)."
       >
         {PAYMENT_METHODS.map((method) => (
           <BoolSwitch
@@ -736,10 +867,10 @@ export function LayoutStudioMockupPage() {
       >
         {SOCIAL_LINKS.map((link) => (
           <BoolSwitch
-            key={link.key}
+            key={link.id}
             label={link.label}
-            value={!hiddenFooterSocialLinkKeys.includes(link.key)}
-            onChange={() => toggleFooterSocialLinkKey(link.key)}
+            value={!hiddenFooterSocialLinkKeys.includes(link.id)}
+            onChange={() => toggleFooterSocialLinkKey(link.id)}
           />
         ))}
         <LiveChromeNotice text="Only applies while the whole social-icons row above is switched on." />
@@ -782,6 +913,112 @@ export function LayoutStudioMockupPage() {
         <LiveChromeNotice text="Also in the footer, just above the columns." />
       </LayoutStudioSection>
 
+      <LayoutStudioSection
+        icon={<Users className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Community"
+        title="Community profile header"
+        description="Gradient card (current), full-width cover banner, compact single row, immersive, split, or strip — the shared ProfileHeader used on every community member's profile page."
+      >
+        <ViewSwitch
+          label="Header layout"
+          value={communityProfileHeaderLayout}
+          onChange={setCommunityProfileHeaderLayout}
+          options={PROFILE_HEADER_LAYOUT_OPTIONS}
+        />
+        <Link
+          to="/community/jordandoe"
+          className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400"
+        >
+          Open a community profile
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<UserSquare2 className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Blog"
+        title="Author profile header"
+        description="Same shared ProfileHeader component and layout options as the community profile header, applied to staff author archive pages instead."
+      >
+        <ViewSwitch
+          label="Header layout"
+          value={authorProfileHeaderLayout}
+          onChange={setAuthorProfileHeaderLayout}
+          options={PROFILE_HEADER_LAYOUT_OPTIONS}
+        />
+        <LiveChromeNotice text="Open any /author/:slug page to see it." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<LayoutGrid className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Shop"
+        title="Product archive hero"
+        description="The hero banner at the top of category/tag/brand product archive pages — split image+copy (current), full-bleed background image, or a minimal text-only header."
+      >
+        <ViewSwitch
+          label="Hero layout"
+          value={productArchiveHeroLayout}
+          onChange={setProductArchiveHeroLayout}
+          options={ARCHIVE_HERO_LAYOUT_OPTIONS}
+        />
+        <LiveChromeNotice text="Open any product category/tag/brand archive page to see it." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<Newspaper className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Blog"
+        title="Post archive hero"
+        description="The same 3 hero treatments as the product archive, applied to blog category/tag archive pages instead."
+      >
+        <ViewSwitch
+          label="Hero layout"
+          value={postArchiveHeroLayout}
+          onChange={setPostArchiveHeroLayout}
+          options={ARCHIVE_HERO_LAYOUT_OPTIONS}
+        />
+        <LiveChromeNotice text="Open any blog category/tag archive page to see it." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<MenuIcon className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Blog"
+        title="Post table of contents"
+        description="Sidebar TOC (current), hidden entirely, or moved above the article content — applies to every blog post with headings."
+      >
+        <ViewSwitch label="TOC placement" value={postTocLayout} onChange={setPostTocLayout} options={POST_TOC_LAYOUT_OPTIONS} />
+        <LiveChromeNotice text="Open any blog post with headings to see it." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<Share2 className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Blog"
+        title="Post share buttons position"
+        description="Above the table of contents (current), overlaid on the featured image, or below the TOC right-aligned."
+      >
+        <ViewSwitch label="Share position" value={postSharePosition} onChange={setPostSharePosition} options={POST_SHARE_POSITION_OPTIONS} />
+        <LiveChromeNotice text="Open any blog post to see it." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<UserSquare2 className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Blog"
+        title="Post author bio layout"
+        description="Full-width (current), compact, or editorial byline card shown at the end of each blog post."
+      >
+        <ViewSwitch label="Author bio layout" value={postAuthorLayout} onChange={setPostAuthorLayout} options={POST_AUTHOR_LAYOUT_OPTIONS} />
+        <LiveChromeNotice text="Scroll to the end of any blog post." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Discussion"
+        title="Comments / reviews discussion layout"
+        description="Stacked (current) shows the discussion list above the reply form. Split-left/right puts the form beside the list on wide screens. Applies to blog post comments, product reviews, and community post/article discussions."
+      >
+        <ViewSwitch label="Discussion layout" value={discussionLayout} onChange={setDiscussionLayout} options={DISCUSSION_LAYOUT_OPTIONS} />
+        <LiveChromeNotice text="Open any blog post, product page, or community post/article to see it." />
+      </LayoutStudioSection>
+
       <section className="grid gap-6 rounded-4xl border border-zinc-200/80 bg-white/80 p-6 shadow-soft backdrop-blur sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/80">
         <header className="grid gap-2 border-b border-zinc-200 pb-5 dark:border-zinc-800">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">
@@ -821,27 +1058,34 @@ export function LayoutStudioMockupPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+      <section className="grid gap-4 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+        <header className="grid gap-1">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400 dark:text-zinc-500">
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            Backend-only — Control Center / shortcode defaults
+          </div>
+          <p className="m-0 max-w-3xl">
+            These Control Center fields configure the <strong className="text-zinc-700 dark:text-zinc-200">default attributes</strong> of
+            a per-instance WordPress shortcode (or CMS block), not a global site setting — the live pages that "look like" they'd use
+            them actually read their layout from the embedded shortcode itself, so a live toggle here would silently do nothing.
+            Configure these in the backend Control Center, or override them per-instance via the shortcode's own attribute.
+          </p>
+        </header>
+        <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+          {BACKEND_ONLY_SETTINGS.map((setting) => (
+            <li key={setting.field} className="grid gap-0.5 rounded-xl border border-zinc-200/80 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <code className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">{setting.field}</code>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">{setting.description}</span>
+              <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">{setting.shortcode}</span>
+            </li>
+          ))}
+        </ul>
         <p className="m-0">
-          <strong className="text-zinc-700 dark:text-zinc-200">Home hero layout</strong> (classic glow / full-width cinematic / 3-slide
-          cinematic slider) and the <strong className="text-zinc-700 dark:text-zinc-200">community feed layout</strong> (masonry / grid-3
-          / grid-4 / list / compact) already have their own switches directly on the{" "}
-          <Link to="/" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
-            home page
-          </Link>{" "}
-          and the{" "}
-          <Link to="/community" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
-            community feed
-          </Link>
-          , and shop page card variants have theirs on the{" "}
-          <Link to="/shop" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
-            shop page
-          </Link>
-          . See the{" "}
+          See the{" "}
           <Link to="/shortcodes" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
             shortcode library
           </Link>{" "}
-          for slider/carousel/grid documentation.
+          for the full list of supported shortcode attributes.
         </p>
       </section>
     </div>

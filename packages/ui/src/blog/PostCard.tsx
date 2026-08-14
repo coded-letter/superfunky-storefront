@@ -1,6 +1,7 @@
 import { Bookmark, Calendar, PencilLine, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useReadingList, useSoundUX } from "../state";
+import { savedListEntityId } from "../state/savedListSync";
 import { ResponsiveImage } from "../media";
 
 export type PostCardVariant = "default" | "compact" | "editorial" | "minimal";
@@ -125,7 +126,7 @@ function PostBookmarkButton({ postId }: { postId: string }) {
       aria-pressed={isSaved}
       aria-label={isSaved ? "Remove from reading list" : "Save to reading list"}
       title={isSaved ? "Remove from reading list" : "Save to reading list"}
-      className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-full shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${
+      className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-control shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${
         isSaved
           ? "bg-brand-gradient text-white"
           : "bg-white/90 text-zinc-600 hover:text-brand-600 dark:bg-zinc-950/80 dark:text-zinc-300"
@@ -146,7 +147,7 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
 
   if (variant === "minimal") {
     return (
-      <div className="funky-post-card funky-post-card--minimal group grid gap-2 rounded-2xl p-1">
+      <div className="sf-post-card funky-post-card funky-post-card--minimal group grid gap-2 rounded-2xl p-1">
         <TaxonomyPills post={post} />
         <Link
           to={postHref(post)}
@@ -171,11 +172,11 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
 
   if (variant === "compact") {
     return (
-      <article className="funky-post-card funky-post-card--compact group grid grid-cols-[6.5rem_1fr] gap-3 rounded-2xl border border-zinc-200/80 bg-white p-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[7.5rem_1fr]">
+      <article className="sf-post-card funky-post-card funky-post-card--compact group grid grid-cols-[6.5rem_1fr] gap-3 rounded-2xl border border-zinc-200/80 bg-white p-3 shadow-soft transition hover:-translate-y-0.5 hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[7.5rem_1fr]">
         <Link
           to={postHref(post)}
           onClick={() => playAction("navigation")}
-          className="block aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900"
+          className="relative block aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900"
         >
           {post.imageUrl ? (
             <ResponsiveImage
@@ -185,7 +186,7 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
               loading={imageLoading}
               draggable={false}
               sizes="(min-width: 640px) 7.5rem, 6.5rem"
-              className="block h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              className="absolute inset-0 block !h-full !w-full max-w-none object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : null}
         </Link>
@@ -209,7 +210,7 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
 
   if (variant === "editorial") {
     return (
-      <article className="funky-post-card funky-post-card--editorial group relative grid overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-950 shadow-soft-lg">
+      <article className="sf-post-card funky-post-card funky-post-card--editorial group relative grid overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-950 shadow-soft-lg">
         <div className="relative aspect-[16/9] w-full min-h-[18rem] overflow-hidden sm:aspect-[21/9] sm:min-h-[16rem]">
           {post.imageUrl ? (
             <ResponsiveImage
@@ -219,7 +220,7 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
               loading={imageLoading}
               draggable={false}
               sizes="(min-width: 640px) 80vw, 100vw"
-              className="block h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              className="absolute inset-0 block !h-full !w-full max-w-none object-cover transition-transform duration-700 group-hover:scale-105"
             />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
@@ -249,14 +250,14 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
           </div>
         </div>
         <div className="absolute right-5 top-5">
-          <PostBookmarkButton postId={post.id} />
+          <PostBookmarkButton postId={savedListEntityId(post)} />
         </div>
       </article>
     );
   }
 
   return (
-    <article className="funky-post-card funky-post-card--default group relative grid h-full gap-3 rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900">
+    <article className="sf-post-card funky-post-card funky-post-card--default group relative grid h-full gap-3 rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900">
       <Link
         to={postHref(post)}
         onClick={() => playAction("navigation")}
@@ -270,14 +271,14 @@ export function PostCard({ post, variant = "default", imageLoading }: PostCardPr
             loading={imageLoading}
             draggable={false}
             sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"
-            className="block h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="absolute inset-0 block !h-full !w-full max-w-none object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : null}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       </Link>
 
       <div className="absolute right-6 top-6">
-        <PostBookmarkButton postId={post.id} />
+        <PostBookmarkButton postId={savedListEntityId(post)} />
       </div>
 
       <div className="grid gap-2">

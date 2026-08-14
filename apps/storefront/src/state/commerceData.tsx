@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 import { useLanguage } from "@funky/ui";
 import { getCommerceCatalog, type CmsCommerceCatalog } from "../lib/commerce";
-import { useIncrementalData, type IncrementalDataState } from "../lib/incrementalData";
+import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 
 const CommerceDataContext = createContext<IncrementalDataState<CmsCommerceCatalog> | null>(null);
 
@@ -11,12 +11,13 @@ const CommerceDataContext = createContext<IncrementalDataState<CmsCommerceCatalo
  * explicitly reports when the current Polish-only live catalog is serving another
  * storefront language, so consumers never mistake it for translated content.
  */
-export function CommerceDataProvider({ children }: { children?: ReactNode }) {
+export function CommerceDataProvider({ children, enabled = true }: { children?: ReactNode; enabled?: boolean }) {
   const { languageCode, languageBackendCode } = useLanguage();
   const normalizedLanguage = languageCode.toLowerCase();
   const rawState = useIncrementalData(
-    `commerce-data:v3:${normalizedLanguage}:${languageBackendCode}`,
+    `commerce-data:v4:${normalizedLanguage}:${languageBackendCode}`,
     () => getCommerceCatalog(normalizedLanguage, languageBackendCode),
+    enabled,
   );
   const state = useMemo<IncrementalDataState<CmsCommerceCatalog>>(() => ({
     ...rawState,

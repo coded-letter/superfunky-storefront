@@ -18,7 +18,7 @@
  * customer account instead of a staff `Author`.
  */
 
-import type { ProductCardData, PostCardData } from "@funky/ui";
+import type { ProductCardData, PostCardData, SocialPostMedia } from "@funky/ui";
 import type { ProductReview } from "./shared";
 
 export type SocialUser = {
@@ -42,6 +42,9 @@ export type SocialPost = {
   id: string;
   authorHandle: string;
   image: string;
+  title?: string;
+  description?: string;
+  media?: SocialPostMedia[];
   /** CSS aspect-ratio value (e.g. `"4/5"`) — the source image is pre-cropped to match,
    * so masonry layout (which renders images at their intrinsic size, uncropped) never
    * letterboxes or distorts. */
@@ -675,4 +678,3 @@ export const COMMUNITY_REVIEWS: CommunityReview[] = [
     date: "2026-07-06",
   },
 ];
-

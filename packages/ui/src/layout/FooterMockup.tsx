@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { ChevronRight, Music2, Sparkles } from "lucide-react";
 import {
   PAYMENT_METHODS,
@@ -9,16 +9,26 @@ import {
 import { useLayoutPreferences } from "../state";
 import { SpotifyPlayerMock, type SpotifyPlayerMockProps } from "./SpotifyPlayerMock";
 import { ResponsiveImage } from "../media";
+import { hasMenuClass } from "./menuClasses";
+import { MenuDescription } from "./MenuDescription";
+import { SafeHtmlContent } from "./SafeHtmlContent";
+import { sanitizeStorefrontHtml } from "./sanitizeStorefrontHtml";
 
 export type FooterLinkItem = {
   label: string;
   href: string;
+  /** Sanitized WordPress menu-item description HTML. */
+  description?: string;
+  cssClasses?: string[];
   /** Optional nested links — rendered as a collapsible sub-list with an expand arrow. */
   children?: FooterLinkItem[];
 };
 
 export type FooterColumn = {
   title: string;
+  /** Sanitized WordPress menu-item description HTML for the top-level menu item. */
+  description?: string;
+  cssClasses?: string[];
   links: FooterLinkItem[];
 };
 
@@ -44,6 +54,7 @@ export type FooterMockupProps = {
   newsletterTitle?: string;
   newsletterDescription?: string;
   privacyConsentLabel?: string;
+  onNewsletterSubscribe?: (email: string, source: "newsletter-footer") => Promise<void>;
   /** `"banner"` (default) is the current full-width gradient banner with a 2-column
    * form split. `"centered"` collapses it to a narrow centered card. `"image-bg"` swaps
    * the gradient for a photographic background with a dark overlay. */
@@ -68,7 +79,7 @@ export type FooterMockupProps = {
    * merchant switch off a single provider (e.g. no crypto) without hiding the whole
    * row via `showPaymentMethods`. */
   hiddenPaymentMethodKeys?: string[];
-  /** `SocialLink.key`s to hide from the social-links row, one by one. */
+  /** `SocialLink.id`s to hide from the social-links row, one by one. */
   hiddenSocialLinkKeys?: string[];
   showAssistantFrame?: boolean;
   assistantFrameTitle?: string;
@@ -94,13 +105,14 @@ export type FooterMockupProps = {
   /** Which layout the payment / social / copyright bottom bar uses — see `FooterBottomBarLayout`. */
   bottomBarLayout?: FooterBottomBarLayout;
   showExtraWrapper?: boolean;
-  extraWrapperText?: string;
+  extraWrapperHtml?: string;
   /** Which layout the extra footer wrapper uses — see `FooterExtraWrapperLayout`. */
   extraWrapperLayout?: FooterExtraWrapperLayout;
   copyrightText?: string;
   /** Toggle the copyright line itself on/off, independent of everything else in the
    * bottom bar. `true` (default). */
   showCopyright?: boolean;
+  assistantSlot?: ReactNode;
 };
 
 const DEFAULT_COLUMNS: FooterColumn[] = [
@@ -148,7 +160,7 @@ const DEFAULT_COLUMNS: FooterColumn[] = [
         href: "#careers",
         children: [
           { label: "Open roles", href: "#careers-open-roles" },
-          { label: "Life at FunkyCommerce", href: "#careers-life" },
+          { label: "Life at Superfunky", href: "#careers-life" },
         ],
       },
       { label: "Wholesale", href: "#wholesale" },
@@ -185,6 +197,7 @@ export function FooterMockup({
   newsletterTitle = "Get product drops and offers first",
   newsletterDescription = "Subscribe for curated picks, launch alerts and monthly updates. No spam, unsubscribe anytime.",
   privacyConsentLabel = "I agree to receive marketing emails and accept the privacy policy.",
+  onNewsletterSubscribe,
   newsletterLayout = "banner",
   showNewsletter = true,
   newsletterBackgroundImage = "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
@@ -199,26 +212,29 @@ export function FooterMockup({
   showAssistantFrame = true,
   assistantFrameTitle = "AI shopping assistant — ask about sizing, orders, or recommendations",
   showSpotifyPlayer = true,
-  spotifyPlayerTitle = "FunkyCommerce Radio",
+  spotifyPlayerTitle = "Superfunky Radio",
   spotifyPlayerDescription = "Instrumental jazz-hop for browsing — swap for any track, album, or podcast link.",
   spotifyPlayerProps,
   assistantSpotifyLayout = "side-by-side",
-  projectName = "FunkyCommerce",
+  projectName = "Superfunky",
   logoUrl,
   iconUrl,
   logoVariant = "text-image",
   showLogo = true,
   bottomBarLayout = "split",
   showExtraWrapper = true,
-  extraWrapperText = "Extra footer wrapper placeholder for promos, legal notes, or third-party integrations.",
+  extraWrapperHtml = "",
   extraWrapperLayout = "inline",
-  copyrightText = "© 2026 FunkyCommerce. All rights reserved.",
+  copyrightText = "",
   showCopyright = true,
+  assistantSlot,
 }: FooterMockupProps) {
   const { themeMaxWidthPx } = useLayoutPreferences();
   const [activeAssistantTab, setActiveAssistantTab] = useState<"assistant" | "spotify">("assistant");
   const visiblePaymentMethods = paymentMethods.filter((method) => !hiddenPaymentMethodKeys.includes(method.key));
-  const visibleSocialLinks = socialLinks.filter((link) => !hiddenSocialLinkKeys.includes(link.key));
+  const visibleSocialLinks = socialLinks.filter((link) => !hiddenSocialLinkKeys.includes(link.id));
+  const safeExtraWrapperHtml = sanitizeStorefrontHtml(extraWrapperHtml);
+  const visibleCopyrightText = copyrightText.trim();
   const logoNode = showLogo ? (
     <div className="mb-10 flex items-center justify-center gap-2.5">
       {logoVariant !== "text" ? (
@@ -236,7 +252,7 @@ export function FooterMockup({
     </div>
   ) : null;
   return (
-    <footer className="funky-footer border-t border-zinc-200 bg-zinc-950 text-zinc-300 dark:border-zinc-800">
+    <footer id="sf-footer" className="sf-footer funky-footer border-t border-zinc-200 bg-zinc-950 text-zinc-300 dark:border-zinc-800">
       <div className="mx-auto w-full px-4 pb-8 pt-14 sm:px-6 lg:px-8" style={{ maxWidth: `${themeMaxWidthPx}px` }}>
         {logoNode}
 
@@ -249,7 +265,7 @@ export function FooterMockup({
               <p className="m-0 max-w-sm text-sm text-white/80">{newsletterDescription}</p>
             </div>
             <div className="relative mx-auto grid w-full max-w-sm justify-items-center gap-2.5">
-              <NewsletterForm privacyConsentLabel={privacyConsentLabel} stacked />
+              <NewsletterForm privacyConsentLabel={privacyConsentLabel} onSubscribe={onNewsletterSubscribe} stacked />
             </div>
           </section>
         ) : newsletterLayout === "image-bg" ? (
@@ -261,7 +277,7 @@ export function FooterMockup({
               <h2 className="m-0 font-display text-2xl font-bold text-white sm:text-3xl">{newsletterTitle}</h2>
               <p className="m-0 max-w-sm text-sm text-white/80">{newsletterDescription}</p>
               <div className="grid w-full max-w-sm justify-items-center gap-2.5">
-                <NewsletterForm privacyConsentLabel={privacyConsentLabel} stacked />
+                <NewsletterForm privacyConsentLabel={privacyConsentLabel} onSubscribe={onNewsletterSubscribe} stacked />
               </div>
             </div>
           </section>
@@ -285,7 +301,7 @@ export function FooterMockup({
                 </p>
               </div>
               <div className="grid gap-2.5">
-                <NewsletterForm privacyConsentLabel={privacyConsentLabel} />
+                <NewsletterForm privacyConsentLabel={privacyConsentLabel} onSubscribe={onNewsletterSubscribe} />
               </div>
             </div>
           </section>
@@ -324,7 +340,7 @@ export function FooterMockup({
                 </button>
               </div>
               {activeAssistantTab === "assistant" ? (
-                <AssistantFrame title={assistantFrameTitle} fullWidth />
+                assistantSlot ?? <AssistantFrame title={assistantFrameTitle} fullWidth />
               ) : (
                 <SpotifyFrame
                   title={spotifyPlayerTitle}
@@ -336,7 +352,7 @@ export function FooterMockup({
             </section>
           ) : assistantSpotifyLayout === "stacked" ? (
             <section className="mb-12 grid gap-5">
-              {showAssistantFrame ? <AssistantFrame title={assistantFrameTitle} fullWidth /> : null}
+              {showAssistantFrame ? assistantSlot ?? <AssistantFrame title={assistantFrameTitle} fullWidth /> : null}
               {showSpotifyPlayer ? (
                 <SpotifyFrame
                   title={spotifyPlayerTitle}
@@ -349,7 +365,7 @@ export function FooterMockup({
           ) : (
             <section className="mb-12 grid gap-5 lg:grid-cols-2">
               {showAssistantFrame ? (
-                <AssistantFrame title={assistantFrameTitle} fullWidth={!showSpotifyPlayer} />
+                assistantSlot ?? <AssistantFrame title={assistantFrameTitle} fullWidth={!showSpotifyPlayer} />
               ) : null}
               {showSpotifyPlayer ? (
                 <SpotifyFrame
@@ -381,9 +397,13 @@ export function FooterMockup({
           ) : (
             footerColumns.map((column) => (
               <div key={column.title}>
-                <h3 className="mb-4 mt-0 text-sm font-semibold uppercase tracking-wide text-zinc-100">
+                <h3 className={`mt-0 text-sm font-semibold uppercase tracking-wide text-zinc-100 ${column.description ? "mb-1" : "mb-4"}`}>
                   {column.title}
                 </h3>
+                <MenuDescription
+                  html={column.description}
+                  className="mb-4 mt-0 text-xs text-zinc-500"
+                />
                 <ul className="m-0 grid list-none gap-2.5 p-0">
                   {column.links.map((link) => (
                     <FooterNavItem key={link.label} item={link} />
@@ -415,11 +435,11 @@ export function FooterMockup({
               </div>
             ) : null}
 
-            {showSocialLinks ? (
+            {showSocialLinks && visibleSocialLinks.length ? (
               <div className="flex flex-wrap items-center justify-center gap-1">
                 {visibleSocialLinks.map((link) => (
                   <a
-                    key={link.key}
+                    key={link.id}
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -439,7 +459,7 @@ export function FooterMockup({
               </div>
             ) : null}
 
-            {showCopyright ? <p className="m-0 text-xs text-zinc-500">{copyrightText}</p> : null}
+            {showCopyright && visibleCopyrightText ? <p className="m-0 text-xs text-zinc-500">{visibleCopyrightText}</p> : null}
           </section>
         ) : (
           <>
@@ -463,11 +483,11 @@ export function FooterMockup({
                 </div>
               ) : null}
 
-              {showSocialLinks ? (
+              {showSocialLinks && visibleSocialLinks.length ? (
                 <div className="flex flex-wrap gap-1">
                   {visibleSocialLinks.map((link) => (
                     <a
-                      key={link.key}
+                      key={link.id}
                       href={link.href}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -488,20 +508,20 @@ export function FooterMockup({
               ) : null}
             </section>
 
-            {showCopyright ? <p className="mb-0 mt-8 text-xs text-zinc-500">{copyrightText}</p> : null}
+            {showCopyright && visibleCopyrightText ? <p className="mb-0 mt-8 text-xs text-zinc-500">{visibleCopyrightText}</p> : null}
           </>
         )}
 
-        {showExtraWrapper && extraWrapperLayout === "inline" ? (
+        {showExtraWrapper && safeExtraWrapperHtml && extraWrapperLayout === "inline" ? (
           <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs text-zinc-500">
-            {extraWrapperText}
+            <SafeHtmlContent html={safeExtraWrapperHtml} className="[&_a]:text-zinc-300 [&_a]:underline [&_p]:m-0" />
           </div>
         ) : null}
       </div>
 
-      {showExtraWrapper && extraWrapperLayout === "full-bleed" ? (
+      {showExtraWrapper && safeExtraWrapperHtml && extraWrapperLayout === "full-bleed" ? (
         <div className="flex h-[150px] w-screen items-center justify-center border-t border-zinc-800 bg-zinc-900/60 px-4 text-center text-xs text-zinc-500">
-          {extraWrapperText}
+          <SafeHtmlContent html={safeExtraWrapperHtml} className="[&_a]:text-zinc-300 [&_a]:underline [&_p]:m-0" />
         </div>
       ) : null}
     </footer>
@@ -511,14 +531,17 @@ export function FooterMockup({
 /** Renders a single footer link; if the link has `children`, adds a rotating chevron
  * button that expands a nested, indented sub-list — mirrors the legacy prototype's
  * footer accordion columns so deep menu structures stay compact by default. */
-function FooterNavItem({ item }: { item: FooterLinkItem }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: number }) {
+  const [isExpanded, setIsExpanded] = useState(() => hasMenuClass(item.cssClasses, "expanded"));
   const hasChildren = Boolean(item.children?.length);
 
   return (
     <li>
       <div className="flex items-center justify-between gap-2">
-        <a href={item.href} className="text-sm text-zinc-400 no-underline transition hover:text-white">
+        <a
+          href={item.href}
+          className={`${depth ? "text-zinc-500" : "text-zinc-400"} text-sm no-underline transition hover:text-white`}
+        >
           {item.label}
         </a>
         {hasChildren ? (
@@ -537,19 +560,20 @@ function FooterNavItem({ item }: { item: FooterLinkItem }) {
         ) : null}
       </div>
 
+      <MenuDescription
+        html={item.description}
+        className={`mt-1 text-xs ${depth ? "text-zinc-600" : "text-zinc-500"}`}
+      />
+
       {hasChildren ? (
-        <div
-          className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "mt-2 max-h-96" : "max-h-0"}`}
-        >
-          <ul className="m-0 grid list-none gap-2 border-l border-zinc-800 p-0 pl-3">
-            {item.children!.map((child) => (
-              <li key={child.label}>
-                <a href={child.href} className="text-sm text-zinc-500 no-underline transition hover:text-white">
-                  {child.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+        <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
+          <div className="overflow-hidden" aria-hidden={!isExpanded}>
+            <ul className="m-0 mt-2 grid list-none gap-2 border-l border-zinc-800 p-0 pl-3">
+              {item.children!.map((child) => (
+                <FooterNavItem key={`${child.label}:${child.href}`} item={child} depth={depth + 1} />
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
     </li>
@@ -559,30 +583,52 @@ function FooterNavItem({ item }: { item: FooterLinkItem }) {
 /** Shared email-capture form used by all three newsletter layouts — `stacked` swaps
  * the row-oriented input+button pair for a full-width stacked pair, used by the
  * `centered`/`image-bg` variants where the surrounding column is already narrow. */
-function NewsletterForm({ privacyConsentLabel, stacked = false }: { privacyConsentLabel: string; stacked?: boolean }) {
+function NewsletterForm({
+  privacyConsentLabel,
+  onSubscribe,
+  stacked = false,
+}: {
+  privacyConsentLabel: string;
+  onSubscribe?: (email: string, source: "newsletter-footer") => Promise<void>;
+  stacked?: boolean;
+}) {
+  const [email, setEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [status, setStatus] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!agreed) {
+      setStatus("Please accept the consent note to continue.");
+      return;
+    }
+    setSubmitting(true);
+    setStatus("");
+    try {
+      await onSubscribe?.(email.trim(), "newsletter-footer");
+      setEmail("");
+      setAgreed(false);
+      setStatus("Thank you. You are subscribed.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The newsletter signup could not be saved.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
-    <>
-      <form className={`flex w-full flex-wrap gap-2 ${stacked ? "flex-col" : "sm:flex-nowrap"}`}>
-        <input
-          type="email"
-          placeholder="Email address"
-          className="min-w-[220px] flex-1 rounded-full border border-white/30 bg-white/10 px-4 py-3 text-sm text-white outline-none backdrop-blur-sm transition placeholder:text-white/60 focus:border-white focus:bg-white/20 focus:ring-4 focus:ring-white/20"
-        />
-        <button
-          type="button"
-          className="whitespace-nowrap rounded-full bg-zinc-950 px-5 py-3 text-sm font-semibold text-white shadow-soft-lg transition hover:-translate-y-0.5 hover:bg-zinc-900"
-        >
-          Subscribe
+    <form className="grid w-full gap-2.5" onSubmit={submit}>
+      <div className={`flex w-full flex-wrap gap-2 ${stacked ? "flex-col" : "sm:flex-nowrap"}`}>
+        <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="min-w-[220px] flex-1 rounded-full border border-white/30 bg-white/10 px-4 py-3 text-sm text-white outline-none backdrop-blur-sm transition placeholder:text-white/60 focus:border-white focus:bg-white/20 focus:ring-4 focus:ring-white/20" />
+        <button type="submit" disabled={submitting} className="whitespace-nowrap rounded-full bg-zinc-950 px-5 py-3 text-sm font-semibold text-white shadow-soft-lg transition hover:-translate-y-0.5 hover:bg-zinc-900 disabled:cursor-wait disabled:opacity-60">
+          {submitting ? "Subscribing…" : "Subscribe"}
         </button>
-      </form>
+      </div>
       <label className={`inline-flex items-start gap-2 text-xs text-white/70 ${stacked ? "text-center" : ""}`}>
-        <input
-          type="checkbox"
-          className="mt-0.5 h-3.5 w-3.5 rounded border-white/40 bg-white/10 text-brand-500 focus:ring-brand-300"
-        />
+        <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} className="mt-0.5 h-3.5 w-3.5 rounded border-white/40 bg-white/10 text-brand-500 focus:ring-brand-300" />
         <span>{privacyConsentLabel}</span>
       </label>
-    </>
+      {status ? <p className="m-0 text-xs text-white" role="status" aria-live="polite">{status}</p> : null}
+    </form>
   );
 }
 
@@ -637,7 +683,7 @@ function SpotifyFrame({
  * `accordion-single` `columnsLayout` variant to stack every column into one compact
  * list instead of a multi-column grid. */
 function FooterColumnAccordion({ column }: { column: FooterColumn }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(() => hasMenuClass(column.cssClasses, "expanded"));
 
   return (
     <div className="py-3 first:pt-0 last:pb-0">
@@ -653,12 +699,18 @@ function FooterColumnAccordion({ column }: { column: FooterColumn }) {
           aria-hidden="true"
         />
       </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "mt-3 max-h-96" : "max-h-0"}`}>
-        <ul className="m-0 grid list-none gap-2.5 p-0 pl-1">
-          {column.links.map((link) => (
-            <FooterNavItem key={link.label} item={link} />
-          ))}
-        </ul>
+      <MenuDescription
+        html={column.description}
+        className="mt-1 text-xs text-zinc-500"
+      />
+      <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden" aria-hidden={!isExpanded}>
+          <ul className="m-0 mt-3 grid list-none gap-2.5 p-0 pl-1">
+            {column.links.map((link) => (
+              <FooterNavItem key={`${link.label}:${link.href}`} item={link} />
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

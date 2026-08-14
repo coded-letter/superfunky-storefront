@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
-import { ImagePlus, Languages, PencilLine, X } from "lucide-react";
+import { ImagePlus, Languages, PencilLine, Trash2, X } from "lucide-react";
 import { useToast } from "../state";
 import { slugify } from "./slugify";
 
@@ -14,6 +14,7 @@ export type WriteArticleTranslationCandidate = {
 export type WriteArticleDraft = {
   postId?: number;
   imagePreview: string | null;
+  imageDataUrl?: string;
   title: string;
   excerpt: string;
   category: string;
@@ -48,6 +49,7 @@ export type WriteArticleModalProps = {
   onClose: () => void;
   /** Publishes the validated draft through the host application's collaborator-post mutation. */
   onSubmit?: (draft: WriteArticleDraft) => void | Promise<void>;
+  onDelete?: (postId: number) => void | Promise<void>;
   /** When provided, the modal opens pre-filled in "edit" mode for this existing post. */
   initialPost?: WriteArticleInitialValues;
   /**
@@ -67,10 +69,11 @@ export type WriteArticleModalProps = {
  * existing one via `initialPost`, plus basic SEO fields and Polylang translation
  * association (linking this post to an existing post in another language).
  */
-export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTranslationCandidates }: WriteArticleModalProps) {
+export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, searchTranslationCandidates }: WriteArticleModalProps) {
   const { showToast } = useToast();
   const isEditing = Boolean(initialPost);
   const [imagePreview, setImagePreview] = useState<string | null>(initialPost?.imageUrl || null);
+  const [imageDataUrl, setImageDataUrl] = useState<string | undefined>();
   const [title, setTitle] = useState(initialPost?.title || "");
   const [excerpt, setExcerpt] = useState(initialPost?.excerpt || "");
   const [category, setCategory] = useState(initialPost?.category || "");
@@ -90,6 +93,7 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
       : null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -144,7 +148,10 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") setImagePreview(reader.result);
+      if (typeof reader.result === "string") {
+        setImagePreview(reader.result);
+        setImageDataUrl(reader.result);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -164,6 +171,7 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
       await onSubmit?.({
         postId: initialPost?.postId,
         imagePreview,
+        imageDataUrl,
         title: title.trim(),
         excerpt: excerpt.trim() || `${stripHtml(body).slice(0, 140)}${stripHtml(body).length > 140 ? "…" : ""}`,
         category: category.trim(),
@@ -177,7 +185,7 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
       });
       showToast({
         title: isEditing ? "Article updated" : "Article published",
-        description: isEditing ? "Your changes are now live." : "It now appears in the WordPress blog.",
+        description: isEditing ? "Your changes are now live." : "It now appears in the site journal.",
         tone: "success",
       });
       onClose();
@@ -188,12 +196,28 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
     }
   };
 
+  const handleDelete = async () => {
+    if (!initialPost || !onDelete || isSubmitting || isDeleting) return;
+    if (!window.confirm("Permanently delete this article? This action cannot be undone.")) return;
+    setIsDeleting(true);
+    setSubmitError(null);
+    try {
+      await onDelete(initialPost.postId);
+      showToast({ title: "Article deleted", description: "The article has been removed.", tone: "success" });
+      onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "The article could not be deleted.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const fieldClass =
     "rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-500 dark:focus:ring-brand-950";
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+      className="sf-write-article-modal fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={isEditing ? "Edit article" : "Write a new article"}
@@ -216,8 +240,8 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
           <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{isEditing ? "Edit article" : "Write a new article"}</h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
             {isEditing
-              ? "Update the details below — changes publish immediately to the WordPress blog."
-              : "Collaborator accounts can publish this article directly to the WordPress blog."}
+              ? "Update the details below — changes publish immediately to the site journal."
+              : "Collaborator accounts can publish this article directly to the site journal."}
           </p>
         </div>
 
@@ -270,7 +294,7 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
                 className={`resize-y font-mono text-[13px] leading-relaxed ${fieldClass}`}
               />
               <span className="text-xs font-normal text-zinc-400 dark:text-zinc-500">
-                Supports safe HTML and WordPress shortcodes — content is sanitized on save and shortcodes expand when the article is rendered.
+                Supports safe HTML and site shortcodes — content is sanitized on save and shortcodes expand when the article is rendered.
               </span>
             </label>
           </div>
@@ -400,15 +424,28 @@ export function WriteArticleModal({ onClose, onSubmit, initialPost, searchTransl
         </div>
 
         {submitError ? <p role="alert" className="m-0 text-sm font-medium text-red-600 dark:text-red-400">{submitError}</p> : null}
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!canSubmit || isSubmitting}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
-        >
-          <PencilLine className="h-4 w-4" aria-hidden="true" />
-          {isSubmitting ? (isEditing ? "Saving…" : "Publishing…") : isEditing ? "Save changes" : "Publish"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit || isSubmitting || isDeleting}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+          >
+            <PencilLine className="h-4 w-4" aria-hidden="true" />
+            {isSubmitting ? (isEditing ? "Saving…" : "Publishing…") : isEditing ? "Save changes" : "Publish"}
+          </button>
+          {initialPost && onDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSubmitting || isDeleting}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {isDeleting ? "Deleting…" : "Delete"}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>,
     document.body,

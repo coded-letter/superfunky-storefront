@@ -3,20 +3,23 @@ import { createPortal } from "react-dom";
 import { Download, ImagePlus, Plus, Store, Trash2, X } from "lucide-react";
 import { useToast } from "../state";
 import { parseLocalizedPrice, useCurrency } from "../locale";
+import { deriveMarketplaceVariationAttributes, marketplaceVariationKey } from "./marketplaceVariations";
 
 export type ListProductDownloadableFile = { name: string; fileDataUrl: string };
+export type ListProductType = "simple" | "variable" | "external";
 
 export type ListProductDraft = {
   productId?: number;
   imagePreview: string | null;
   imagePreviews: string[];
+  imageDataUrls: string[];
   name: string;
   subtitle: string;
   category: string;
   brand: string;
   upsellIds: number[];
   crossSellIds: number[];
-  productType: "simple" | "variable";
+  productType: ListProductType;
   sku: string;
   stockQuantity: number;
   priceLabel: string;
@@ -29,8 +32,11 @@ export type ListProductDraft = {
   downloadableFiles: ListProductDownloadableFile[];
   downloadLimit: number;
   downloadExpiryDays: number;
+  externalUrl: string;
+  buttonText: string;
   attributes: { name: string; options: string[] }[];
   variations: {
+    variationId?: number;
     attributes: { name: string; option: string }[];
     sku: string;
     priceLabel: string;
@@ -39,6 +45,11 @@ export type ListProductDraft = {
     compareAtPriceAmount?: number;
     stockQuantity: number;
     imageIndex: number;
+    isVirtual: boolean;
+    isDownloadable: boolean;
+    downloadableFiles: ListProductDownloadableFile[];
+    downloadLimit: number;
+    downloadExpiryDays: number;
   }[];
 };
 
@@ -52,7 +63,7 @@ export type ListProductInitialValues = {
   brand: string;
   upsellIds: number[];
   crossSellIds: number[];
-  productType: "simple" | "variable";
+  productType: ListProductType;
   sku: string;
   stockQuantity: number;
   priceLabel: string;
@@ -62,16 +73,53 @@ export type ListProductInitialValues = {
   isDownloadable: boolean;
   downloadLimit: number;
   downloadExpiryDays: number;
+  externalUrl: string;
+  buttonText: string;
   /** Read-only names of files already uploaded — uploading new files below replaces them. */
   existingDownloadNames: string[];
   attributes: { name: string; options: string[] }[];
   variations: {
+    databaseId: number;
     attributes: { name: string; option: string }[];
     sku: string;
     priceLabel: string;
     compareAtPriceLabel: string;
     stockQuantity: number;
+    isVirtual: boolean;
+    isDownloadable: boolean;
+    downloadLimit: number;
+    downloadExpiryDays: number;
+    existingDownloadNames: string[];
   }[];
+};
+
+type VariationFormState = {
+  variationId?: number;
+  sku: string;
+  price: string;
+  compareAtPrice: string;
+  stock: string;
+  imageIndex: string;
+  isVirtual: boolean;
+  isDownloadable: boolean;
+  downloadableFiles: ListProductDownloadableFile[];
+  downloadLimit: string;
+  downloadExpiryDays: string;
+  existingDownloadNames: string[];
+};
+
+const EMPTY_VARIATION: VariationFormState = {
+  sku: "",
+  price: "",
+  compareAtPrice: "",
+  stock: "1",
+  imageIndex: "-1",
+  isVirtual: false,
+  isDownloadable: false,
+  downloadableFiles: [],
+  downloadLimit: "0",
+  downloadExpiryDays: "0",
+  existingDownloadNames: [],
 };
 
 export type ListProductModalProps = {
@@ -98,7 +146,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
   const [brand, setBrand] = useState(initialProduct?.brand || "");
   const [upsellIds, setUpsellIds] = useState(initialProduct?.upsellIds.join(", ") || "");
   const [crossSellIds, setCrossSellIds] = useState(initialProduct?.crossSellIds.join(", ") || "");
-  const [productType, setProductType] = useState<"simple" | "variable">(initialProduct?.productType || "simple");
+  const [productType, setProductType] = useState<ListProductType>(initialProduct?.productType || "simple");
   const [sku, setSku] = useState(initialProduct?.sku || "");
   const [stockQuantity, setStockQuantity] = useState(String(initialProduct?.stockQuantity ?? 1));
   const [priceLabel, setPriceLabel] = useState(initialProduct?.priceLabel || "");
@@ -109,16 +157,35 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
   const [downloadableFiles, setDownloadableFiles] = useState<ListProductDownloadableFile[]>([]);
   const [downloadLimit, setDownloadLimit] = useState(String(initialProduct?.downloadLimit ?? 0));
   const [downloadExpiryDays, setDownloadExpiryDays] = useState(String(initialProduct?.downloadExpiryDays ?? 0));
+  const [externalUrl, setExternalUrl] = useState(initialProduct?.externalUrl || "");
+  const [buttonText, setButtonText] = useState(initialProduct?.buttonText || "");
+  const initialAttributes = initialProduct?.attributes.length
+    ? initialProduct.attributes
+    : deriveMarketplaceVariationAttributes(initialProduct?.variations || []);
   const [attributes, setAttributes] = useState(
-    initialProduct?.attributes.length
-      ? initialProduct.attributes.map((attribute, index) => ({ id: `attribute-${index}`, name: attribute.name, options: attribute.options.join(", ") }))
-      : [{ id: "attribute-1", name: "Size", options: "Small, Medium, Large" }],
+    initialAttributes.length
+      ? initialAttributes.map((attribute, index) => ({ id: `attribute-${index}`, name: attribute.name, options: attribute.options.join(", ") }))
+      : isEditing
+        ? []
+        : [{ id: "attribute-1", name: "Size", options: "Small, Medium, Large" }],
   );
-  const [variationValues, setVariationValues] = useState<Record<string, { sku: string; price: string; compareAtPrice: string; stock: string; imageIndex: string }>>(
+  const [variationValues, setVariationValues] = useState<Record<string, VariationFormState>>(
     Object.fromEntries(
       (initialProduct?.variations || []).map((variation) => [
-        variationKey(variation.attributes),
-        { sku: variation.sku, price: variation.priceLabel, compareAtPrice: variation.compareAtPriceLabel, stock: String(variation.stockQuantity), imageIndex: "-1" },
+        marketplaceVariationKey(variation.attributes),
+        {
+          ...EMPTY_VARIATION,
+          variationId: variation.databaseId,
+          sku: variation.sku,
+          price: variation.priceLabel,
+          compareAtPrice: variation.compareAtPriceLabel,
+          stock: String(variation.stockQuantity),
+          isVirtual: variation.isVirtual,
+          isDownloadable: variation.isDownloadable,
+          downloadLimit: String(variation.downloadLimit),
+          downloadExpiryDays: String(variation.downloadExpiryDays),
+          existingDownloadNames: variation.existingDownloadNames,
+        },
       ]),
     ),
   );
@@ -175,12 +242,30 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
   );
   const combinations = useMemo(() => cartesianVariations(normalizedAttributes), [normalizedAttributes]);
   const hasExistingDownloads = (initialProduct?.existingDownloadNames.length || 0) > 0;
+  const primaryPrice = parseLocalizedPrice(priceLabel);
+  const primaryCompareAtPrice = parseOptionalPrice(compareAtPriceLabel);
+  const variationDrafts = productType === "variable"
+    ? combinations.map((combination) => {
+        const values = variationValues[marketplaceVariationKey(combination)] || EMPTY_VARIATION;
+        return {
+          combination,
+          values,
+          price: parseLocalizedPrice(values.price),
+          compareAtPrice: parseOptionalPrice(values.compareAtPrice),
+        };
+      })
+    : [];
   const canSubmit = name.trim().length > 0
-    && (!isDownloadable || downloadableFiles.length > 0 || hasExistingDownloads)
+    && (productType !== "external" || isValidExternalUrl(externalUrl))
+    && (productType !== "simple" || !isDownloadable || downloadableFiles.length > 0 || hasExistingDownloads)
     && (
-      productType === "simple"
-        ? isPositivePrice(priceLabel)
-        : combinations.length > 0 && combinations.length <= 100 && combinations.every((combination) => isPositivePrice(variationValues[variationKey(combination)]?.price || ""))
+      productType !== "variable"
+        ? isValidPrice(primaryPrice) && isValidCompareAtPrice(primaryCompareAtPrice, primaryPrice)
+        : variationDrafts.length > 0 && variationDrafts.length <= 100 && variationDrafts.every(({ values, price, compareAtPrice }) =>
+            isValidPrice(price)
+              && isValidCompareAtPrice(compareAtPrice, price)
+              && (!values.isDownloadable || values.downloadableFiles.length > 0 || values.existingDownloadNames.length > 0)
+          )
     );
 
   const handleSubmit = async () => {
@@ -188,12 +273,13 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const priceAmount = productType === "simple" ? requirePositivePrice(priceLabel) : 0;
-      const compareAtPriceAmount = compareAtPriceLabel ? requirePositivePrice(compareAtPriceLabel) : undefined;
+      const priceAmount = productType !== "variable" ? requireValidatedPrice(primaryPrice, "Price") : 0;
+      const compareAtPriceAmount = productType !== "variable" ? primaryCompareAtPrice ?? undefined : undefined;
       await onSubmit?.({
         productId: initialProduct?.productId,
         imagePreview: imagePreviews[0] || null,
         imagePreviews,
+        imageDataUrls: imagePreviews.filter((preview) => preview.startsWith("data:image/")),
         name: name.trim(),
         subtitle: subtitle.trim(),
         category: category.trim(),
@@ -213,19 +299,28 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         downloadableFiles: isDownloadable ? downloadableFiles : [],
         downloadLimit: Math.max(0, Number.parseInt(downloadLimit, 10) || 0),
         downloadExpiryDays: Math.max(0, Number.parseInt(downloadExpiryDays, 10) || 0),
+        externalUrl: productType === "external" ? externalUrl.trim() : "",
+        buttonText: productType === "external" ? buttonText.trim() : "",
         attributes: normalizedAttributes,
-        variations: combinations.map((combination) => {
-          const values = variationValues[variationKey(combination)];
-          const variationPrice = requirePositivePrice(values?.price || "");
+        variations: variationDrafts.map(({ combination, values, price: variationPrice, compareAtPrice }) => {
           return {
+            variationId: values.variationId,
             attributes: combination,
-            sku: values?.sku.trim() || "",
-            priceLabel: values?.price.trim() || "",
-            priceAmount: variationPrice,
-            compareAtPriceLabel: values?.compareAtPrice.trim() || "",
-            compareAtPriceAmount: values?.compareAtPrice ? requirePositivePrice(values.compareAtPrice) : undefined,
-            stockQuantity: Math.max(0, Number.parseInt(values?.stock || "0", 10) || 0),
-            imageIndex: Math.max(-1, Number.parseInt(values?.imageIndex || "-1", 10)),
+            sku: values.sku.trim(),
+            priceLabel: values.price.trim(),
+            priceAmount: requireValidatedPrice(
+              variationPrice,
+              `Price for ${combination.map(({ name: attributeName, option }) => `${attributeName}: ${option}`).join(", ")}`,
+            ),
+            compareAtPriceLabel: values.compareAtPrice.trim(),
+            compareAtPriceAmount: compareAtPrice ?? undefined,
+            stockQuantity: Math.max(0, Number.parseInt(values.stock, 10) || 0),
+            imageIndex: Math.max(-1, Number.parseInt(values.imageIndex, 10)),
+            isVirtual: Boolean(values.isVirtual || values.isDownloadable),
+            isDownloadable: values.isDownloadable,
+            downloadableFiles: values.isDownloadable ? values.downloadableFiles : [],
+            downloadLimit: Math.max(0, Number.parseInt(values.downloadLimit, 10) || 0),
+            downloadExpiryDays: Math.max(0, Number.parseInt(values.downloadExpiryDays, 10) || 0),
           };
         }),
       });
@@ -246,7 +341,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+      className="sf-list-product-modal fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={isEditing ? "Edit product" : "List a new product"}
@@ -363,8 +458,8 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
 
         <div className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
           <span>Product type</span>
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-            {(["simple", "variable"] as const).map((type) => (
+          <div className="grid grid-cols-3 gap-2 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
+            {(["simple", "variable", "external"] as const).map((type) => (
               <button
                 key={type}
                 type="button"
@@ -377,7 +472,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-700">
+        {productType === "simple" ? <div className="grid gap-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-700">
           <label className="flex items-center justify-between gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">
             <span>
               Virtual product
@@ -476,7 +571,31 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
               </div>
             </div>
           ) : null}
-        </div>
+        </div> : productType === "external" ? (
+          <div className="grid gap-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+              <span>External product URL</span>
+              <input
+                type="url"
+                required
+                value={externalUrl}
+                onChange={(event) => setExternalUrl(event.target.value)}
+                placeholder="https://partner.example/product"
+                className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none focus:border-brand-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+              <span>Button text</span>
+              <input
+                type="text"
+                value={buttonText}
+                onChange={(event) => setButtonText(event.target.value)}
+                placeholder="Buy product"
+                className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none focus:border-brand-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              />
+            </label>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-4">
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
@@ -503,7 +622,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
           ) : <span />}
         </div>
 
-        {productType === "simple" ? <div className="grid grid-cols-2 gap-4">
+        {productType !== "variable" ? <div className="grid grid-cols-2 gap-4">
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
             <span>Price ({currencyCode})</span>
             <input
@@ -591,23 +710,23 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
             ) : (
               <div className="grid gap-3">
                 {combinations.map((combination) => {
-                  const key = variationKey(combination);
-                  const values = variationValues[key] || { sku: "", price: "", compareAtPrice: "", stock: "1", imageIndex: "-1" };
-                  const update = (field: keyof typeof values, value: string) =>
-                    setVariationValues((current) => ({ ...current, [key]: { ...values, [field]: value } }));
+                  const key = marketplaceVariationKey(combination);
+                  const values = variationValues[key] || EMPTY_VARIATION;
+                  const update = (patch: Partial<VariationFormState>) =>
+                    setVariationValues((current) => ({ ...current, [key]: { ...values, ...patch } }));
                   return (
                     <div key={key} className="grid gap-2 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950">
                       <p className="m-0 text-xs font-semibold text-zinc-700 dark:text-zinc-200">{combination.map(({ name: attributeName, option }) => `${attributeName}: ${option}`).join(" · ")}</p>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        <VariationInput label={`Price * (${currencyCode})`} value={values.price} onChange={(value) => update("price", value)} />
-                        <VariationInput label={`Compare at (${currencyCode})`} value={values.compareAtPrice} onChange={(value) => update("compareAtPrice", value)} />
-                        <VariationInput label="SKU" value={values.sku} onChange={(value) => update("sku", value)} />
-                        <VariationInput label="Stock" type="number" value={values.stock} onChange={(value) => update("stock", value)} />
+                        <VariationInput label={`Price * (${currencyCode})`} value={values.price} onChange={(value) => update({ price: value })} />
+                        <VariationInput label={`Compare at (${currencyCode})`} value={values.compareAtPrice} onChange={(value) => update({ compareAtPrice: value })} />
+                        <VariationInput label="SKU" value={values.sku} onChange={(value) => update({ sku: value })} />
+                        <VariationInput label="Stock" type="number" value={values.stock} onChange={(value) => update({ stock: value })} />
                         <label className="grid gap-1 text-[11px] font-medium text-zinc-500">
                           <span>Variation image</span>
                           <select
                             value={values.imageIndex}
-                            onChange={(event) => update("imageIndex", event.target.value)}
+                            onChange={(event) => update({ imageIndex: event.target.value })}
                             className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                           >
                             <option value="-1">Product image</option>
@@ -615,6 +734,59 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
                           </select>
                         </label>
                       </div>
+                      <div className="flex flex-wrap items-center gap-4 border-t border-zinc-200 pt-2 text-xs dark:border-zinc-800">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={values.isVirtual || values.isDownloadable}
+                            disabled={values.isDownloadable}
+                            onChange={(event) => update({ isVirtual: event.target.checked })}
+                          />
+                          Virtual
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={values.isDownloadable}
+                            onChange={(event) => update({
+                              isDownloadable: event.target.checked,
+                              isVirtual: event.target.checked || values.isVirtual,
+                            })}
+                          />
+                          Downloadable
+                        </label>
+                      </div>
+                      {values.isDownloadable ? (
+                        <div className="grid gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+                          {values.existingDownloadNames.length ? (
+                            <p className="m-0 text-[11px] text-zinc-500">
+                              Current files: {values.existingDownloadNames.join(", ")}
+                            </p>
+                          ) : null}
+                          <label className="grid cursor-pointer gap-1 text-[11px] font-medium text-zinc-500">
+                            <span>Replacement downloadable files ({values.downloadableFiles.length}/5)</span>
+                            <input
+                              multiple
+                              type="file"
+                              accept=".pdf,.zip,.epub,.mp3,.mp4,application/pdf,application/zip,application/epub+zip,audio/mpeg,video/mp4"
+                              onChange={async (event) => {
+                                const files = Array.from(event.target.files || []).slice(0, 5);
+                                event.target.value = "";
+                                try {
+                                  update({ downloadableFiles: await Promise.all(files.map(readDownloadableFile)) });
+                                } catch (error) {
+                                  setSubmitError(error instanceof Error ? error.message : "A variation file could not be read.");
+                                }
+                              }}
+                              className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                            />
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <VariationInput label="Download limit (0 = unlimited)" type="number" value={values.downloadLimit} onChange={(value) => update({ downloadLimit: value })} />
+                            <VariationInput label="Expiry days (0 = never)" type="number" value={values.downloadExpiryDays} onChange={(value) => update({ downloadExpiryDays: value })} />
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -675,10 +847,6 @@ function VariationInput({
   );
 }
 
-function variationKey(attributes: { name: string; option: string }[]): string {
-  return attributes.map(({ name, option }) => `${name}:${option}`).join("|");
-}
-
 function parseProductIds(value: string): number[] {
   return Array.from(new Set(
     value
@@ -688,15 +856,30 @@ function parseProductIds(value: string): number[] {
   ));
 }
 
-function isPositivePrice(value: string): boolean {
-  const amount = parseLocalizedPrice(value);
-  return amount !== null && amount > 0;
+function isValidPrice(value: number | null): value is number {
+  return value !== null && value >= 0;
 }
 
-function requirePositivePrice(value: string): number {
-  const amount = parseLocalizedPrice(value);
-  if (amount === null || amount <= 0) throw new Error("Enter a valid positive price");
-  return amount;
+function requireValidatedPrice(value: number | null, fieldLabel: string): number {
+  if (!isValidPrice(value)) throw new Error(`${fieldLabel} is missing or invalid.`);
+  return value;
+}
+
+function parseOptionalPrice(value: string): number | null | undefined {
+  return value.trim() ? parseLocalizedPrice(value) : undefined;
+}
+
+function isValidCompareAtPrice(compareAtPrice: number | null | undefined, price: number | null): boolean {
+  return compareAtPrice === undefined || (price !== null && compareAtPrice !== null && compareAtPrice >= price);
+}
+
+function isValidExternalUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function cartesianVariations(attributes: { name: string; options: string[] }[]): { name: string; option: string }[][] {

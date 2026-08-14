@@ -1,4 +1,4 @@
-import { renderWordPressContent } from "../components/WordPressSpecialPageContent";
+import { renderCmsContent } from "../components/CmsPageContent";
 import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
 
 const COMMUNITY_DEFAULT_CONTENT = `
@@ -14,7 +14,7 @@ const COMMUNITY_DEFAULT_CONTENT = `
 export function CommunityFeedMockupPage() {
   return (
     <div className="wp-site-blocks entry-content is-layout-flow grid gap-4">
-      {renderWordPressContent(COMMUNITY_DEFAULT_CONTENT, WORDPRESS_SHORTCODE_RENDERERS, {})}
+      {renderCmsContent(COMMUNITY_DEFAULT_CONTENT, WORDPRESS_SHORTCODE_RENDERERS)}
     </div>
   );
 }

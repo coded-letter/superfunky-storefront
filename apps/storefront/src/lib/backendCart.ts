@@ -11,11 +11,60 @@
  */
 
 import { useEffect, useRef } from "react";
-import { useCart, type CartLineItem } from "@funky/ui";
-import { isBackendConfigured } from "./env";
-import { addToCart, getCart, removeFromCart, updateCartItem, type StoreApiCart, type StoreApiCartItem } from "./wcStoreApi";
+import { mergeCartLineItemsByMaxQuantity, normalizeDisplayLabel, useCart, type CartLineItem } from "@funky/ui";
+import { planCartReconciliation, type ResolvedCartLine } from "./cartReconciliation";
+import { graphqlRequest, isBackendConfigured } from "@funky/sdk";
+import {
+  addToCart,
+  getCart,
+  removeFromCart,
+  resetStoreApiSession,
+  updateCartItem,
+} from "./wcStoreApi.ts";
 
 type SyncResult = { ok: true } | { ok: false; error: string };
+
+const PRODUCT_ID_LOOKUP_QUERY = /* GraphQL */ `
+  query CheckoutProductIdentity($search: String!) {
+    products(first: 20, where: { search: $search }) {
+      nodes {
+        databaseId
+        name
+      }
+    }
+  }
+`;
+
+const resolvedProductIds = new Map<string, number>();
+
+async function lookupBackendProductId(
+  name: string,
+): Promise<{ ok: true; productId: number } | { ok: false; error: string }> {
+  const normalizedName = normalizeDisplayLabel(name).trim().toLocaleLowerCase();
+  const cached = resolvedProductIds.get(normalizedName);
+  if (cached) return { ok: true, productId: cached };
+
+  const { data, errors } = await graphqlRequest<{
+    products: { nodes: Array<{ databaseId: number; name: string }> } | null;
+  }>(PRODUCT_ID_LOOKUP_QUERY, { search: name });
+  if (errors?.length) {
+    return {
+      ok: false,
+      error: `Could not resolve “${name}” in WooCommerce: ${errors.map(({ message }) => message).join("; ")}`,
+    };
+  }
+  const matches = (data?.products?.nodes || []).filter(
+    (product) => normalizeDisplayLabel(product.name).trim().toLocaleLowerCase() === normalizedName,
+  );
+  if (matches.length !== 1 || !Number.isFinite(matches[0].databaseId) || matches[0].databaseId <= 0) {
+    return {
+      ok: false,
+      error: `Could not sync “${name}” to WooCommerce because its backend product ID is missing. Remove it and add the live product from the shop again.`,
+    };
+  }
+  resolvedProductIds.set(normalizedName, matches[0].databaseId);
+  return { ok: true, productId: matches[0].databaseId };
+}
 
 function decodeLegacyGraphqlId(id: string): number | null {
   try {
@@ -61,120 +110,131 @@ function resolveBackendCartIdentity(lineItem: CartLineItem): {
   };
 }
 
-/** Converts a Store API cart response to a map of backend keys for deduplication. */
-function buildBackendKeyMap(cart: StoreApiCart): Map<string, StoreApiCartItem> {
-  const keyMap = new Map<string, StoreApiCartItem>();
-  if (cart.items) {
-    for (const item of cart.items) {
-      keyMap.set(item.key, item);
-    }
-  }
-  return keyMap;
+let cartSyncQueue: Promise<void> = Promise.resolve();
+let syncSuspensionCount = 0;
+
+export function suspendCartSync(): () => void {
+  syncSuspensionCount += 1;
+  return () => {
+    syncSuspensionCount = Math.max(0, syncSuspensionCount - 1);
+  };
 }
 
-let syncInProgress = false;
-let lastSyncTime = 0;
-let activeSyncPromise: Promise<SyncResult> | null = null;
-const SYNC_DEBOUNCE_MS = 300; // Debounce rapid changes
+function isCartSyncSuspended(): boolean {
+  return syncSuspensionCount > 0;
+}
+
+async function performCartSync(
+  frontendCart: CartLineItem[],
+  verifyForCheckout: boolean,
+): Promise<SyncResult> {
+  const desiredCart = mergeCartLineItemsByMaxQuantity([], frontendCart);
+  const backendResponse = await getCart();
+  if (!backendResponse.ok) {
+   console.warn("[backendCart] Could not fetch backend cart:", backendResponse.error);
+   return { ok: false, error: backendResponse.error };
+  }
+
+  const resolvedLines: ResolvedCartLine[] = [];
+  for (const frontendItem of desiredCart) {
+   const identity = resolveBackendCartIdentity(frontendItem);
+   let { productId } = identity;
+   if (!productId) {
+     const lookup = await lookupBackendProductId(frontendItem.name);
+     if (!lookup.ok) return lookup;
+     productId = lookup.productId;
+   }
+   resolvedLines.push({
+     productId,
+     variationId: identity.variationId,
+     variationAttributes: identity.variationAttributes,
+     quantity: frontendItem.quantity,
+   });
+  }
+
+  const plan = planCartReconciliation(backendResponse.data, resolvedLines);
+  for (const change of plan.update) {
+   const updated = await updateCartItem({ key: change.item.key, quantity: change.quantity });
+   if (!updated.ok) return { ok: false, error: updated.error };
+  }
+  for (const line of plan.add) {
+   const added = await addResolvedCartLine(line);
+   if (!added.ok) return added;
+  }
+  for (const item of plan.remove) {
+   const removed = await removeFromCart(item.key);
+   if (!removed.ok) return { ok: false, error: removed.error };
+  }
+
+  if (verifyForCheckout || plan.remove.length > 0 || plan.update.length > 0 || plan.add.length > 0) {
+   const verifiedCart = await getCart();
+   if (!verifiedCart.ok) return { ok: false, error: verifiedCart.error };
+   if (desiredCart.length > 0 && (verifiedCart.data.items?.length ?? 0) === 0) {
+     return { ok: false, error: "empty-cart-after-sync" };
+   }
+   const remainingPlan = planCartReconciliation(verifiedCart.data, resolvedLines);
+   if (remainingPlan.remove.length > 0 || remainingPlan.update.length > 0 || remainingPlan.add.length > 0) {
+     return { ok: false, error: "cart-mismatch-after-sync" };
+   }
+  }
+
+  return { ok: true };
+}
+
+async function addResolvedCartLine(line: ResolvedCartLine): Promise<SyncResult> {
+  const added = await addToCart({
+    id: line.productId,
+    quantity: line.quantity,
+    ...(line.variationAttributes && Object.keys(line.variationAttributes).length
+      ? { variation: line.variationAttributes }
+      : {}),
+  });
+  if (!added.ok && line.variationId) {
+    const variationFallback = await addToCart({ id: line.variationId, quantity: line.quantity });
+    if (!variationFallback.ok) return { ok: false, error: variationFallback.error };
+  } else if (!added.ok) {
+    return { ok: false, error: added.error };
+  }
+  return { ok: true };
+}
 
 /** Synchronizes the frontend cart with the backend. Called after cart mutations
  * (add, remove, update). Gracefully handles backend unavailability. */
 export async function syncCartToBackend(
   frontendCart: CartLineItem[],
-  options?: { force?: boolean; verifyForCheckout?: boolean },
+  options?: { force?: boolean; verifyForCheckout?: boolean; ignoreSuspension?: boolean },
 ): Promise<SyncResult> {
   if (!isBackendConfigured) return { ok: false, error: "Backend not configured." };
-  if (syncInProgress && activeSyncPromise) return activeSyncPromise;
+  if (isCartSyncSuspended() && !options?.ignoreSuspension) return { ok: true };
 
-  const now = Date.now();
-  if (!options?.force && now - lastSyncTime < SYNC_DEBOUNCE_MS) return { ok: true };
-  lastSyncTime = now;
-
-  syncInProgress = true;
-  activeSyncPromise = (async (): Promise<SyncResult> => {
-    // Fetch current backend cart state
-    const backendResponse = await getCart();
-    if (!backendResponse.ok) {
-      console.warn("[backendCart] Could not fetch backend cart, falling back to frontend-only:", backendResponse.error);
-      return { ok: false, error: backendResponse.error };
+  const queuedSync = cartSyncQueue.then(async (): Promise<SyncResult> => {
+    let result = await performCartSync(frontendCart, Boolean(options?.verifyForCheckout));
+    if (!result.ok && result.error === "empty-cart-after-sync") {
+      resetStoreApiSession();
+      result = await performCartSync(frontendCart, true);
     }
-
-    const backendCart = backendResponse.data;
-    const backendKeyMap = buildBackendKeyMap(backendCart);
-
-    // For each frontend item, ensure it exists on backend with correct quantity
-    for (const frontendItem of frontendCart) {
-      const { productId, variationId, variationAttributes } = resolveBackendCartIdentity(frontendItem);
-      if (!productId) {
-        return {
-          ok: false,
-          error: `Could not sync “${frontendItem.name}” to WooCommerce because its backend product ID is missing.`,
-        };
-      }
-
-      // Find if this item already exists on backend
-      let backendItem = Array.from(backendKeyMap.values()).find(
-        (item) =>
-          item.product_id === productId &&
-          (variationId === null || item.variation_id === variationId)
-      );
-
-      if (backendItem && backendItem.quantity !== frontendItem.quantity) {
-        // Update quantity
-        const updated = await updateCartItem({ key: backendItem.key, quantity: frontendItem.quantity });
-        if (!updated.ok) {
-          return { ok: false, error: updated.error };
-        }
-        backendKeyMap.delete(backendItem.key);
-      } else if (!backendItem) {
-        // Add new item
-        const added = await addToCart({
-          id: productId,
-          quantity: frontendItem.quantity,
-          ...(variationAttributes && Object.keys(variationAttributes).length ? { variation: variationAttributes } : {}),
-        });
-        if (!added.ok && variationId) {
-          const variationFallback = await addToCart({ id: variationId, quantity: frontendItem.quantity });
-          if (!variationFallback.ok) {
-            return { ok: false, error: variationFallback.error };
-          }
-        } else if (!added.ok) {
-          return { ok: false, error: added.error };
-        }
-      } else {
-        // Item already correct, mark it as handled
-        backendKeyMap.delete(backendItem.key);
-      }
+    if (!result.ok && result.error === "empty-cart-after-sync") {
+      return {
+        ok: false,
+        error: "The store still reports an empty cart after synchronizing it. Please try again.",
+      };
     }
-
-    // Remove items from backend that aren't in frontend
-    for (const orphanedItem of backendKeyMap.values()) {
-      const removed = await removeFromCart(orphanedItem.key);
-      if (!removed.ok) {
-        return { ok: false, error: removed.error };
-      }
+    if (!result.ok && result.error === "cart-mismatch-after-sync") {
+      return {
+        ok: false,
+        error: "The store could not confirm the latest cart quantities. Please try again.",
+      };
     }
-
-    if (options?.verifyForCheckout) {
-      const verifiedCart = await getCart();
-      if (!verifiedCart.ok) {
-        return { ok: false, error: verifiedCart.error };
-      }
-      if (frontendCart.length > 0 && (verifiedCart.data.items?.length ?? 0) === 0) {
-        return { ok: false, error: "WooCommerce still reports an empty cart after sync. Please refresh and try again." };
-      }
-    }
-
-    return { ok: true };
-  })().catch((error) => {
+    return result;
+  }).catch((error) => {
     console.warn("[backendCart] Sync error:", error instanceof Error ? error.message : error);
     return { ok: false, error: error instanceof Error ? error.message : "Cart sync failed." };
-  }).finally(() => {
-    syncInProgress = false;
-    activeSyncPromise = null;
   });
-
-  return activeSyncPromise;
+  cartSyncQueue = queuedSync.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queuedSync;
 }
 
 /** Hook that syncs the frontend cart to the backend whenever it changes.
@@ -184,6 +244,10 @@ export function useSyncCartToBackend(): void {
   const previousItemsRef = useRef<CartLineItem[] | null>(null);
 
   useEffect(() => {
+    if (isCartSyncSuspended()) {
+      previousItemsRef.current = items;
+      return;
+    }
     // Only sync if items actually changed (not just re-renders)
     if (!previousItemsRef.current) {
       previousItemsRef.current = items;
@@ -193,13 +257,14 @@ export function useSyncCartToBackend(): void {
       return;
     }
 
+    const previousItems = previousItemsRef.current;
     const itemsChanged =
-      items.length !== previousItemsRef.current.length ||
+      items.length !== previousItems.length ||
       items.some(
         (item, i) =>
-          !previousItemsRef.current[i] ||
-          previousItemsRef.current[i].id !== item.id ||
-          previousItemsRef.current[i].quantity !== item.quantity
+          !previousItems[i] ||
+          previousItems[i].id !== item.id ||
+          previousItems[i].quantity !== item.quantity
       );
 
     if (itemsChanged) {

@@ -43,7 +43,7 @@ export function ProductGallery({ images, selectedImageId }: ProductGalleryProps)
   if (!selected) return null;
 
   return (
-    <div className="funky-product-gallery grid gap-4">
+    <div className="sf-product-gallery funky-product-gallery grid gap-4">
       <button
         type="button"
         onClick={() => setIsLightboxOpen(true)}

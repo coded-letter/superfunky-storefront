@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parseLocalizedPrice, useCurrency } from "../locale";
+import { persistCartItems, readStoredCartItems } from "./cartStorage";
+import { mergeCartLineItemsByMaxQuantity, type MergeCartItemInput } from "./cartMerge";
 
 export type CartLineItem = {
   /** Unique cart line id — usually the product id, or `${productId}-${variantLabel}`
@@ -29,11 +31,14 @@ export type CartContextValue = {
   itemCount: number;
   subtotalAmount: number;
   subtotalLabel: string;
+  isHydrated: boolean;
   isDrawerOpen: boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
   addItem: (item: AddCartItemInput, quantity?: number) => void;
+  mergeItem: (item: AddCartItemInput, quantity?: number) => void;
+  mergeItems: (items: MergeCartItemInput[]) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clear: () => void;
@@ -41,32 +46,29 @@ export type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "funky-cart-v2";
-const LEGACY_STORAGE_KEY = "funky-cart-v1";
-
 export function CartProvider({ children }: { children: ReactNode }) {
   const { formatBaseAmount } = useCurrency();
   const [items, setItems] = useState<CartLineItem[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const didWarnAboutPersistence = useRef(false);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setItems(parsed);
-      }
-    } catch {
-      // Ignore malformed/unavailable storage and fall back to an empty cart.
-    } finally {
-      setIsHydrated(true);
-    }
+    setItems(readStoredCartItems(window.localStorage, window.sessionStorage));
+    setIsHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!isHydrated) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    const result = persistCartItems(items, window.localStorage, window.sessionStorage);
+    if (result.medium === "memory") {
+      if (!didWarnAboutPersistence.current) {
+        console.warn("Cart storage is unavailable; the cart will remain available for this page session.", result.error);
+        didWarnAboutPersistence.current = true;
+      }
+    } else {
+      didWarnAboutPersistence.current = false;
+    }
   }, [items, isHydrated]);
 
   const value = useMemo<CartContextValue>(() => {
@@ -84,6 +86,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       itemCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
       subtotalAmount,
       subtotalLabel: formatBaseAmount(subtotalAmount),
+      isHydrated,
       isDrawerOpen,
       openDrawer: () => setIsDrawerOpen(true),
       closeDrawer: () => setIsDrawerOpen(false),
@@ -96,6 +99,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
           return [...previous, { ...item, quantity }];
         }),
+      mergeItem: (item, quantity = 1) =>
+        setItems((previous) =>
+          mergeCartLineItemsByMaxQuantity(previous, [{ ...item, quantity }]),
+        ),
+      mergeItems: (incomingItems) =>
+        setItems((previous) => mergeCartLineItemsByMaxQuantity(previous, incomingItems)),
       removeItem: (id) => setItems((previous) => previous.filter((line) => line.id !== id)),
       updateQuantity: (id, quantity) =>
         setItems((previous) =>
@@ -105,7 +114,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ),
       clear: () => setItems([]),
     };
-  }, [formatBaseAmount, items, isDrawerOpen]);
+  }, [formatBaseAmount, isHydrated, items, isDrawerOpen]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

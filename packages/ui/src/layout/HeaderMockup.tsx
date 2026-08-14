@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   AlignJustify,
+  Bell,
+  BellRing,
   BookMarked,
   Bookmark,
   ChevronDown,
@@ -34,12 +36,17 @@ import { useLayoutPreferences, useReadingList, useCart, useTheme, useWishlist } 
 import { CartDropdown } from "./CartDropdown";
 import { SearchAutocomplete, type SearchAutocompleteProps } from "./SearchAutocomplete";
 import { ResponsiveImage } from "../media";
+import { getMegaMenuConfiguration, hasMenuClass } from "./menuClasses";
+import { MenuDescription } from "./MenuDescription";
+import { SafeHtmlContent } from "./SafeHtmlContent";
+import { sanitizeStorefrontHtml } from "./sanitizeStorefrontHtml";
 
 export type HeaderNavItem = {
   id?: string;
   label: string;
   href: string;
   title?: string;
+  /** Sanitized WordPress menu-item description HTML. */
   description?: string;
   target?: string;
   cssClasses?: string[];
@@ -73,14 +80,17 @@ export type HeaderIconConfiguration = {
   search: string;
   theme: string;
   account: string;
+  push: string;
   readingList: string;
   wishlist: string;
   cart: string;
   menu: string;
+  assistant: string;
 };
+export type HeaderIconMediaConfiguration = Partial<Record<keyof HeaderIconConfiguration, string | null>>;
 
 export type HeaderMockupProps = {
-  announcementText?: string;
+  announcementHtml?: string;
   /** Whether the top promo/announcement bar can ever show at all. `true` (default)
    * keeps the existing scroll-collapse behavior (visible at the top, hides on scroll).
    * `false` removes it entirely, regardless of scroll position. */
@@ -94,6 +104,7 @@ export type HeaderMockupProps = {
    * without triggering an intermediate redirect. */
   homePath?: string;
   headerIcons?: Partial<HeaderIconConfiguration>;
+  headerIconMedia?: HeaderIconMediaConfiguration;
   primaryNavigation?: HeaderNavItem[];
   mobileNavigation?: HeaderNavItem[];
   showSearch?: boolean;
@@ -105,6 +116,10 @@ export type HeaderMockupProps = {
   showCurrencySwitcher?: boolean;
   showDarkModeToggle?: boolean;
   showAccountLink?: boolean;
+  showPushAction?: boolean;
+  pushSubscribed?: boolean;
+  pushBusy?: boolean;
+  onPushToggle?: () => void;
   showReadingListLink?: boolean;
   showWishlistLink?: boolean;
   showCartIcon?: boolean;
@@ -119,6 +134,7 @@ export type HeaderMockupProps = {
   announcementScrollEffect?: boolean;
   /** Which cart-trigger presentation the cart icon opens — see `CartTriggerVariant`. */
   cartTriggerVariant?: CartTriggerVariant;
+  actionSlot?: ReactNode;
 };
 
 const DEFAULT_PRIMARY_NAVIGATION: HeaderNavItem[] = [
@@ -178,7 +194,6 @@ const DEFAULT_PRIMARY_NAVIGATION: HeaderNavItem[] = [
   },
   { label: "Page template preview", href: "/page/about-us" },
   { label: "Shortcode library", href: "/shortcodes" },
-  { label: "Layout studio", href: "/layout-studio" },
   {
     label: "Community",
     href: "/community",
@@ -205,14 +220,15 @@ const DEFAULT_PRIMARY_NAVIGATION: HeaderNavItem[] = [
 ];
 
 export function HeaderMockup({
-  announcementText = "Free shipping over €60 · Dispatch in 24h · 30-day returns",
+  announcementHtml = "",
   showAnnouncementBar = true,
-  projectName = "FunkyCommerce",
+  projectName = "Superfunky",
   projectTagline = "Modern storefront mockup",
   logoUrl,
   iconUrl,
   homePath = "/",
   headerIcons,
+  headerIconMedia,
   primaryNavigation = DEFAULT_PRIMARY_NAVIGATION,
   mobileNavigation,
   showSearch = true,
@@ -223,6 +239,10 @@ export function HeaderMockup({
   showCurrencySwitcher = true,
   showDarkModeToggle = true,
   showAccountLink = true,
+  showPushAction = false,
+  pushSubscribed = false,
+  pushBusy = false,
+  onPushToggle,
   showReadingListLink = true,
   showWishlistLink = true,
   showCartIcon = true,
@@ -230,15 +250,17 @@ export function HeaderMockup({
   sticky = true,
   announcementScrollEffect = true,
   cartTriggerVariant = "drawer",
+  actionSlot,
 }: HeaderMockupProps) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { themeMaxWidthPx } = useLayoutPreferences();
-  const { count: wishlistCount } = useWishlist();
-  const { count: readingListCount } = useReadingList();
+  const { count: wishlistCount, syncError: wishlistSyncError } = useWishlist();
+  const { count: readingListCount, syncError: readingListSyncError } = useReadingList();
   const { itemCount: cartBadgeCount, toggleDrawer: toggleCartDrawer } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(true);
-  const isAnnouncementBarShown = showAnnouncementBar && isAnnouncementVisible;
+  const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml);
+  const isAnnouncementBarShown = showAnnouncementBar && Boolean(safeAnnouncementHtml) && isAnnouncementVisible;
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const resolvedMobileNavigation = mobileNavigation?.length ? mobileNavigation : primaryNavigation;
   const location = useLocation();
@@ -323,7 +345,8 @@ export function HeaderMockup({
     <>
       <header
         ref={headerRef}
-        className={`funky-header ${sticky ? "fixed inset-x-0 top-0" : "relative"} z-40 border-b border-zinc-200/70 bg-white/80 text-zinc-900 backdrop-blur-lg backdrop-saturate-150 dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-100`}
+        id="sf-header"
+        className={`sf-header funky-header ${sticky ? "fixed inset-x-0 top-0" : "relative"} z-40 border-b border-zinc-200/70 bg-white/80 text-zinc-900 backdrop-blur-lg backdrop-saturate-150 dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-100`}
       >
         <div
           className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${isAnnouncementBarShown ? "max-h-10" : "max-h-0"}`}
@@ -333,7 +356,10 @@ export function HeaderMockup({
               isAnnouncementBarShown ? "translate-y-0" : "-translate-y-full"
             }`}
           >
-            {announcementText}
+            <SafeHtmlContent
+              html={safeAnnouncementHtml}
+              className="[&_a]:font-semibold [&_a]:text-inherit [&_a]:underline [&_p]:m-0"
+            />
           </div>
         </div>
 
@@ -383,7 +409,7 @@ export function HeaderMockup({
                   className={iconButtonClass}
                 >
                   <span className="grid transition-transform duration-300">
-                    {isSearchExpanded ? <X className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" /> : <HeaderActionIcon name={headerIcons?.search} fallback={Search} />}
+                    {isSearchExpanded ? <X className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" /> : <HeaderActionIcon name={headerIcons?.search} mediaUrl={headerIconMedia?.search} fallback={Search} />}
                   </span>
                 </button>
               </div>
@@ -392,6 +418,8 @@ export function HeaderMockup({
             {showLanguageSwitcher ? <LanguageSwitcher className="hidden sm:block" /> : null}
 
             {showCurrencySwitcher ? <CurrencySwitcher className="hidden sm:block" /> : null}
+
+            {actionSlot}
 
             <div className="mx-1 hidden h-6 w-px bg-zinc-200 dark:bg-zinc-800 lg:block" aria-hidden="true" />
 
@@ -404,26 +432,60 @@ export function HeaderMockup({
                 title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
               >
                 <span className="grid transition-transform duration-500 motion-safe:hover:rotate-12">
-                  <HeaderActionIcon name={headerIcons?.theme} fallback={isDarkMode ? Sun : Moon} />
+                  <HeaderActionIcon name={headerIcons?.theme} mediaUrl={headerIconMedia?.theme} fallback={isDarkMode ? Sun : Moon} />
                 </span>
+              </button>
+            ) : null}
+
+            {showPushAction && onPushToggle ? (
+              <button
+                type="button"
+                onClick={onPushToggle}
+                disabled={pushBusy}
+                className={`${iconButtonClass} focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-wait disabled:opacity-60 ${
+                  pushSubscribed
+                    ? "border-brand-300 text-brand-600 dark:border-brand-700 dark:text-brand-300"
+                    : ""
+                }`}
+                aria-label={pushSubscribed ? "Disable push notifications" : "Enable push notifications"}
+                aria-pressed={pushSubscribed}
+                title={pushSubscribed ? "Push notifications enabled" : "Enable push notifications"}
+              >
+                <HeaderActionIcon
+                  name={pushSubscribed ? "bell-ring" : headerIcons?.push}
+                  mediaUrl={pushSubscribed ? null : headerIconMedia?.push}
+                  fallback={pushSubscribed ? BellRing : Bell}
+                />
               </button>
             ) : null}
 
             {showAccountLink ? (
               <Link to="/account" aria-label="Account" title="Account" className={`${iconButtonClass} hidden lg:inline-grid`}>
-                <HeaderActionIcon name={headerIcons?.account} fallback={User} />
+                <HeaderActionIcon name={headerIcons?.account} mediaUrl={headerIconMedia?.account} fallback={User} />
               </Link>
             ) : null}
             {showReadingListLink ? (
-              <Link to="/reading-list" aria-label="Reading list" title="Reading list" className={`${iconButtonClass} relative hidden lg:inline-grid`}>
-                <HeaderActionIcon name={headerIcons?.readingList} fallback={BookMarked} />
+              <Link
+                to="/reading-list"
+                aria-label={readingListSyncError ? "Reading list (sync error)" : "Reading list"}
+                title={readingListSyncError ? `Reading list — ${readingListSyncError}` : "Reading list"}
+                className={`${iconButtonClass} relative hidden lg:inline-grid`}
+              >
+                <HeaderActionIcon name={headerIcons?.readingList} mediaUrl={headerIconMedia?.readingList} fallback={BookMarked} />
                 {readingListCount > 0 ? <BadgeCount count={readingListCount} /> : null}
+                {readingListSyncError ? <SyncErrorDot /> : null}
               </Link>
             ) : null}
             {showWishlistLink ? (
-              <Link to="/wishlist" aria-label="Wishlist" title="Wishlist" className={`${iconButtonClass} relative hidden lg:inline-grid`}>
-                <HeaderActionIcon name={headerIcons?.wishlist} fallback={Heart} />
+              <Link
+                to="/wishlist"
+                aria-label={wishlistSyncError ? "Wishlist (sync error)" : "Wishlist"}
+                title={wishlistSyncError ? `Wishlist — ${wishlistSyncError}` : "Wishlist"}
+                className={`${iconButtonClass} relative hidden lg:inline-grid`}
+              >
+                <HeaderActionIcon name={headerIcons?.wishlist} mediaUrl={headerIconMedia?.wishlist} fallback={Heart} />
                 {wishlistCount > 0 ? <BadgeCount count={wishlistCount} /> : null}
+                {wishlistSyncError ? <SyncErrorDot /> : null}
               </Link>
             ) : null}
             {showCartIcon ? (
@@ -435,7 +497,7 @@ export function HeaderMockup({
                   title="Cart"
                   className={`${iconButtonClass} relative`}
                 >
-                  <HeaderActionIcon name={headerIcons?.cart} fallback={ShoppingCart} />
+                  <HeaderActionIcon name={headerIcons?.cart} mediaUrl={headerIconMedia?.cart} fallback={ShoppingCart} />
                   {cartBadgeCount > 0 ? <BadgeCount count={cartBadgeCount} /> : null}
                 </button>
                 {cartTriggerVariant === "dropdown" ? (
@@ -451,7 +513,7 @@ export function HeaderMockup({
               aria-label="Open menu"
               aria-expanded={isMenuOpen}
             >
-              <HeaderActionIcon name={headerIcons?.menu} fallback={Menu} />
+              <HeaderActionIcon name={headerIcons?.menu} mediaUrl={headerIconMedia?.menu} fallback={Menu} />
             </button>
           </div>
         </div>
@@ -502,10 +564,14 @@ export function HeaderMockup({
         onClose={() => setIsMenuOpen(false)}
         primaryNavigation={resolvedMobileNavigation}
         wishlistCount={wishlistCount}
+        wishlistSyncError={wishlistSyncError}
         readingListCount={readingListCount}
+        readingListSyncError={readingListSyncError}
         cartBadgeCount={cartBadgeCount}
         onCartClick={handleCartTriggerClick}
         search={search}
+        showLanguageSwitcher={showLanguageSwitcher}
+        showCurrencySwitcher={showCurrencySwitcher}
       />
     </>
   );
@@ -516,19 +582,27 @@ function MobileDrawer({
   onClose,
   primaryNavigation,
   wishlistCount,
+  wishlistSyncError,
   readingListCount,
+  readingListSyncError,
   cartBadgeCount,
   onCartClick,
   search,
+  showLanguageSwitcher,
+  showCurrencySwitcher,
 }: {
   isOpen: boolean;
   onClose: () => void;
   primaryNavigation: HeaderNavItem[];
   wishlistCount: number;
+  wishlistSyncError?: string | null;
   readingListCount: number;
+  readingListSyncError?: string | null;
   cartBadgeCount: number;
   onCartClick: () => void;
   search?: SearchAutocompleteProps["search"];
+  showLanguageSwitcher: boolean;
+  showCurrencySwitcher: boolean;
 }) {
   // Rendered via a portal directly into <body>: the header uses `backdrop-blur`, which
   // (like `filter`/`will-change: transform`) establishes a new containing block for any
@@ -563,14 +637,14 @@ function MobileDrawer({
         </div>
 
         <div className="scrollbar-thin grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-6 pb-6 pt-1">
-          <SearchAutocomplete search={search} fullWidth placeholder="Search products..." onNavigate={onClose} />
+          <SearchAutocomplete search={search} fullWidth onNavigate={onClose} />
 
           {/* Moved here (from a fixed footer strip) so the dropdown panel has room to
               open downward inside this scrollable area — anchored at the very bottom of
               the drawer, it had nowhere to expand into and was effectively unreachable. */}
           <div className="flex gap-2">
-            <LanguageSwitcher fullWidth />
-            <CurrencySwitcher fullWidth />
+            {showLanguageSwitcher ? <LanguageSwitcher fullWidth /> : null}
+            {showCurrencySwitcher ? <CurrencySwitcher fullWidth /> : null}
           </div>
 
           <nav aria-label="Mobile navigation" className="grid gap-1">
@@ -586,10 +660,12 @@ function MobileDrawer({
             <Link to="/reading-list" className={mobileActionLinkClass}>
               <BookMarked className="h-4 w-4" aria-hidden="true" /> Reading list
               {readingListCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{readingListCount}</span> : null}
+              {readingListSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={readingListSyncError} /> : null}
             </Link>
             <Link to="/wishlist" className={mobileActionLinkClass}>
               <Heart className="h-4 w-4" aria-hidden="true" /> Wishlist
               {wishlistCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{wishlistCount}</span> : null}
+              {wishlistSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={wishlistSyncError} /> : null}
             </Link>
             <button
               type="button"
@@ -614,29 +690,34 @@ function MobileDrawer({
  * toggle that expands an indented sub-list — mirrors the legacy prototype's
  * `NestedList` (`menu-header.js`, supports arbitrary nesting depth) but with a smoother
  * CSS grid-rows height transition instead of a fixed `max-h-96` cap, and no artificial
- * nesting-depth limit. Top-level sub-lists start expanded (there's currently just one,
- * "Shop", and it should stay discoverable); deeper levels start collapsed. */
+ * nesting-depth limit. Every sub-list starts collapsed unless its parent has the
+ * WordPress menu-item CSS class `expanded`. */
 function MobileNavItem({ item, depth = 0 }: { item: HeaderNavItem; depth?: number }) {
-  const [isExpanded, setIsExpanded] = useState(depth === 0);
+  const [isExpanded, setIsExpanded] = useState(
+    () => hasMenuClass(item.cssClasses, "expanded"),
+  );
   const hasChildren = Boolean(item.children?.length);
 
   return (
     <div>
-      <div className="flex items-center">
-        <NavLink
-          to={item.href}
-          end={item.href === "/"}
-          reloadDocument={isExternalHref(item.href)}
-          title={item.title}
-          target={item.target}
-          rel={menuItemRel(item)}
-          className={({ isActive }) => joinMenuClasses(`${mobileNavLinkClass({ isActive })} flex-1`, item)}
-        >
-          <span className="grid">
+      <div className="flex items-start">
+        <div className="min-w-0 flex-1">
+          <NavLink
+            to={item.href}
+            end={item.href === "/"}
+            reloadDocument={isExternalHref(item.href)}
+            title={item.title}
+            target={item.target}
+            rel={menuItemRel(item)}
+            className={({ isActive }) => joinMenuClasses(`${mobileNavLinkClass({ isActive })} block`, item)}
+          >
             <span>{item.label}</span>
-            {item.description ? <span className="text-xs font-normal text-zinc-400 dark:text-zinc-500">{item.description}</span> : null}
-          </span>
-        </NavLink>
+          </NavLink>
+          <MenuDescription
+            html={item.description}
+            className="-mt-1 px-3.5 pb-1 text-xs font-normal text-zinc-400 dark:text-zinc-500"
+          />
+        </div>
         {hasChildren ? (
           <button
             type="button"
@@ -651,8 +732,8 @@ function MobileNavItem({ item, depth = 0 }: { item: HeaderNavItem; depth?: numbe
       </div>
 
       {hasChildren ? (
-        <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-          <div className="overflow-hidden">
+        <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
+          <div className="overflow-hidden" aria-hidden={!isExpanded}>
             <div className={`mt-1 grid gap-1 border-l border-zinc-200 pl-3 dark:border-zinc-800 ${depth === 0 ? "ml-3" : "ml-2"}`}>
               {item.children?.map((child) => (
                 <MobileNavItem key={menuItemKey(child)} item={child} depth={depth + 1} />
@@ -673,6 +754,19 @@ function BadgeCount({ count }: { count: number }) {
   );
 }
 
+/** Small warning dot for a saved list (wishlist/reading list) whose most recent
+ * toggle/clear/merge with the backend failed and was rolled back — surfaces
+ * `syncError` from the shared `createPersistedIdCollection` abstraction without a
+ * disruptive banner, since the optimistic local UI already reverted. */
+function SyncErrorDot() {
+  return (
+    <span
+      className="absolute -bottom-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900"
+      aria-hidden="true"
+    />
+  );
+}
+
 /** Desktop-only dropdown for nav items with `children` (currently just "Shop", to preview
  * the in-progress product template). Mirrors the legacy Gatsby prototype's `DesktopMenu`
  * hover-to-reveal interaction (`menu-header.js`), with click/keyboard support layered on
@@ -682,16 +776,34 @@ function BadgeCount({ count }: { count: number }) {
  * reliably. */
 function NavDropdownItem({ item }: { item: HeaderNavItem }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; width?: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<number | undefined>(undefined);
   const location = useLocation();
   const isActive = navItemMatchesPath(item, location.pathname);
+  const megaMenu = getMegaMenuConfiguration(item.cssClasses, item.children?.length || 0);
 
   const updatePosition = () => {
     const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) setPosition({ top: rect.bottom + 8, left: rect.left });
+    if (!rect) return;
+
+    const top = rect.bottom + 8;
+    if (!megaMenu) {
+      setPosition({ top, left: rect.left });
+      return;
+    }
+
+    const viewportPadding = 16;
+    const width = Math.min(
+      window.innerWidth - viewportPadding * 2,
+      Math.max(320, megaMenu.columns * 208),
+    );
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.left, window.innerWidth - width - viewportPadding),
+    );
+    setPosition({ top, left, width });
   };
 
   const openMenu = () => {
@@ -771,12 +883,33 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
               role="menu"
               onMouseEnter={openMenu}
               onMouseLeave={scheduleClose}
-              style={{ top: position.top, left: position.left }}
-              className="fixed z-50 grid w-64 origin-top-left gap-0.5 rounded-xl border border-zinc-100 bg-white p-2 shadow-xl transition-all duration-150 dark:border-zinc-800 dark:bg-zinc-900"
+              style={{
+                top: position.top,
+                left: position.left,
+                width: position.width,
+                maxHeight: `calc(100vh - ${position.top + 16}px)`,
+              }}
+              className={`fixed z-50 origin-top-left rounded-xl border border-zinc-100 bg-white shadow-xl transition-all duration-150 dark:border-zinc-800 dark:bg-zinc-900 ${
+                megaMenu ? "overflow-auto p-5" : "grid w-64 gap-0.5 overflow-y-auto p-2"
+              }`}
             >
-              {item.children?.map((child) => (
-                <NavDropdownPanelItem key={menuItemKey(child)} item={child} />
-              ))}
+              {megaMenu ? (
+                <div
+                  className="grid gap-6"
+                  style={{
+                    gridTemplateColumns: `repeat(${megaMenu.columns}, minmax(11rem, 1fr))`,
+                    minWidth: `${megaMenu.columns * 11}rem`,
+                  }}
+                >
+                  {item.children?.map((child) => (
+                    <MegaMenuColumn key={menuItemKey(child)} item={child} />
+                  ))}
+                </div>
+              ) : (
+                item.children?.map((child) => (
+                  <NavDropdownPanelItem key={menuItemKey(child)} item={child} />
+                ))
+              )}
             </div>,
             document.body,
           )
@@ -785,16 +918,9 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
   );
 }
 
-/** A single entry inside a desktop dropdown panel. Renders as a plain link, or — when
- * it has its own `children` — as an inline expandable group (arrow toggle, like the
- * nested footer-menu columns) rather than a further flyout, keeping deep nesting simple
- * to reach with a mouse without chaining hover-timers across multiple panels. */
-function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasChildren = Boolean(item.children?.length);
-
-  if (!hasChildren) {
-    return (
+function MegaMenuColumn({ item }: { item: HeaderNavItem }) {
+  return (
+    <div className="min-w-0">
       <NavLink
         role="menuitem"
         to={item.href}
@@ -804,18 +930,66 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
         target={item.target}
         rel={menuItemRel(item)}
         className={({ isActive }) =>
-          joinMenuClasses(`rounded-lg px-3 py-2 text-sm font-medium no-underline transition ${
+          joinMenuClasses(`grid gap-1 text-sm font-semibold no-underline transition ${
             isActive
-              ? "font-semibold text-brand-600 dark:text-brand-400"
-              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+              ? "text-brand-600 dark:text-brand-400"
+              : "text-zinc-800 hover:text-brand-600 dark:text-zinc-100 dark:hover:text-brand-400"
           }`, item)
         }
       >
-        <span className="grid gap-0.5">
-          <span>{item.label}</span>
-          {item.description ? <span className="text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500">{item.description}</span> : null}
-        </span>
+        <span>{item.label}</span>
       </NavLink>
+      <MenuDescription
+        html={item.description}
+        className="mt-1 text-xs font-normal leading-snug text-zinc-500 dark:text-zinc-400"
+      />
+      {item.children?.length ? (
+        <div className="mt-3 grid gap-1 border-l border-zinc-200 pl-2 dark:border-zinc-800">
+          {item.children.map((child) => (
+            <NavDropdownPanelItem key={menuItemKey(child)} item={child} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A single entry inside a desktop dropdown panel. Renders as a plain link, or — when
+ * it has its own `children` — as an inline expandable group (arrow toggle, like the
+ * nested footer-menu columns) rather than a further flyout, keeping deep nesting simple
+ * to reach with a mouse without chaining hover-timers across multiple panels. */
+function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
+  const [isExpanded, setIsExpanded] = useState(
+    () => hasMenuClass(item.cssClasses, "expanded"),
+  );
+  const hasChildren = Boolean(item.children?.length);
+
+  if (!hasChildren) {
+    return (
+      <div>
+        <NavLink
+          role="menuitem"
+          to={item.href}
+          end={item.href === "/"}
+          reloadDocument={isExternalHref(item.href)}
+          title={item.title}
+          target={item.target}
+          rel={menuItemRel(item)}
+          className={({ isActive }) =>
+            joinMenuClasses(`block rounded-lg px-3 py-2 text-sm font-medium no-underline transition ${
+              isActive
+                ? "font-semibold text-brand-600 dark:text-brand-400"
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+            }`, item)
+          }
+        >
+          <span>{item.label}</span>
+        </NavLink>
+        <MenuDescription
+          html={item.description}
+          className="-mt-1 px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500"
+        />
+      </div>
     );
   }
 
@@ -838,10 +1012,7 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
             }`, item)
           }
         >
-          <span className="grid gap-0.5">
-            <span>{item.label}</span>
-            {item.description ? <span className="text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500">{item.description}</span> : null}
-          </span>
+          <span>{item.label}</span>
         </NavLink>
         <button
           type="button"
@@ -853,9 +1024,13 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
       </div>
+      <MenuDescription
+        html={item.description}
+        className="-mt-1 px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500"
+      />
 
-      <div className={`grid transition-all duration-200 ease-in-out ${isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-        <div className="overflow-hidden">
+      <div className={`grid transition-all duration-200 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden" aria-hidden={!isExpanded}>
           <div className="ml-3 mt-0.5 grid gap-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-800">
             {item.children?.map((child) => (
               <NavDropdownPanelItem key={menuItemKey(child)} item={child} />
@@ -891,7 +1066,12 @@ function menuItemRel(item: HeaderNavItem): string | undefined {
 const iconButtonClass =
   "inline-grid h-10 w-10 place-items-center rounded-2xl border border-zinc-200 bg-white text-zinc-700 no-underline shadow-soft transition hover:-translate-y-0.5 hover:border-brand-300 hover:text-brand-600 hover:shadow-soft-lg active:translate-y-0 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300";
 
+export const headerIconButtonClassName = iconButtonClass;
+const loadedHeaderIconUrls = new Set<string>();
+
 const HEADER_ACTION_ICONS: Record<string, LucideIcon> = {
+  bell: Bell,
+  "bell-ring": BellRing,
   "align-justify": AlignJustify,
   "book-marked": BookMarked,
   bookmark: Bookmark,
@@ -915,9 +1095,50 @@ const HEADER_ACTION_ICONS: Record<string, LucideIcon> = {
   "user-check": UserCheck,
 };
 
-function HeaderActionIcon({ name, fallback: Fallback }: { name?: string; fallback: LucideIcon }) {
-  const Icon = (name && HEADER_ACTION_ICONS[name]) || Fallback;
+function HeaderActionIcon({ name, mediaUrl, fallback: Fallback }: { name?: string; mediaUrl?: string | null; fallback: LucideIcon }) {
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const [mediaReady, setMediaReady] = useState(() => Boolean(mediaUrl && loadedHeaderIconUrls.has(mediaUrl)));
+  useEffect(() => {
+    setMediaFailed(false);
+    setMediaReady(Boolean(mediaUrl && loadedHeaderIconUrls.has(mediaUrl)));
+  }, [mediaUrl]);
+  const Icon = resolveHeaderActionIcon(name, Fallback);
+  if (mediaUrl) {
+    return (
+      <span className="relative grid h-[1.15rem] w-[1.15rem] place-items-center">
+        <Icon
+          className={`h-[1.15rem] w-[1.15rem] transition-opacity duration-150 ${
+            mediaReady && !mediaFailed ? "opacity-0" : "opacity-100"
+          }`}
+          aria-hidden="true"
+        />
+        {!mediaFailed ? (
+          <img
+            src={mediaUrl}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            fetchPriority="high"
+            height={18}
+            width={18}
+            className={`absolute h-[1.15rem] w-[1.15rem] object-contain transition-opacity duration-150 ${
+              mediaReady ? "opacity-100" : "opacity-0"
+            }`}
+            onLoad={() => {
+              loadedHeaderIconUrls.add(mediaUrl);
+              setMediaReady(true);
+            }}
+            onError={() => setMediaFailed(true)}
+          />
+        ) : null}
+      </span>
+    );
+  }
   return <Icon className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />;
+}
+
+export function resolveHeaderActionIcon(name: string | undefined, fallback: LucideIcon): LucideIcon {
+  return (name && HEADER_ACTION_ICONS[name]) || fallback;
 }
 
 function navLinkClass({ isActive }: { isActive: boolean }) {

@@ -1,19 +1,11 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { LANGUAGE_OPTIONS } from "../locale/options";
+import { useLanguage } from "../locale/LanguageContext";
+import { normalizeLanguagePath, usesLanguagePrefixes } from "../locale/urlPaths";
+import { normalizeDisplayLabel } from "./htmlEntities";
 
-/** Language-tagged SEO head component — a TypeScript rewrite of the legacy
- * prototype's `src/components/seo.js`. That version pulled `title`/`generalSettings`/
- * `schema` from a Gatsby `useStaticQuery` GraphQL fragment; since this project has no
- * GraphQL client yet, every value the original sourced from WPGraphQL is instead a
- * plain prop with sensible defaults, ready to be threaded from real query data once
- * the backend lands (the prop names intentionally mirror the WPGraphQL SEO fields —
- * `metaDesc`, `opengraphImage`, `canonical`, `breadcrumbs`, `schema` — for a low-diff
- * swap later).
- *
- * Adds one thing the legacy version didn't have: proper multi-language `hreflang`
- * alternates driven by `translations`, each resolved against the site's known
- * `LANGUAGE_OPTIONS` list instead of a WPGraphQL `language.code` field. */
+/** Complete per-route document metadata, social cards, structured data, and language alternates. */
 
 export type SeoTranslation = {
   /** ISO 639-1 language code, e.g. "de", "el". */
@@ -30,6 +22,14 @@ export type SeoSchema = {
   personName?: string;
 };
 
+export type SeoImage = {
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  type?: string;
+};
+
 export type SeoProps = {
   title: string;
   description?: string;
@@ -44,11 +44,18 @@ export type SeoProps = {
   opengraphType?: "website" | "article" | "product";
   opengraphTitle?: string;
   opengraphDescription?: string;
+  /** Preferred social and structured-data image. Content pages should pass their featured image. */
+  image?: SeoImage;
+  /** Legacy URL-only image input retained for archive and compatibility callers. */
   opengraphImage?: string;
   opengraphPublishedTime?: string;
   opengraphModifiedTime?: string;
   opengraphAuthor?: string;
+  opengraphPublisher?: string;
+  articleSection?: string;
+  articleTags?: string[];
   twitterHandle?: string;
+  twitterCreator?: string;
   twitterTitle?: string;
   twitterDescription?: string;
   schema?: SeoSchema;
@@ -58,7 +65,7 @@ export type SeoProps = {
   translations?: SeoTranslation[];
 };
 
-const DEFAULT_SITE_NAME = "FunkyCommerce";
+const DEFAULT_SITE_NAME = "Superfunky";
 
 export function Seo({
   title,
@@ -72,25 +79,51 @@ export function Seo({
   opengraphType = "website",
   opengraphTitle,
   opengraphDescription,
+  image,
   opengraphImage,
   opengraphPublishedTime,
   opengraphModifiedTime,
   opengraphAuthor,
+  opengraphPublisher,
+  articleSection,
+  articleTags = [],
   twitterHandle,
+  twitterCreator,
   twitterTitle,
   twitterDescription,
   schema,
   breadcrumbs,
   translations = [],
 }: SeoProps) {
+  const { configuredLanguageCodes } = useLanguage();
   const metaTitle = appendSiteName && siteName ? `${title} · ${siteName}` : title;
+  const canonicalCandidate = canonical || (typeof window !== "undefined" ? window.location.href : undefined);
+  const resolvedCanonical = canonicalCandidate && typeof window !== "undefined"
+    ? (() => {
+        try {
+          const url = new URL(canonicalCandidate, window.location.origin);
+          const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "");
+          const localizedPath = normalizeLanguagePath(
+            `${path || "/"}${url.search}`,
+            languageCode,
+            configuredLanguageCodes,
+          );
+          return `${window.location.origin}${localizedPath === "/" ? "" : localizedPath}`;
+        } catch {
+          return canonicalCandidate;
+        }
+      })()
+    : canonicalCandidate;
+  const resolvedImageUrl = resolveAbsoluteUrl(image?.url || opengraphImage);
+  const imageAlt = image?.alt || title;
+  const imageType = image?.type || imageTypeFromUrl(resolvedImageUrl);
 
-  useEffect(() => {
-    const fallback = document.head.querySelector<HTMLMetaElement>('meta[name="description"]:not([data-rh])');
-    if (!fallback) return;
-    const nextSibling = fallback.nextSibling;
-    fallback.remove();
-    return () => document.head.insertBefore(fallback, nextSibling?.parentNode === document.head ? nextSibling : null);
+  useLayoutEffect(() => {
+    document.head
+      .querySelectorAll(
+        '[data-storefront-seo], meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
+      )
+      .forEach((element) => element.remove());
   }, []);
 
   const breadcrumbJsonLd =
@@ -101,39 +134,60 @@ export function Seo({
           itemListElement: breadcrumbs.map((crumb, index) => ({
             "@type": "ListItem",
             position: index + 1,
-            name: crumb.name,
-            item: crumb.url,
+            name: normalizeDisplayLabel(crumb.name),
+            item: typeof window === "undefined"
+              ? crumb.url
+              : (() => {
+                  const url = new URL(crumb.url, window.location.origin);
+                  return `${window.location.origin}${normalizeLanguagePath(url.pathname, languageCode, configuredLanguageCodes)}`;
+                })(),
           })),
         }
       : null;
 
-  const pageJsonLd =
-    schema?.pageType || schema?.articleType
+  const schemaType = schema?.articleType || schema?.pageType || (opengraphType === "article" ? "Article" : opengraphType === "product" ? "Product" : "WebPage");
+  const pageJsonLd = {
+    "@context": "https://schema.org",
+    "@type": schemaType,
+    name: title,
+    ...(opengraphType === "article" ? { headline: opengraphTitle || title } : {}),
+    description,
+    url: resolvedCanonical,
+    mainEntityOfPage: resolvedCanonical ? { "@type": "WebPage", "@id": resolvedCanonical } : undefined,
+    isPartOf: siteName ? { "@type": "WebSite", name: siteName, url: typeof window !== "undefined" ? window.location.origin : undefined } : undefined,
+    datePublished: opengraphPublishedTime,
+    dateModified: opengraphModifiedTime,
+    author: opengraphAuthor
+      ? { "@type": "Person", name: opengraphAuthor }
+      : schema?.personName
+        ? { "@type": "Person", name: schema.personName }
+        : undefined,
+    publisher: schema?.companyName
       ? {
-          "@context": "https://schema.org",
-          "@type": schema.articleType || schema.pageType,
-          name: title,
-          description,
-          url: canonical,
-          datePublished: opengraphPublishedTime,
-          dateModified: opengraphModifiedTime,
-          author: opengraphAuthor ? { "@type": "Person", name: opengraphAuthor } : schema.personName ? { "@type": "Person", name: schema.personName } : undefined,
-          publisher: schema.companyName
-            ? {
-                "@type": "Organization",
-                name: schema.companyName,
-                logo: schema.companyLogoUrl ? { "@type": "ImageObject", url: schema.companyLogoUrl } : undefined,
-              }
-            : undefined,
-          image: opengraphImage,
-          inLanguage: languageCode,
+          "@type": "Organization",
+          name: schema.companyName,
+          logo: schema.companyLogoUrl ? { "@type": "ImageObject", url: schema.companyLogoUrl } : undefined,
         }
-      : null;
+      : undefined,
+    image: resolvedImageUrl
+      ? {
+          "@type": "ImageObject",
+          url: resolvedImageUrl,
+          contentUrl: resolvedImageUrl,
+          caption: imageAlt,
+          width: image?.width,
+          height: image?.height,
+        }
+      : undefined,
+    inLanguage: languageCode,
+    keywords: keywords || articleTags.join(", ") || undefined,
+    articleSection: articleSection || undefined,
+  };
 
   // Resolves each translation's language code against the known LANGUAGE_OPTIONS list
   // so hreflang tags always use a real, recognizable code even if a caller passes
   // something slightly off (e.g. "EL" instead of "el").
-  const hreflangLinks = translations
+  const hreflangLinks = (usesLanguagePrefixes(configuredLanguageCodes) ? translations : [])
     .map((translation) => {
       const option = LANGUAGE_OPTIONS.find((lang) => lang.code === translation.languageCode.toLowerCase());
       return option ? { hrefLang: option.code, href: translation.url } : null;
@@ -142,16 +196,20 @@ export function Seo({
 
   // Per hreflang spec: the current page must also appear in the alternate set.
   // We add it using canonical (absolute URL preferred) or the current browser URL.
-  const selfHref = canonical || (typeof window !== "undefined" ? window.location.href : null);
+  const selfHref = resolvedCanonical || (typeof window !== "undefined" ? window.location.href : null);
   const selfLink = selfHref && LANGUAGE_OPTIONS.find((lang) => lang.code === languageCode.toLowerCase())
     ? { hrefLang: languageCode.toLowerCase(), href: selfHref }
     : null;
-  const allHreflangLinks = selfLink
-    ? [selfLink, ...hreflangLinks.filter((l) => l.hrefLang !== selfLink.hrefLang)]
-    : hreflangLinks;
+  const allHreflangLinks = !usesLanguagePrefixes(configuredLanguageCodes)
+    ? []
+    : selfLink
+      ? [selfLink, ...hreflangLinks.filter((l) => l.hrefLang !== selfLink.hrefLang)]
+      : hreflangLinks;
 
   // x-default points to the first available language (self preferred, then first translation).
-  const xDefaultHref = selfHref || hreflangLinks[0]?.href;
+  const xDefaultHref = usesLanguagePrefixes(configuredLanguageCodes)
+    ? selfHref || hreflangLinks[0]?.href
+    : undefined;
 
   return (
     <Helmet htmlAttributes={{ lang: languageCode }}>
@@ -159,24 +217,39 @@ export function Seo({
       {description ? <meta name="description" content={description} /> : null}
       {keywords ? <meta name="keywords" content={keywords} /> : null}
       <meta name="robots" content={robots} />
+      {opengraphAuthor ? <meta name="author" content={opengraphAuthor} /> : null}
 
       {/* OpenGraph */}
       <meta property="og:type" content={opengraphType} />
       <meta property="og:title" content={opengraphTitle || title} />
       {opengraphDescription || description ? <meta property="og:description" content={opengraphDescription || description} /> : null}
-      {canonical ? <meta property="og:url" content={canonical} /> : null}
-      {opengraphImage ? <meta property="og:image" content={opengraphImage} /> : null}
+      {resolvedCanonical ? <meta property="og:url" content={resolvedCanonical} /> : null}
+      {resolvedImageUrl ? <meta property="og:image" content={resolvedImageUrl} /> : null}
+      {resolvedImageUrl?.startsWith("https://") ? <meta property="og:image:secure_url" content={resolvedImageUrl} /> : null}
+      {imageType ? <meta property="og:image:type" content={imageType} /> : null}
+      {image?.width ? <meta property="og:image:width" content={String(image.width)} /> : null}
+      {image?.height ? <meta property="og:image:height" content={String(image.height)} /> : null}
+      {resolvedImageUrl ? <meta property="og:image:alt" content={imageAlt} /> : null}
       <meta property="og:site_name" content={siteName} />
       <meta property="og:locale" content={languageCode} />
+      {allHreflangLinks.map((link) => <meta key={`og-locale-${link.hrefLang}`} property="og:locale:alternate" content={link.hrefLang} />)}
+      {opengraphType === "article" && opengraphPublishedTime ? <meta property="article:published_time" content={opengraphPublishedTime} /> : null}
+      {opengraphType === "article" && opengraphModifiedTime ? <meta property="article:modified_time" content={opengraphModifiedTime} /> : null}
+      {opengraphType === "article" && opengraphAuthor ? <meta property="article:author" content={opengraphAuthor} /> : null}
+      {opengraphType === "article" && opengraphPublisher ? <meta property="article:publisher" content={opengraphPublisher} /> : null}
+      {opengraphType === "article" && articleSection ? <meta property="article:section" content={articleSection} /> : null}
+      {opengraphType === "article" ? articleTags.map((tag) => <meta key={tag} property="article:tag" content={tag} />) : null}
 
       {/* Twitter */}
-      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:card" content={resolvedImageUrl ? "summary_large_image" : "summary"} />
       {twitterHandle ? <meta name="twitter:site" content={twitterHandle} /> : null}
+      {twitterCreator ? <meta name="twitter:creator" content={twitterCreator} /> : null}
       <meta name="twitter:title" content={twitterTitle || title} />
       {twitterDescription || description ? <meta name="twitter:description" content={twitterDescription || description} /> : null}
-      {opengraphImage ? <meta name="twitter:image" content={opengraphImage} /> : null}
+      {resolvedImageUrl ? <meta name="twitter:image" content={resolvedImageUrl} /> : null}
+      {resolvedImageUrl ? <meta name="twitter:image:alt" content={imageAlt} /> : null}
 
-      {canonical ? <link rel="canonical" href={canonical} /> : null}
+      {resolvedCanonical ? <link rel="canonical" href={resolvedCanonical} /> : null}
 
       {/* hreflang alternates + x-default fallback (current page + all translations). */}
       {allHreflangLinks.map((link) => (
@@ -185,7 +258,22 @@ export function Seo({
       {xDefaultHref ? <link rel="alternate" hrefLang="x-default" href={xDefaultHref} /> : null}
 
       {breadcrumbJsonLd ? <script type="application/ld+json">{JSON.stringify(breadcrumbJsonLd)}</script> : null}
-      {pageJsonLd ? <script type="application/ld+json">{JSON.stringify(pageJsonLd)}</script> : null}
+      <script type="application/ld+json">{JSON.stringify(pageJsonLd)}</script>
     </Helmet>
   );
+}
+
+function resolveAbsoluteUrl(value?: string): string | undefined {
+  if (!value || typeof window === "undefined") return value;
+  try {
+    return new URL(value, window.location.origin).href;
+  } catch {
+    return value;
+  }
+}
+
+function imageTypeFromUrl(value?: string): string | undefined {
+  const extension = value?.match(/\.(avif|gif|jpe?g|png|webp)(?:[?#]|$)/i)?.[1]?.toLowerCase();
+  if (!extension) return undefined;
+  return extension === "jpg" ? "image/jpeg" : `image/${extension}`;
 }

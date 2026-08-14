@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { FileText, FolderTree, LayoutTemplate, Package, Search, Tags } from "lucide-react";
+import { Building2, FileText, FolderTree, LayoutTemplate, MessageSquare, Package, Search, Tags, UserRound } from "lucide-react";
+import { useT } from "../locale";
+import {
+  groupSearchResults,
+  type SearchResultGroup,
+  type SearchResultItem,
+} from "./searchResults";
 
-export type SearchResultItem = {
-  type: "product" | "post" | "page" | "category" | "tag";
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-};
+export type { SearchResultItem } from "./searchResults";
 
-// Small mock search index — stands in for a real product/post search endpoint so the
+// Small mock search index — stands in for a real storefront search endpoint so the
 // header's search inputs have something to demo. Kept local to the header (rather than
 // pulled from an app's own mock catalog) since `packages/ui` is shared across apps and
 // shouldn't reach into any single app's page-level mock data.
@@ -67,11 +67,14 @@ export type SearchAutocompleteProps = {
 
 export function SearchAutocomplete({
   className = "",
-  placeholder = "Search products, categories, tags...",
+  placeholder,
   fullWidth = false,
   onNavigate,
   search,
 }: SearchAutocompleteProps) {
+  const t = useT();
+  const resultsId = useId();
+  const resolvedPlaceholder = placeholder || t("search.placeholder");
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<SearchResultItem[]>([]);
@@ -109,12 +112,12 @@ export function SearchAutocomplete({
       setError("");
       search(query.trim())
         .then((results) => {
-          if (!controller.signal.aborted) setRemoteResults(results.slice(0, 6));
+          if (!controller.signal.aborted) setRemoteResults(results);
         })
         .catch((searchError: unknown) => {
           if (!controller.signal.aborted) {
             setRemoteResults([]);
-            setError(searchError instanceof Error ? searchError.message : "Search is unavailable");
+            setError(searchError instanceof Error ? searchError.message : t("search.unavailable"));
           }
         })
         .finally(() => {
@@ -125,71 +128,79 @@ export function SearchAutocomplete({
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [query, search]);
+  }, [query, search, t]);
 
   const results = search ? remoteResults : matchResults(query);
   const isOpen = isFocused && query.trim().length > 0;
 
   return (
-    <div ref={containerRef} className={`funky-search-autocomplete relative ${fullWidth ? "w-full" : ""} ${className}`}>
+    <div ref={containerRef} className={`sf-search funky-search-autocomplete relative ${fullWidth ? "w-full" : ""} ${className}`}>
       <label className="relative block">
-        <span className="sr-only">{placeholder}</span>
+        <span className="sr-only">{resolvedPlaceholder}</span>
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" aria-hidden="true" />
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => setIsFocused(true)}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           role="combobox"
           aria-expanded={isOpen}
-          aria-controls="header-search-results"
+          aria-controls={resultsId}
           aria-autocomplete="list"
           className="w-full rounded-2xl border border-zinc-200 bg-zinc-100/70 py-2.5 pl-11 pr-4 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-400 dark:focus:bg-zinc-900 dark:focus:ring-brand-400"
         />
       </label>
 
       {isOpen ? (
-        <ul
-          id="header-search-results"
+        <div
+          id={resultsId}
           role="listbox"
-          aria-label="Search results"
+          aria-label={t("search.results")}
           className="absolute inset-x-0 z-50 mt-2 grid gap-0.5 rounded-2xl border border-zinc-200/80 bg-white p-1.5 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900"
         >
           {isLoading ? (
-            <li className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">Searching WordPress…</li>
+            <div role="status" className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{t("search.loading")}</div>
           ) : error ? (
-            <li role="alert" className="px-3 py-4 text-center text-sm text-red-600 dark:text-red-400">{error}</li>
+            <div role="alert" className="px-3 py-4 text-center text-sm text-red-600 dark:text-red-400">{error}</div>
           ) : results.length ? (
-            results.map((item) => (
-              <li key={`${item.type}-${item.id}`}>
-                <Link
-                  to={item.href}
-                  role="option"
-                  onClick={() => {
-                    setQuery("");
-                    setIsFocused(false);
-                    onNavigate?.();
-                  }}
-                  className="flex items-center gap-3 rounded-xl px-2.5 py-2 text-left no-underline transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
-                >
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-200 text-zinc-400 dark:from-zinc-800 dark:to-zinc-900 dark:text-zinc-500">
-                    <SearchResultIcon type={item.type} />
-                  </span>
-                  <span className="grid min-w-0 flex-1 gap-0.5">
-                    <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</span>
-                    <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{item.subtitle}</span>
-                  </span>
-                  <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                    {searchResultTypeLabel(item.type)}
-                  </span>
-                </Link>
-              </li>
+            groupSearchResults(results).map(({ group, items }) => (
+              <div key={group} role="group" aria-label={searchResultGroupLabel(group, t)} className="grid gap-0.5">
+                <div className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500" aria-hidden="true">
+                  {searchResultGroupLabel(group, t)}
+                </div>
+                {items.map((item) => (
+                  <Link
+                    key={`${item.type}-${item.id}`}
+                    to={item.href}
+                    role="option"
+                    onClick={() => {
+                      setQuery("");
+                      setIsFocused(false);
+                      onNavigate?.();
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-2.5 py-2 text-left no-underline transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
+                  >
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-200 text-zinc-400 dark:from-zinc-800 dark:to-zinc-900 dark:text-zinc-500">
+                      <SearchResultIcon type={item.type} />
+                    </span>
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</span>
+                      <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{item.subtitle}</span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                      {searchResultTypeLabel(item.type, t)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             ))
           ) : (
-            <li className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">No results for &ldquo;{query.trim()}&rdquo;</li>
+            <div role="status" className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              {t("search.no_results", { query: query.trim() })}
+            </div>
           )}
-        </ul>
+        </div>
       ) : null}
     </div>
   );
@@ -200,14 +211,24 @@ function SearchResultIcon({ type }: { type: SearchResultItem["type"] }) {
     ? Package
     : type === "page"
       ? LayoutTemplate
-      : type === "category"
+      : type === "product_brand"
+        ? Building2
+        : type === "author" || type === "community_author"
+          ? UserRound
+          : type === "community_post"
+            ? MessageSquare
+            : type.endsWith("_category")
         ? FolderTree
-        : type === "tag"
+        : type.endsWith("_tag")
           ? Tags
           : FileText;
   return <Icon className="h-4 w-4" aria-hidden="true" />;
 }
 
-function searchResultTypeLabel(type: SearchResultItem["type"]): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+function searchResultTypeLabel(type: SearchResultItem["type"], t: (key: string) => string): string {
+  return t(`search.type.${type}`);
+}
+
+function searchResultGroupLabel(group: SearchResultGroup, t: (key: string) => string): string {
+  return t(`search.group.${group}`);
 }

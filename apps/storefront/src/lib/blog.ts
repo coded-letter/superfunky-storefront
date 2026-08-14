@@ -1,11 +1,21 @@
 import type { PostCardData } from "@funky/ui";
-import { graphqlRequest } from "./graphqlClient";
+import {
+  graphqlRequest,
+  STOREFRONT_BACKEND_PROFILE,
+  type GraphqlResponse,
+} from "@funky/sdk";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
+import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility";
 import {
   BLOG_POST_CARD_FIELDS,
   mapBlogPost,
   type RawBlogPost,
   type RawBlogTerm,
 } from "./postArchives";
+import {
+  createCoreBlogQuery,
+  shouldPreferCoreGraphqlQueries,
+} from "./profileGraphqlCompatibility";
 
 export type CmsBlogTerm = {
   id: string;
@@ -72,6 +82,13 @@ type BlogDataResult = {
         } | null;
       } | null;
     }[];
+  } | null;
+};
+
+type BlogAuthorDirectoryResult = {
+  posts: {
+    nodes: RawBlogPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
   } | null;
 };
 
@@ -142,12 +159,45 @@ const BLOG_DATA_QUERY = /* GraphQL */ `
   }
 `;
 
+const BLOG_AUTHOR_DIRECTORY_QUERY = /* GraphQL */ `
+  query StorefrontBlogAuthorDirectory($language: LanguageCodeFilterEnum!, $after: String) {
+    posts(first: 100, after: $after, where: { language: $language }) {
+      nodes {
+        id
+        author {
+          node {
+            id
+            databaseId
+            name
+            slug
+            uri
+            description
+            avatar(size: 192) {
+              url
+            }
+          }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
 export async function getBlogData(languageCode: string, backendLanguageCode: string): Promise<CmsBlogData> {
-  const { data, errors } = await graphqlRequest<BlogDataResult>(BLOG_DATA_QUERY, { language: backendLanguageCode });
+  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCoreBlogQuery(BLOG_DATA_QUERY)
+    : BLOG_DATA_QUERY;
+  const { data, errors } = await requestGraphqlWithCompatibility<BlogDataResult>(
+    graphqlRequest,
+    query,
+    { language: backendLanguageCode },
+    BLOG_DATA_COMPATIBILITY_RULES,
+  );
 
   if (errors?.length) {
     throw new Error(errors.map(({ message }) => message).join("; "));
   }
+
   if (!data) {
     throw new Error("The blog data query returned no data");
   }
@@ -161,7 +211,14 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
     comments:
       data.comments?.nodes.flatMap((comment) => {
         const post = comment.commentedOn?.node;
-        if (!post?.title || !post.uri || post.language?.code?.toLowerCase() !== languageCode.toLowerCase()) return [];
+        if (
+          !post?.title
+          || !post.uri
+          || (
+            post.language?.code
+            && post.language.code.toLowerCase() !== languageCode.toLowerCase()
+          )
+        ) return [];
         return [{
           id: comment.id,
           author: comment.author?.node?.name?.trim() || "Anonymous",
@@ -174,6 +231,36 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
       }).slice(0, 4) || [],
     hasMorePosts: data.posts?.pageInfo.hasNextPage || false,
   };
+}
+
+export async function getBlogAuthorDirectory(languageCode: string): Promise<CmsBlogAuthor[]> {
+  const posts: RawBlogPost[] = [];
+  let after: string | null = null;
+
+  do {
+    const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+      ? createCoreBlogQuery(BLOG_AUTHOR_DIRECTORY_QUERY)
+      : BLOG_AUTHOR_DIRECTORY_QUERY;
+    const response: GraphqlResponse<BlogAuthorDirectoryResult> = await requestGraphqlWithCompatibility<BlogAuthorDirectoryResult>(
+      graphqlRequest,
+      query,
+      { language: languageCode, after },
+      BLOG_DATA_COMPATIBILITY_RULES,
+    );
+    const pageData: BlogAuthorDirectoryResult | null = response.data;
+    const errors = response.errors;
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    if (!pageData?.posts) throw new Error("The blog author directory query returned no data");
+
+    posts.push(...pageData.posts.nodes);
+    if (!pageData.posts.pageInfo.hasNextPage) break;
+    if (!pageData.posts.pageInfo.endCursor) {
+      throw new Error("The blog author directory query returned an incomplete pagination cursor");
+    }
+    after = pageData.posts.pageInfo.endCursor;
+  } while (after);
+
+  return mapAuthors(posts);
 }
 
 function mapListingTerms(terms: RawBlogListingTerm[] | undefined): CmsBlogTerm[] {

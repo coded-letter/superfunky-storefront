@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useSoundUX } from "@funky/ui";
+import type { HeadingLevel } from "../lib/headingLevels";
 
 export type SliderWidth = "full" | "two-thirds" | "one-third";
 
@@ -113,6 +114,8 @@ export type SliderMockProps<TItem> = {
    * row) is hidden along with it; use `navigation="dots"` or `"none"` for those cases.
    * Defaults to `true` (shown), matching every existing slider usage. */
   showHeader?: boolean;
+  /** Semantic level for the slider's own section title. Defaults to h3. */
+  headingLevel?: HeadingLevel;
   /** Wrap previous/next and autoplay at the ends. Defaults to true. */
   loop?: boolean;
 };
@@ -141,8 +144,10 @@ export function SliderMock<TItem>({
   fullBleed = false,
   height,
   showHeader = true,
+  headingLevel = "h3",
   loop = true,
 }: SliderMockProps<TItem>) {
+  const Heading = headingLevel;
   const isMobileSlider = useIsMobileSlider();
   const effectivePageSize = isMobileSlider ? 1 : pageSize;
   const pages = useMemo(() => chunkItems(items, effectivePageSize), [items, effectivePageSize]);
@@ -293,7 +298,7 @@ export function SliderMock<TItem>({
 
   return (
     <article
-      className={`funky-slider grid min-w-0 max-w-full gap-5 overflow-hidden ${widthClassName(width)}`}
+      className={`sf-slider funky-slider grid min-w-0 gap-5 ${fullBleed ? "max-w-none overflow-visible" : "max-w-full overflow-hidden"} ${widthClassName(width)}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onFocus={() => setIsFocused(true)}
@@ -304,7 +309,7 @@ export function SliderMock<TItem>({
       {showHeader ? (
         <header className="flex min-h-[3.75rem] flex-wrap items-start justify-between gap-4">
           <div className="grid min-w-0 flex-1 gap-1 pr-2">
-            <h3 className="m-0 truncate font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+            <Heading className="m-0 truncate font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</Heading>
             <p className="m-0 truncate text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{subtitle}</p>
           </div>
           {pages.length > 1 && (navigation === "arrows" || navigation === "both") ? (
@@ -345,7 +350,9 @@ export function SliderMock<TItem>({
           onPointerCancel={onPointerCancel}
           onPointerLeave={onPointerLeave}
           onClickCapture={onClickCapture}
-          className={`-mx-1 flex overflow-x-auto px-1 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+          className={`flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+            fullBleed ? "" : "-mx-1 px-1 py-2"
+          } ${
             isDragging ? "cursor-grabbing select-none" : "snap-x snap-mandatory cursor-grab scroll-smooth"
           }`}
           style={{
@@ -355,8 +362,8 @@ export function SliderMock<TItem>({
           }}
         >
           {pages.map((page, pageIndex) => (
-            <div key={pageIndex} className={`min-w-0 w-full shrink-0 snap-start snap-always ${height ? "h-full" : ""}`}>
-              <div className={`grid min-w-0 ${gap} ${gridClassName} ${height ? "h-full" : ""}`}>
+            <div key={pageIndex} className="min-w-0 w-full shrink-0 self-stretch snap-start snap-always">
+              <div className={`grid h-full min-w-0 ${gap} ${gridClassName}`}>
                 {page.map((item, itemIndex) =>
                   renderItem(item, pageIndex * effectivePageSize + itemIndex, {
                     isPriority: Math.abs(pageIndex - activePage) <= 1,

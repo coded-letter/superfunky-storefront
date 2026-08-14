@@ -1,102 +1,89 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect } from "react";
 import { useLayoutPreferences } from "@funky/ui";
-import { authStore } from "./auth";
-import { loadLayoutPreferences, saveLayoutPreferences } from "./account";
-
-const DEBOUNCE_MS = 2000;
+import { mapLayoutToHiddenFooterKeys, type StorefrontLayoutConfiguration } from "./navigation";
 
 type PrefsContext = ReturnType<typeof useLayoutPreferences>;
 
-/** Calls every set* setter from useLayoutPreferences() for each key present in
- *  the saved snapshot. Unknown or invalid keys are silently skipped. */
-function applySnapshot(prefs: PrefsContext, snapshot: Record<string, unknown>) {
-  if (typeof snapshot.showAnnouncementBar === "boolean") prefs.setShowAnnouncementBar(snapshot.showAnnouncementBar);
-  if (typeof snapshot.announcementBarScrollEffect === "boolean") prefs.setAnnouncementBarScrollEffect(snapshot.announcementBarScrollEffect);
-  if (typeof snapshot.headerSticky === "boolean") prefs.setHeaderSticky(snapshot.headerSticky);
-  if (typeof snapshot.headerSearchVariant === "string") prefs.setHeaderSearchVariant(snapshot.headerSearchVariant as never);
-  if (typeof snapshot.headerLogoVariant === "string") prefs.setHeaderLogoVariant(snapshot.headerLogoVariant as never);
-  if (typeof snapshot.showHeaderLogo === "boolean") prefs.setShowHeaderLogo(snapshot.showHeaderLogo);
-  if (typeof snapshot.showHeaderSearchIcon === "boolean") prefs.setShowHeaderSearchIcon(snapshot.showHeaderSearchIcon);
-  if (typeof snapshot.showHeaderLanguageSwitcher === "boolean") prefs.setShowHeaderLanguageSwitcher(snapshot.showHeaderLanguageSwitcher);
-  if (typeof snapshot.showHeaderCurrencySwitcher === "boolean") prefs.setShowHeaderCurrencySwitcher(snapshot.showHeaderCurrencySwitcher);
-  if (typeof snapshot.showHeaderDarkModeToggle === "boolean") prefs.setShowHeaderDarkModeToggle(snapshot.showHeaderDarkModeToggle);
-  if (typeof snapshot.showHeaderAccountLink === "boolean") prefs.setShowHeaderAccountLink(snapshot.showHeaderAccountLink);
-  if (typeof snapshot.showHeaderReadingListLink === "boolean") prefs.setShowHeaderReadingListLink(snapshot.showHeaderReadingListLink);
-  if (typeof snapshot.showHeaderWishlistLink === "boolean") prefs.setShowHeaderWishlistLink(snapshot.showHeaderWishlistLink);
-  if (typeof snapshot.showHeaderCartIcon === "boolean") prefs.setShowHeaderCartIcon(snapshot.showHeaderCartIcon);
-  if (typeof snapshot.cartTriggerVariant === "string") prefs.setCartTriggerVariant(snapshot.cartTriggerVariant as never);
-  if (typeof snapshot.showCartDrawerPromotedProduct === "boolean") prefs.setShowCartDrawerPromotedProduct(snapshot.showCartDrawerPromotedProduct);
-  if (typeof snapshot.showFooter === "boolean") prefs.setShowFooter(snapshot.showFooter);
-  if (typeof snapshot.footerColumnsLayout === "string") prefs.setFooterColumnsLayout(snapshot.footerColumnsLayout as never);
-  if (typeof snapshot.footerNewsletterLayout === "string") prefs.setFooterNewsletterLayout(snapshot.footerNewsletterLayout as never);
-  if (typeof snapshot.showFooterNewsletter === "boolean") prefs.setShowFooterNewsletter(snapshot.showFooterNewsletter);
-  if (typeof snapshot.footerAssistantLayout === "string") prefs.setFooterAssistantLayout(snapshot.footerAssistantLayout as never);
-  if (typeof snapshot.footerLogoVariant === "string") prefs.setFooterLogoVariant(snapshot.footerLogoVariant as never);
-  if (typeof snapshot.footerBottomBarLayout === "string") prefs.setFooterBottomBarLayout(snapshot.footerBottomBarLayout as never);
-  if (typeof snapshot.footerExtraWrapperLayout === "string") prefs.setFooterExtraWrapperLayout(snapshot.footerExtraWrapperLayout as never);
-  if (typeof snapshot.showFooterLogo === "boolean") prefs.setShowFooterLogo(snapshot.showFooterLogo);
-  if (typeof snapshot.showFooterExtraWrapper === "boolean") prefs.setShowFooterExtraWrapper(snapshot.showFooterExtraWrapper);
-  if (typeof snapshot.showFooterSpotifyPlayer === "boolean") prefs.setShowFooterSpotifyPlayer(snapshot.showFooterSpotifyPlayer);
-  if (typeof snapshot.showFooterAssistantFrame === "boolean") prefs.setShowFooterAssistantFrame(snapshot.showFooterAssistantFrame);
-  if (typeof snapshot.showFooterPaymentMethods === "boolean") prefs.setShowFooterPaymentMethods(snapshot.showFooterPaymentMethods);
-  if (typeof snapshot.showFooterSocialLinks === "boolean") prefs.setShowFooterSocialLinks(snapshot.showFooterSocialLinks);
-  if (typeof snapshot.showFooterCopyright === "boolean") prefs.setShowFooterCopyright(snapshot.showFooterCopyright);
-  if (typeof snapshot.themeMaxWidthPx === "number") prefs.setThemeMaxWidthPx(snapshot.themeMaxWidthPx);
-  if (typeof snapshot.themeRadiusPx === "number") prefs.setThemeRadiusPx(snapshot.themeRadiusPx);
-  if (typeof snapshot.showBreadcrumbs === "boolean") prefs.setShowBreadcrumbs(snapshot.showBreadcrumbs);
-  if (typeof snapshot.showNewsletterPopup === "boolean") prefs.setShowNewsletterPopup(snapshot.showNewsletterPopup);
-  if (typeof snapshot.newsletterPopupVariant === "string") prefs.setNewsletterPopupVariant(snapshot.newsletterPopupVariant as never);
-  if (typeof snapshot.newsletterPopupCooldownDays === "number") prefs.setNewsletterPopupCooldownDays(snapshot.newsletterPopupCooldownDays);
-  if (typeof snapshot.brandPalette === "string") prefs.setBrandPalette(snapshot.brandPalette as never);
-  if (typeof snapshot.brandGradientStyle === "string") prefs.setBrandGradientStyle(snapshot.brandGradientStyle as never);
-  if (typeof snapshot.checkoutStoreMode === "string") prefs.setCheckoutStoreMode(snapshot.checkoutStoreMode as never);
-  if (typeof snapshot.checkoutCouponPosition === "string") prefs.setCheckoutCouponPosition(snapshot.checkoutCouponPosition as never);
-  if (typeof snapshot.checkoutPaymentPosition === "string") prefs.setCheckoutPaymentPosition(snapshot.checkoutPaymentPosition as never);
-  if (typeof snapshot.checkoutSummaryPosition === "string") prefs.setCheckoutSummaryPosition(snapshot.checkoutSummaryPosition as never);
-  if (typeof snapshot.checkoutHideOptionalBillingFields === "boolean") prefs.setCheckoutHideOptionalBillingFields(snapshot.checkoutHideOptionalBillingFields);
-  if (typeof snapshot.checkoutHideOptionalShippingFields === "boolean") prefs.setCheckoutHideOptionalShippingFields(snapshot.checkoutHideOptionalShippingFields);
-  if (typeof snapshot.checkoutShowOrderNotes === "boolean") prefs.setCheckoutShowOrderNotes(snapshot.checkoutShowOrderNotes);
-  if (typeof snapshot.checkoutShowTerms === "boolean") prefs.setCheckoutShowTerms(snapshot.checkoutShowTerms);
-  if (typeof snapshot.checkoutShowPrivacy === "boolean") prefs.setCheckoutShowPrivacy(snapshot.checkoutShowPrivacy);
+/** Calls every relevant set* setter from `useLayoutPreferences()` for a normalized
+ *  backend `layout` config, plus derives the two hidden-footer-key arrays from the
+ *  per-provider `showFooterPayment*`/`showFooterSocial*` booleans. This is the sole
+ *  source of truth for the shared layout context: one-directional (backend → UI),
+ *  no user-meta persistence, no debounced writes back to the backend. */
+export function applyLayoutConfiguration(prefs: PrefsContext, layout: StorefrontLayoutConfiguration) {
+  prefs.setShowAnnouncementBar(layout.showAnnouncementBar);
+  prefs.setAnnouncementBarScrollEffect(layout.announcementBarScrollEffect);
+  prefs.setHeaderSticky(layout.headerSticky);
+  prefs.setHeaderSearchVariant(layout.headerSearchVariant);
+  prefs.setHeaderLogoVariant(layout.headerLogoVariant);
+  prefs.setShowHeaderLogo(layout.showHeaderLogo);
+  prefs.setShowHeaderSearchIcon(layout.showHeaderSearchIcon);
+  prefs.setShowHeaderLanguageSwitcher(layout.showHeaderLanguageSwitcher);
+  prefs.setShowHeaderCurrencySwitcher(layout.showHeaderCurrencySwitcher);
+  prefs.setShowHeaderDarkModeToggle(layout.showHeaderDarkModeToggle);
+  prefs.setShowHeaderAccountLink(layout.showHeaderAccountLink);
+  prefs.setShowHeaderReadingListLink(layout.showHeaderReadingListLink);
+  prefs.setShowHeaderWishlistLink(layout.showHeaderWishlistLink);
+  prefs.setShowHeaderCartIcon(layout.showHeaderCartIcon);
+  prefs.setCartTriggerVariant(layout.cartTriggerVariant);
+  prefs.setShowCartDrawerPromotedProduct(layout.showCartDrawerPromotedProduct);
+  prefs.setShowFooter(layout.showFooter);
+  prefs.setFooterColumnsLayout(layout.footerColumnsLayout);
+  prefs.setFooterNewsletterLayout(layout.footerNewsletterLayout);
+  prefs.setShowFooterNewsletter(layout.showFooterNewsletter);
+  prefs.setFooterAssistantLayout(layout.footerAssistantLayout);
+  prefs.setFooterLogoVariant(layout.footerLogoVariant);
+  prefs.setFooterBottomBarLayout(layout.footerBottomBarLayout);
+  prefs.setFooterExtraWrapperLayout(layout.footerExtraWrapperLayout);
+  prefs.setShowFooterLogo(layout.showFooterLogo);
+  prefs.setShowFooterExtraWrapper(layout.showFooterExtraWrapper);
+  prefs.setShowFooterSpotifyPlayer(layout.showFooterSpotifyPlayer);
+  prefs.setShowFooterAssistantFrame(layout.showFooterAssistantFrame);
+  prefs.setShowFooterPaymentMethods(layout.showFooterPaymentMethods);
+  prefs.setShowFooterSocialLinks(layout.showFooterSocialLinks);
+  prefs.setShowFooterCopyright(layout.showFooterCopyright);
+  prefs.setThemeMaxWidthPx(layout.themeMaxWidthPx);
+  prefs.setThemeRadiusPx(layout.themeRadiusPx);
+  prefs.setShowBreadcrumbs(layout.showBreadcrumbs);
+  prefs.setShowNewsletterPopup(layout.showNewsletterPopup);
+  prefs.setNewsletterPopupVariant(layout.newsletterPopupVariant);
+  prefs.setNewsletterPopupCooldownDays(layout.newsletterPopupCooldownDays);
+  prefs.setBrandPalette(layout.brandPalette);
+  prefs.setBrandGradientStyle(layout.brandGradientStyle);
+  prefs.setProductPageLayout(layout.productPageLayout);
+  prefs.setCheckoutStoreMode(layout.checkoutStoreMode);
+  prefs.setCheckoutCouponPosition(layout.checkoutCouponPosition);
+  prefs.setCheckoutPaymentPosition(layout.checkoutPaymentPosition);
+  prefs.setCheckoutSummaryPosition(layout.checkoutSummaryPosition);
+  prefs.setCheckoutHideOptionalBillingFields(layout.checkoutHideOptionalBillingFields);
+  prefs.setCheckoutHideOptionalShippingFields(layout.checkoutHideOptionalShippingFields);
+  prefs.setCheckoutShowOrderNotes(layout.checkoutShowOrderNotes);
+  prefs.setCheckoutShowTerms(layout.checkoutShowTerms);
+  prefs.setCheckoutShowPrivacy(layout.checkoutShowPrivacy);
+  prefs.setCommunityProfileHeaderLayout(layout.communityProfileHeaderLayout);
+  prefs.setAuthorProfileHeaderLayout(layout.authorProfileHeaderLayout);
+  prefs.setProductArchiveHeroLayout(layout.productArchiveHeroLayout);
+  prefs.setPostArchiveHeroLayout(layout.postArchiveHeroLayout);
+  prefs.setPostTocLayout(layout.postTocLayout);
+  prefs.setPostSharePosition(layout.postSharePosition);
+  prefs.setPostAuthorLayout(layout.postAuthorLayout);
+  prefs.setDiscussionLayout(layout.discussionLayout);
+
+  const { hiddenFooterPaymentMethodKeys, hiddenFooterSocialLinkKeys } = mapLayoutToHiddenFooterKeys(layout);
+  prefs.setHiddenFooterPaymentMethodKeys(hiddenFooterPaymentMethodKeys);
+  prefs.setHiddenFooterSocialLinkKeys(hiddenFooterSocialLinkKeys);
 }
 
-/** Syncs Layout Studio preferences to WP user meta when the user is logged in.
- *  - Loads saved preferences on mount (if auth token present) and restores them.
- *  - Debounces saves (2 s) whenever preferences change so rapid slider moves do
- *    not flood the backend with requests. */
-export function useLayoutPreferencesSync() {
+/** Hydrates/reconciles the shared `LayoutPreferencesContext` from the canonical
+ *  backend storefront `layout` configuration. Runs (via `useLayoutEffect`, so it
+ *  applies before the browser paints) whenever the navigation data's `layout` object
+ *  changes — on initial load and again if it is later revalidated with a different
+ *  value — so the storefront's live chrome always reflects backend Control Center
+ *  settings deterministically, with no client-side persistence or editing. */
+export function useLayoutPreferencesFromBackendConfig(layout: StorefrontLayoutConfiguration | undefined) {
   const prefs = useLayoutPreferences();
-  const loadedRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Load on mount only if logged in.
-  useEffect(() => {
-    if (loadedRef.current || !authStore.load()?.authToken) return;
-    loadedRef.current = true;
-    loadLayoutPreferences().then((snapshot) => {
-      if (snapshot) applySnapshot(prefs, snapshot);
-    });
+  useLayoutEffect(() => {
+    if (!layout) return;
+    applyLayoutConfiguration(prefs, layout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Compute a serialized key of all non-function preference values for change detection.
-  const stateKey = JSON.stringify(
-    Object.fromEntries(Object.entries(prefs).filter(([, v]) => typeof v !== "function")),
-  );
-
-  // Debounce saves whenever stateKey changes (skip before initial load completes).
-  useEffect(() => {
-    if (!loadedRef.current || !authStore.load()?.authToken) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const snapshot = Object.fromEntries(
-        Object.entries(prefs).filter(([, v]) => typeof v !== "function"),
-      );
-      saveLayoutPreferences(snapshot);
-    }, DEBOUNCE_MS);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateKey]);
+  }, [layout]);
 }

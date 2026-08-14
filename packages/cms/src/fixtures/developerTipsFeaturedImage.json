@@ -1,0 +1,8 @@
+{
+  "featuredImage": null,
+  "seo": {
+    "schema": {
+      "raw": "{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Article\",\"headline\":\"Developer tips\",\"image\":{\"@id\":\"https://v3.superfunky.pro/developer-tips/#primaryimage\"}},{\"@type\":\"ImageObject\",\"@id\":\"https://v3.superfunky.pro/developer-tips/#primaryimage\",\"url\":\"https://v3.superfunky.pro/wp-content/uploads/2025/02/david-pupaza-heNwUmEtZzo-unsplash-e1785794485108.jpg\",\"contentUrl\":\"https://v3.superfunky.pro/wp-content/uploads/2025/02/david-pupaza-heNwUmEtZzo-unsplash-e1785794485108.jpg\",\"width\":1192,\"height\":784}]}"
+    }
+  }
+}

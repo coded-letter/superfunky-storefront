@@ -2,12 +2,17 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: "class",
-  content: ["./index.html", "./src/**/*.{ts,tsx}", "../../packages/ui/src/**/*.{ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+    "./.tailwind/cms-content.html",
+    "../../packages/ui/src/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["Sora", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["ui-sans-serif", "system-ui", "-apple-system", "BlinkMacSystemFont", "\"Segoe UI\"", "sans-serif"],
+        display: ["ui-rounded", "\"SF Pro Rounded\"", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
         brand: {
@@ -38,6 +43,15 @@ export default {
         "2xl": "var(--theme-radius)",
         "3xl": "calc(var(--theme-radius) * 1.5)",
         "4xl": "calc(var(--theme-radius) * 2)",
+        /* Pill-shaped controls (segmented switches, icon-toggle buttons, auth/account
+         * CTAs) still need to *look* fully rounded at the 16px default — but should
+         * flatten toward the theme's square/sharp end as `--theme-radius` approaches 0,
+         * same as every other themed surface. A multiplier this large always clips to a
+         * true pill once the base radius is more than a few px (browsers cap
+         * border-radius at 50% of the box's own size), while resolving to a hard square
+         * corner at exactly 0 — so it stays a "pill" at any non-zero setting without
+         * hard-coding an unthemed 9999px like `rounded-full` does. */
+        control: "calc(var(--theme-radius) * 3)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(135deg, rgb(var(--brand-gradient-from)) 0%, rgb(var(--brand-gradient-to)) 100%)",

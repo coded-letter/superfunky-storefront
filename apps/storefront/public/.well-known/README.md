@@ -13,7 +13,8 @@ The actual file content is NOT something this repo can generate — it's a signe
 blob downloaded from the Apple Developer "Merchant IDs" dashboard for a specific,
 verified domain, and must be served byte-for-byte unmodified at
 `/.well-known/apple-developer-merchantid-domain-association` with no build-time
-transformation (no HTML wrapper, no trailing newline changes). The checked-in file
-next to this README is an empty placeholder purely so the route/deploy path exists —
-replace its contents with the real downloaded file before enabling Apple Pay in
-production, and re-download it if the domain ever changes.
+transformation (no HTML wrapper, no trailing newline changes). Prefer pasting that
+complete document into the WordPress Control Center's Apple Pay domain-association
+field. A non-empty file next to this README is supported as a deployment fallback;
+the checked-in file is an empty placeholder. Re-download the document if the
+storefront domain changes.

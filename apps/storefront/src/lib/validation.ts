@@ -193,7 +193,7 @@ export function validateCheckoutForm(data: CheckoutFormInput): ValidationResult 
     { field: "address1", label: "Street address", min: 4, max: 100, required: requiresShipping },
     { field: "address2", label: "Address line 2", min: 0, max: 254 },
     { field: "city", label: "Town / city", min: 1, max: 85, required: requiresShipping },
-    { field: "state", label: "State / county", min: 0, max: 254 },
+    { field: "state", label: "State / county", min: 1, max: 254, required: requiresShipping },
     { field: "postcode", label: "Postcode / ZIP", min: 2, max: 12, required: requiresShipping },
     { field: "phone", label: "Phone", min: 7, max: 20, type: "phone", required: true },
     { field: "email", label: "Email", min: 6, max: 254, type: "email", required: true },

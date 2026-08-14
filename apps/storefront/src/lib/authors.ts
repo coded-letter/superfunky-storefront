@@ -1,6 +1,12 @@
 import type { PostCardData } from "@funky/ui";
 import { BLOG_POST_CARD_FIELDS, mapBlogPost, type RawBlogPost } from "./postArchives";
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import {
+  AUTHOR_ARCHIVE_COMPATIBILITY_RULE,
+  createCompatibleAuthorArchiveQuery,
+} from "./authorArchiveGraphqlCompatibility";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
+import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility";
 
 export type CmsAuthorArchive = {
   id: string;
@@ -10,6 +16,7 @@ export type CmsAuthorArchive = {
   name: string;
   bio: string;
   avatarUrl: string | null;
+  coverUrl: string | null;
   languageCode: string;
   posts: PostCardData[];
 };
@@ -23,6 +30,7 @@ type AuthorArchiveResult = {
     name: string | null;
     description: string | null;
     avatar: { url: string | null } | null;
+    communityCover: { url: string | null } | null;
   } | null;
   posts: { nodes: RawBlogPost[] } | null;
 };
@@ -43,6 +51,9 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
       avatar(size: 192) {
         url
       }
+      communityCover {
+        url
+      }
     }
     posts(first: 100, where: { authorName: $authorName, language: $language }) {
       ${BLOG_POST_CARD_FIELDS}
@@ -51,11 +62,19 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
 `;
 
 export async function getAuthorArchive(slug: string, languageCode: string): Promise<CmsAuthorArchive | null> {
-  const { data, errors } = await graphqlRequest<AuthorArchiveResult>(AUTHOR_ARCHIVE_QUERY, {
-    slug,
-    authorName: slug,
-    language: languageCode,
-  });
+  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCompatibleAuthorArchiveQuery(AUTHOR_ARCHIVE_QUERY)
+    : AUTHOR_ARCHIVE_QUERY;
+  const { data, errors } = await requestGraphqlWithCompatibility<AuthorArchiveResult>(
+    graphqlRequest,
+    query,
+    {
+      slug,
+      authorName: slug,
+      language: languageCode,
+    },
+    [AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
+  );
 
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   if (!data) throw new Error("The author archive query returned no data");
@@ -69,7 +88,13 @@ export async function getAuthorArchive(slug: string, languageCode: string): Prom
     name: data.user.name?.trim() || "Unknown author",
     bio: data.user.description?.trim() || "",
     avatarUrl: data.user.avatar?.url || null,
+    // Reuses the canonical `_community_cover_attachment_id` user meta (via the
+    // existing `communityCover` field) so authors and community members share one
+    // cover image — no separate journal-only cover field.
+    coverUrl: data.user.communityCover?.url || null,
     languageCode: languageCode.toLowerCase(),
-    posts: data.posts?.nodes.map(mapBlogPost) || [],
+    posts: data.posts?.nodes
+      .filter((post) => post.author?.node.slug === (data.user?.slug || slug))
+      .map(mapBlogPost) || [],
   };
 }

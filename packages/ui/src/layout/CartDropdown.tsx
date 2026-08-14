@@ -29,7 +29,7 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
         aria-modal="true"
         aria-label="Shopping cart"
         onClick={(event) => event.stopPropagation()}
-        className="funky-cart-dropdown absolute right-0 top-[calc(100%+0.75rem)] z-[80] w-[22rem] max-w-[90vw] origin-top-right rounded-2xl border border-zinc-200 bg-white p-4 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-950"
+        className="sf-cart-dropdown funky-cart-dropdown absolute right-0 top-[calc(100%+0.75rem)] z-[80] w-[22rem] max-w-[90vw] origin-top-right rounded-2xl border border-zinc-200 bg-white p-4 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="m-0 flex items-center gap-1.5 font-display text-sm font-bold text-zinc-900 dark:text-zinc-100">

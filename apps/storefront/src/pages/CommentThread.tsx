@@ -1,7 +1,24 @@
-import { useMemo, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Star } from "lucide-react";
 import { ViewSwitch } from "@funky/ui";
 import { primaryActionButtonClass, type ProductReview } from "./shared";
+import {
+  buildReviewTree,
+  isPendingReview,
+  isTopLevelReview,
+  mergeServerAndLocalReviews,
+  type ReviewNode,
+} from "../lib/commentThreads";
+import { authStore } from "../lib/auth";
+
+function commentIdentity() {
+  const user = authStore.load()?.user;
+  return {
+    author: user?.displayName || "",
+    email: user?.email || "",
+    authenticated: Boolean(user),
+  };
+}
 
 /**
  * Generic, reusable WordPress-style threaded comments system — shared by the product
@@ -17,26 +34,6 @@ import { primaryActionButtonClass, type ProductReview } from "./shared";
  * data can nest indefinitely — deeper replies just keep attaching to their true parent
  * but stop indenting further. We mirror that so very long threads stay readable. */
 export const MAX_REPLY_VISUAL_DEPTH = 4;
-
-export type ReviewNode = ProductReview & { replies: ReviewNode[] };
-
-/** Rebuilds the flat `parentId`-linked comment list WordPress's GraphQL API returns
- * into a nested tree, the same shape `wp_list_comments` walks natively. */
-export function buildReviewTree(reviews: ProductReview[]): ReviewNode[] {
-  const nodesById = new Map<string, ReviewNode>();
-  reviews.forEach((review) => nodesById.set(review.id, { ...review, replies: [] }));
-
-  const roots: ReviewNode[] = [];
-  nodesById.forEach((node) => {
-    const parent = node.parentId ? nodesById.get(node.parentId) : undefined;
-    if (parent) {
-      parent.replies.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  return roots;
-}
 
 export function StarRating({ rating }: { rating: number }) {
   return (
@@ -57,7 +54,7 @@ export function summarizeReviews(reviews: ProductReview[]) {
   const histogram: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   const ratedReviews = reviews.filter(
     (review): review is ProductReview & { rating: number } =>
-      !review.parentId && typeof review.rating === "number" && review.rating >= 1 && review.rating <= 5,
+      isTopLevelReview(review) && typeof review.rating === "number" && review.rating >= 1 && review.rating <= 5,
   );
   ratedReviews.forEach((review) => {
     histogram[Math.round(review.rating) as 1 | 2 | 3 | 4 | 5] += 1;
@@ -119,7 +116,70 @@ export function ReviewSummary({
   );
 }
 
-function ReviewCard({ review, isPending }: { review: ProductReview; isPending: boolean }) {
+/** Truncates long comment/review bodies to 5 lines by default (CSS `line-clamp-5`)
+ * with an accessible "Read more"/"Hide" toggle — shared by every comment/review
+ * surface in the app via `ReviewCard` below, so the behavior stays consistent
+ * everywhere WordPress comments or WooCommerce reviews are rendered. Short content
+ * that never actually overflows 5 lines renders as-is, with no toggle button. */
+function ClampedText({ text, className = "" }: { text: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  // A hidden, always-clamped probe mirrors the visible text so overflow can be
+  // measured independently of whether the real paragraph is currently expanded —
+  // avoids the visible element's own clamp toggling ever affecting the measurement.
+  const probeRef = useRef<HTMLParagraphElement>(null);
+  const contentId = useId();
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = probeRef.current;
+      if (!el) return;
+      setIsOverflowing(el.scrollHeight - el.clientHeight > 1);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [text]);
+
+  return (
+    <div className="relative grid gap-1.5">
+      <p
+        aria-hidden="true"
+        ref={probeRef}
+        className={`pointer-events-none invisible absolute inset-x-0 top-0 m-0 line-clamp-5 whitespace-pre-line text-sm leading-relaxed ${className}`.trim()}
+      >
+        {text}
+      </p>
+      <p
+        id={contentId}
+        className={`m-0 whitespace-pre-line text-sm leading-relaxed ${expanded ? "" : "line-clamp-5"} ${className}`.trim()}
+      >
+        {text}
+      </p>
+      {isOverflowing ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((previous) => !previous)}
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          className="justify-self-start text-xs font-semibold text-brand-600 underline-offset-2 hover:underline dark:text-brand-400"
+        >
+          {expanded ? "Hide" : "Read more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewCard({
+  review,
+  isPending,
+  showRating,
+}: {
+  review: ProductReview;
+  isPending: boolean;
+  showRating: boolean;
+}) {
   const initials = review.author
     .split(" ")
     .map((part) => part[0])
@@ -140,7 +200,7 @@ function ReviewCard({ review, isPending }: { review: ProductReview; isPending: b
           </span>
           <div className="grid">
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{review.author}</span>
-            {typeof review.rating === "number" ? <StarRating rating={review.rating} /> : null}
+            {showRating && typeof review.rating === "number" ? <StarRating rating={review.rating} /> : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -154,7 +214,7 @@ function ReviewCard({ review, isPending }: { review: ProductReview; isPending: b
           </span>
         </div>
       </div>
-      <p className="m-0 whitespace-pre-line text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{review.content}</p>
+      <ClampedText text={review.content} className="text-zinc-600 dark:text-zinc-300" />
     </div>
   );
 }
@@ -163,8 +223,9 @@ function ReviewCard({ review, isPending }: { review: ProductReview; isPending: b
  * reply is a plain WordPress comment) rendered directly under the review/reply it's
  * attached to, so a thread can grow deeper and deeper without leaving the list. */
 function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: string; content: string }) => Promise<void> }) {
-  const [author, setAuthor] = useState("");
-  const [email, setEmail] = useState("");
+  const [identity] = useState(commentIdentity);
+  const [author, setAuthor] = useState(identity.author);
+  const [email, setEmail] = useState(identity.email);
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -186,8 +247,10 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
 
     try {
       await onSubmit({ author: author.trim(), email: email.trim(), content: content.trim() });
-      setAuthor("");
-      setEmail("");
+      if (!identity.authenticated) {
+        setAuthor("");
+        setEmail("");
+      }
       setContent("");
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "The reply could not be submitted.");
@@ -251,30 +314,35 @@ function ReviewThread({
   review,
   depth,
   onReply,
+  showRatings,
 }: {
   review: ReviewNode;
   depth: number;
   onReply: (parent: ProductReview, reply: { author: string; email: string; content: string }) => Promise<void>;
+  showRatings: boolean;
 }) {
   const [isReplying, setIsReplying] = useState(false);
   const visualDepth = Math.min(depth, MAX_REPLY_VISUAL_DEPTH);
+  const canReply = !isPendingReview(review);
 
   return (
     <div
       className={visualDepth > 0 ? "border-l-2 border-zinc-100 pl-4 dark:border-zinc-800 sm:pl-5" : undefined}
       style={visualDepth > 0 ? { marginLeft: visualDepth * 16 } : undefined}
     >
-      <ReviewCard review={review} isPending={review.id.startsWith("pending-")} />
+      <ReviewCard review={review} isPending={isPendingReview(review)} showRating={showRatings} />
 
-      <button
-        type="button"
-        onClick={() => setIsReplying((previous) => !previous)}
-        className="mt-2 text-xs font-semibold text-brand-600 transition hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
-      >
-        {isReplying ? "Cancel" : "Reply"}
-      </button>
+      {canReply ? (
+        <button
+          type="button"
+          onClick={() => setIsReplying((previous) => !previous)}
+          className="mt-2 text-xs font-semibold text-brand-600 transition hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
+        >
+          {isReplying ? "Cancel" : "Reply"}
+        </button>
+      ) : null}
 
-      {isReplying ? (
+      {canReply && isReplying ? (
         <div className="mt-3">
           <ReplyForm
             onSubmit={async (reply) => {
@@ -288,7 +356,13 @@ function ReviewThread({
       {review.replies.length ? (
         <div className="mt-4 grid gap-4">
           {review.replies.map((reply) => (
-            <ReviewThread key={reply.id} review={reply} depth={depth + 1} onReply={onReply} />
+            <ReviewThread
+              key={reply.id}
+              review={reply}
+              depth={depth + 1}
+              onReply={onReply}
+              showRatings={showRatings}
+            />
           ))}
         </div>
       ) : null}
@@ -299,7 +373,7 @@ function ReviewThread({
 export function ReviewForm({
   onSubmit,
   formTitle = "Leave a review",
-  formNote = "Submissions are held for moderation as a standard WordPress comment and only appear once approved.",
+  formNote = "Submissions are held for moderation and only appear once approved.",
   showRatingField = true,
 }: {
   onSubmit: (review: { author: string; email: string; content: string; rating?: number }) => Promise<void>;
@@ -307,8 +381,9 @@ export function ReviewForm({
   formNote?: string;
   showRatingField?: boolean;
 }) {
-  const [author, setAuthor] = useState("");
-  const [email, setEmail] = useState("");
+  const [identity] = useState(commentIdentity);
+  const [author, setAuthor] = useState(identity.author);
+  const [email, setEmail] = useState(identity.email);
   const [content, setContent] = useState("");
   const [rating, setRating] = useState(5);
   const [hoveredRating, setHoveredRating] = useState<number | null>(null);
@@ -334,8 +409,10 @@ export function ReviewForm({
     try {
       await onSubmit({ author: author.trim(), email: email.trim(), content: content.trim(), ...(showRatingField ? { rating } : {}) });
       setShowSuccess(true);
-      setAuthor("");
-      setEmail("");
+      if (!identity.authenticated) {
+        setAuthor("");
+        setEmail("");
+      }
       setContent("");
       setRating(5);
       window.setTimeout(() => setShowSuccess(false), 4000);
@@ -455,6 +532,7 @@ const DISCUSSION_LAYOUT_OPTIONS: { value: CommentsDiscussionLayout; label: strin
  * ("Comments"), since both are ultimately just WordPress comment threads on a post. */
 export function CommentsSection({
   anchorId,
+  contentKey,
   heading,
   initialReviews,
   ratingHistogram,
@@ -473,11 +551,18 @@ export function CommentsSection({
    * a two-column layout with an independently scrollable feed instead of one long
    * stacked page. */
   showLayoutSwitch = true,
+  /** When provided, overrides the internal `discussionLayout` state and suppresses
+   * the local switch (regardless of `showLayoutSwitch`) — used by real storefront
+   * pages to render the backend's `discussionLayout` Control Center setting instead
+   * of a visitor-facing toggle. Omit to preserve the existing dev/docs behavior
+   * (e.g. the shortcode library's kitchen-sink preview). */
+  discussionLayout: discussionLayoutOverride,
   showRatingField = true,
   onSubmitReview,
   onSubmitReply,
 }: {
   anchorId: string;
+  contentKey: string;
   heading: string;
   initialReviews: ProductReview[];
   ratingHistogram?: Record<1 | 2 | 3 | 4 | 5, number>;
@@ -488,6 +573,7 @@ export function CommentsSection({
   variant?: "full" | "compact";
   maxVisibleCompact?: number;
   showLayoutSwitch?: boolean;
+  discussionLayout?: CommentsDiscussionLayout;
   showRatingField?: boolean;
   onSubmitReview?: (review: { author: string; email: string; content: string; rating?: number }) => Promise<ProductReview>;
   onSubmitReply?: (
@@ -495,17 +581,29 @@ export function CommentsSection({
     reply: { author: string; email: string; content: string },
   ) => Promise<ProductReview>;
 }) {
-  const [reviews, setReviews] = useState(initialReviews);
-  const [discussionLayout, setDiscussionLayout] = useState<CommentsDiscussionLayout>("stacked");
-  const topLevelReviewCount = useMemo(() => reviews.filter((review) => !review.parentId).length, [reviews]);
-  const totalReviewCount = totalCountOverride ?? topLevelReviewCount;
+  const [localState, setLocalState] = useState<{ contentKey: string; reviews: ProductReview[] }>({
+    contentKey,
+    reviews: [],
+  });
+  const [internalDiscussionLayout, setInternalDiscussionLayout] = useState<CommentsDiscussionLayout>("stacked");
+  const discussionLayout = discussionLayoutOverride ?? internalDiscussionLayout;
+  const localReviews = localState.contentKey === contentKey ? localState.reviews : [];
+  const reviews = useMemo(
+    () => mergeServerAndLocalReviews(initialReviews, localReviews),
+    [initialReviews, localReviews],
+  );
+  const totalReviewCount = totalCountOverride ?? reviews.length;
   const reviewTree = useMemo(() => buildReviewTree(reviews), [reviews]);
 
   const handleSubmit = async (review: { author: string; email: string; content: string; rating?: number }) => {
     const submitted = onSubmitReview
       ? await onSubmitReview(review)
       : { ...review, id: `pending-${Date.now()}`, date: new Date().toISOString() };
-    setReviews((previous) => [submitted, ...previous]);
+    const normalized = { ...submitted, parentId: null, parentDatabaseId: 0 };
+    setLocalState((previous) => ({
+      contentKey,
+      reviews: [normalized, ...(previous.contentKey === contentKey ? previous.reviews : [])],
+    }));
   };
 
   const handleReply = async (parent: ProductReview, reply: { author: string; email: string; content: string }) => {
@@ -517,13 +615,28 @@ export function CommentsSection({
           date: new Date().toISOString(),
           parentId: parent.id,
         };
-    setReviews((previous) => [...previous, submitted]);
+    const normalized = {
+      ...submitted,
+      parentId: submitted.parentId || parent.id,
+      parentDatabaseId: submitted.parentDatabaseId ?? parent.databaseId ?? null,
+      rating: undefined,
+    };
+    setLocalState((previous) => ({
+      contentKey,
+      reviews: [...(previous.contentKey === contentKey ? previous.reviews : []), normalized],
+    }));
   };
 
   const feed = (
     <div className="grid gap-5">
       {reviewTree.map((review) => (
-        <ReviewThread key={review.id} review={review} depth={0} onReply={handleReply} />
+        <ReviewThread
+          key={review.id}
+          review={review}
+          depth={0}
+          onReply={handleReply}
+          showRatings={showRatingField}
+        />
       ))}
     </div>
   );
@@ -542,16 +655,21 @@ export function CommentsSection({
       {variant === "compact" ? (
         <div className="grid gap-4">
           {reviewTree.slice(0, maxVisibleCompact).map((review) => (
-            <ReviewCard key={review.id} review={review} isPending={review.id.startsWith("pending-")} />
+            <ReviewCard
+              key={review.id}
+              review={review}
+              isPending={isPendingReview(review)}
+              showRating={showRatingField}
+            />
           ))}
         </div>
       ) : (
         <>
-          {showLayoutSwitch ? (
+          {showLayoutSwitch && discussionLayoutOverride === undefined ? (
             <ViewSwitch
               label="Discussion layout"
               value={discussionLayout}
-              onChange={setDiscussionLayout}
+              onChange={setInternalDiscussionLayout}
               options={DISCUSSION_LAYOUT_OPTIONS}
             />
           ) : null}

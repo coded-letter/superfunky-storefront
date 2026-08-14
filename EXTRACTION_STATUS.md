@@ -6,12 +6,17 @@ public repository.
 | Date | Module | Status |
 |---|---|---|
 | 2025-08-03 | Full storefront + UI library | ✅ Complete — 450 files published |
+| 2026-08-14 | Static-first storefront and package architecture | ✅ Release candidate extracted |
 
 ## What's Included
 
-- `apps/storefront/` — Complete React/Vite/TypeScript headless storefront (391 files)
-- `packages/ui/` — Shared React component library (59 files)
-- Root workspace config (pnpm workspaces)
+- `apps/storefront/` — Complete React/Vite/TypeScript headless storefront
+- `packages/sdk/` — Backend transport, environment, cache and React data hooks
+- `packages/cms/` — First extracted CMS normalization primitives
+- `packages/commerce/` — First extracted commerce normalization primitives
+- `packages/ui/` — Shared presentation and current application primitives
+- `packages/shared/` — Framework-independent schemas, validators and route contracts
+- Root workspace, test, build and deployment configuration
 
 ## Safety Verification
 
@@ -19,6 +24,7 @@ public repository.
 - ✅ `.env.example` contains only placeholder variables (no values)
 - ✅ No premium plugin source code
 - ✅ All code is MIT-licensed and free to use
+- ✅ Extraction safety, complete test suite and production build pass before publication
 
 ## Notes
 

@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "dependencies": {
+    "entities": "^6.0.1"
+  },
   "peerDependencies": {
     "lucide-react": "^1.27.0",
     "react": "^18.3.1",

@@ -1,17 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Columns2,
-  GalleryVertical,
-  Layers,
   Lock,
-  Minus,
   PenSquare,
   PlusCircle,
-  Rows3,
   Sparkles,
-  SquareUser,
   Trash2,
   Upload,
   UserCheck,
@@ -21,14 +15,16 @@ import {
   ListProductModal,
   PaginableProductGrid,
   PaginablePostGrid,
+  ProfileHeader,
+  ProfileStat,
   ResponsiveImage,
   SocialFeedGrid,
   UploadPostModal,
-  ViewSwitch,
   WriteArticleModal,
   avatarColorFor,
   useCurrency,
   useLanguage,
+  useLayoutPreferences,
   useToast,
   type ListProductInitialValues,
   type SocialPostCardData,
@@ -40,17 +36,27 @@ import {
   createCollaboratorPost,
   createCommunityPost,
   createMarketplaceProduct,
+  deleteCollaboratorPost,
+  followCommunityProfile,
+  getCommunityProfile,
+  getCommunityProfileConnection,
   getCollaboratorPostForEditing,
   getMarketplaceProductForEditing,
+  searchTranslationCandidateCommunityPosts,
   searchTranslationCandidatePosts,
-  toggleFollowUser,
+  unfollowCommunityProfile,
   updateCollaboratorPost,
   updateMarketplaceProduct,
+  type CommunityProfileConnection,
+  type CommunityProfileData,
 } from "../lib/community";
 import { useCommunityData } from "../state/communityData";
 import { useBlogData } from "../state/blogData";
 import { NotFoundMockupPage } from "./NotFoundMockupPage";
 import { useCreatorContent } from "../state/creatorContent";
+import { isBackendConfigured } from "@funky/sdk";
+import { communityHandlesMatch, resolvePublicCommunityMember } from "../lib/communityProfiles";
+import { resolveMarketplaceMutationPrice } from "../lib/marketplaceProductPricing";
 import {
   getCreatorArticles,
   getCreatorProducts,
@@ -58,17 +64,7 @@ import {
   getSocialUserByHandle,
 } from "./socialShared";
 
-type ProfileTab = "posts" | "shop" | "articles";
-type ProfileHeaderLayout = "card" | "cover-banner" | "compact-list" | "immersive" | "split" | "strip";
-
-const PROFILE_HEADER_LAYOUT_OPTIONS: { value: ProfileHeaderLayout; label: string; icon: typeof SquareUser }[] = [
-  { value: "card", label: "Gradient card", icon: SquareUser },
-  { value: "cover-banner", label: "Cover banner", icon: GalleryVertical },
-  { value: "compact-list", label: "Compact row", icon: Rows3 },
-  { value: "immersive", label: "Immersive", icon: Layers },
-  { value: "split", label: "Editorial split", icon: Columns2 },
-  { value: "strip", label: "Minimal strip", icon: Minus },
-];
+type ProfileTab = "posts" | "shop" | "articles" | "followers" | "following";
 
 /**
  * A single community member's public profile — mirrors `AuthorMockupPage`'s bio-hero
@@ -79,22 +75,68 @@ const PROFILE_HEADER_LAYOUT_OPTIONS: { value: ProfileHeaderLayout; label: string
  */
 export function CommunityProfileMockupPage() {
   const { handle = "" } = useParams();
-  const fallbackUser = getSocialUserByHandle(handle);
   const { data: liveCommunity, viewer, refresh, isLoading, isRevalidating, error } = useCommunityData();
+  const fallbackUser = isBackendConfigured ? null : getSocialUserByHandle(handle);
   const { data: liveBlog } = useBlogData();
+  const { communityProfileHeaderLayout: headerLayout } = useLayoutPreferences();
   const { languageCode } = useLanguage();
   const { baseCurrency, convertSelectedToBase } = useCurrency();
-  const liveMember = liveCommunity?.members.find((member) => member.handle === handle);
+  const [profileData, setProfileData] = useState<CommunityProfileData | null>(null);
+  const [profileError, setProfileError] = useState<Error | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(isBackendConfigured);
+  useEffect(() => {
+    if (!isBackendConfigured) return;
+    let active = true;
+    setProfileData(null);
+    setIsProfileLoading(true);
+    setProfileError(null);
+    getCommunityProfile(handle)
+      .then((profile) => {
+        if (active) setProfileData(profile);
+      })
+      .catch((reason) => {
+        if (active) {
+          setProfileData(null);
+          setProfileError(reason instanceof Error ? reason : new Error("Could not load community profile"));
+        }
+      })
+      .finally(() => {
+        if (active) setIsProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [handle, viewer?.databaseId, liveCommunity]);
+  const currentProfileData = profileData && communityHandlesMatch(handle, profileData.member.handle) ? profileData : null;
+  const liveMember = currentProfileData?.member || (liveCommunity
+    ? resolvePublicCommunityMember(
+        liveCommunity.members,
+        handle,
+        viewer,
+        liveCommunity.profilesPublicEnabled,
+      )
+    : null);
   const followersEnabled = liveCommunity?.followersEnabled !== false;
   const user = liveMember
     ? liveMember
     : fallbackUser
-      ? { ...fallbackUser, databaseId: 0, followerCount: 0, followingCount: 0, isFollowedByViewer: false }
+      ? {
+          ...fallbackUser,
+          databaseId: 0,
+          followerCount: fallbackUser.followers,
+          followingCount: fallbackUser.following,
+          isFollowedByViewer: false,
+          relationshipState: "none" as const,
+          canAccess: fallbackUser.isPublic,
+          isLocked: !fallbackUser.isPublic,
+          role: fallbackUser.role || "member",
+        }
       : null;
 
   // Optimistic follow state — starts from live backend value, toggled locally on mutation.
-  const [followState, setFollowState] = useState<{ isFollowed: boolean; followerCount: number } | null>(null);
-  const effectiveIsFollowed = followState !== null ? followState.isFollowed : (user?.isFollowedByViewer ?? false);
+  const [followState, setFollowState] = useState<{ relationshipState: "none" | "pending" | "accepted" | "owner"; followerCount: number } | null>(null);
+  useEffect(() => setFollowState(null), [handle, liveMember?.databaseId]);
+  const effectiveRelationship = followState?.relationshipState || user?.relationshipState || "none";
   const effectiveFollowerCount = followState !== null ? followState.followerCount : (user?.followerCount ?? 0);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
@@ -102,10 +144,17 @@ export function CommunityProfileMockupPage() {
     if (!liveMember || isFollowLoading) return;
     setIsFollowLoading(true);
     try {
-      const result = await toggleFollowUser(liveMember.databaseId);
+      const result = effectiveRelationship === "pending" || effectiveRelationship === "accepted"
+        ? await unfollowCommunityProfile(liveMember.databaseId)
+        : await followCommunityProfile(liveMember.databaseId);
       setFollowState(result);
+      refresh();
     } catch (err) {
-      // Ignore errors — the button snaps back to previous state automatically
+      showToast({
+        title: "Could not update follow status",
+        description: err instanceof Error ? err.message : "Try again.",
+        tone: "error",
+      });
     } finally {
       setIsFollowLoading(false);
     }
@@ -118,14 +167,25 @@ export function CommunityProfileMockupPage() {
   const [editingProduct, setEditingProduct] = useState<ListProductInitialValues | null>(null);
   const [editingArticle, setEditingArticle] = useState<WriteArticleInitialValues | null>(null);
   const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
-  const [headerLayout, setHeaderLayout] = useState<ProfileHeaderLayout>("card");
+  const [followersConnection, setFollowersConnection] = useState<CommunityProfileConnection | null>(null);
+  const [followingConnection, setFollowingConnection] = useState<CommunityProfileConnection | null>(null);
+  const [isLoadingConnection, setIsLoadingConnection] = useState(false);
+  useEffect(() => {
+    setFollowersConnection(currentProfileData?.followers || null);
+    setFollowingConnection(currentProfileData?.following || null);
+  }, [currentProfileData]);
   // Supports deep links like `/community/:handle?tab=shop` (e.g. from a post detail
   // page's "Shop @handle's listings" link) landing directly on the right tab.
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkTab = searchParams.get("tab");
-  const activeTab: ProfileTab = deepLinkTab === "shop" || deepLinkTab === "articles" ? deepLinkTab : "posts";
+  const activeTab: ProfileTab = deepLinkTab === "shop"
+    || deepLinkTab === "articles"
+    || deepLinkTab === "followers"
+    || deepLinkTab === "following"
+    ? deepLinkTab
+    : "posts";
 
-  const isOwnProfile = Boolean(viewer && handle === viewer.handle);
+  const isOwnProfile = Boolean(viewer && communityHandlesMatch(handle, viewer.handle));
   const isCreator = user?.role === "creator";
   const isCollaborator = user?.role === "collaborator";
   const canPublishPosts = isOwnProfile && (viewer?.capabilities.includes("publish_community_posts") ?? false);
@@ -134,11 +194,15 @@ export function CommunityProfileMockupPage() {
 
   const feedPosts = useMemo<SocialPostCardData[]>(() => {
     if (!user) return [];
-    if (liveCommunity) return liveCommunity.posts.filter((post) => post.author.handle === user.handle);
+    if (currentProfileData) return currentProfileData.posts;
+    if (liveCommunity) return liveCommunity.posts.filter((post) => communityHandlesMatch(post.author.handle, user.handle));
     return getPostsByHandle(user.handle, creatorContent.posts).map((post) => ({
       id: post.id,
       image: post.image,
       aspect: post.aspect,
+      title: post.title,
+      description: post.description,
+      media: post.media,
       caption: post.caption,
       tags: post.tags,
       likes: post.likes,
@@ -146,7 +210,7 @@ export function CommunityProfileMockupPage() {
       createdAt: post.createdAt,
       author: { handle: user.handle, displayName: user.displayName, avatarUrl: user.avatarUrl },
     }));
-  }, [user, creatorContent.posts, liveCommunity]);
+  }, [user, creatorContent.posts, liveCommunity, currentProfileData]);
 
   const ownProducts = useMemo(
     () => (user ? creatorContent.products.filter((product) => product.vendorHandle === user.handle) : []),
@@ -159,18 +223,18 @@ export function CommunityProfileMockupPage() {
   const creatorProducts = useMemo(
     () => user
       ? liveCommunity
-        ? liveCommunity.marketplaceItems.filter(({ vendor }) => vendor.handle === user.handle).map(({ product }) => product)
+        ? currentProfileData?.products || liveCommunity.marketplaceItems.filter(({ vendor }) => vendor.handle === user.handle).map(({ product }) => product)
         : getCreatorProducts(user.handle, ownProducts)
       : [],
-    [user, ownProducts, liveCommunity],
+    [user, ownProducts, liveCommunity, currentProfileData],
   );
   const creatorArticles = useMemo(
     () => user
       ? liveMember && liveBlog
-        ? liveBlog.posts.filter((post) => post.authorDatabaseId === user.databaseId)
+        ? currentProfileData?.articles || liveBlog.posts.filter((post) => post.authorDatabaseId === user.databaseId)
         : getCreatorArticles(user.handle, ownArticles)
       : [],
-    [user, ownArticles, liveBlog, liveMember],
+    [user, ownArticles, liveBlog, liveMember, currentProfileData],
   );
   const hasPublishingTabs = isCollaborator
     || creatorProducts.length > 0
@@ -179,6 +243,25 @@ export function CommunityProfileMockupPage() {
     || canPublishArticles;
   const selectTab = (tab: ProfileTab) => {
     setSearchParams(tab === "posts" ? {} : { tab });
+  };
+  const loadMoreProfiles = async (direction: "followers" | "following") => {
+    const connection = direction === "followers" ? followersConnection : followingConnection;
+    if (!connection?.hasNextPage || isLoadingConnection) return;
+    setIsLoadingConnection(true);
+    try {
+      const next = await getCommunityProfileConnection(handle, direction, connection.endCursor);
+      const merged = { ...next, nodes: [...connection.nodes, ...next.nodes] };
+      if (direction === "followers") setFollowersConnection(merged);
+      else setFollowingConnection(merged);
+    } catch (reason) {
+      showToast({
+        title: `Could not load ${direction}`,
+        description: reason instanceof Error ? reason.message : "Try again.",
+        tone: "error",
+      });
+    } finally {
+      setIsLoadingConnection(false);
+    }
   };
 
   const openProductForEditing = async (productId: number) => {
@@ -225,12 +308,12 @@ export function CommunityProfileMockupPage() {
     }
   };
 
-  if (!user && (isLoading || isRevalidating)) return <ContentLoadingState label="Loading community profile" />;
-  if (!user && error) {
+  if (!user && (isLoading || isRevalidating || isProfileLoading)) return <ContentLoadingState label="Loading community profile" />;
+  if (!user && (error || profileError)) {
     return (
       <section role="alert" className="mx-auto grid max-w-lg gap-3 rounded-3xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/60 dark:bg-red-950/30">
         <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Community profile unavailable</h1>
-        <p className="m-0 text-sm text-red-700 dark:text-red-300">{error.message}</p>
+        <p className="m-0 text-sm text-red-700 dark:text-red-300">{(profileError || error)?.message}</p>
       </section>
     );
   }
@@ -243,28 +326,7 @@ export function CommunityProfileMockupPage() {
     .slice(0, 2)
     .toUpperCase();
 
-  const canViewFeed = user.isPublic || isOwnProfile;
-
-  const avatarNode = (size: "lg" | "xl") =>
-    user.avatarUrl ? (
-      <ResponsiveImage
-        src={user.avatarUrl}
-        alt={user.displayName}
-        priority
-        sizes={size === "xl" ? "7rem" : "5rem"}
-        className={`shrink-0 rounded-full object-cover shadow-glow ${size === "xl" ? "h-24 w-24 sm:h-28 sm:w-28" : "h-20 w-20"}`}
-      />
-    ) : (
-      <span
-        className={`inline-grid shrink-0 place-items-center rounded-full font-semibold text-white shadow-glow ${
-          size === "xl" ? "h-24 w-24 text-3xl sm:h-28 sm:w-28" : "h-20 w-20 text-2xl"
-        }`}
-        style={{ backgroundColor: avatarColorFor(user.displayName) }}
-        aria-hidden="true"
-      >
-        {initials}
-      </span>
-    );
+  const canViewFeed = user.canAccess || isOwnProfile;
 
   const badgesNode = (
     <>
@@ -305,15 +367,20 @@ export function CommunityProfileMockupPage() {
       disabled={isFollowLoading}
       onClick={handleFollowToggle}
       className={`inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
-        effectiveIsFollowed
+        effectiveRelationship === "accepted" || effectiveRelationship === "pending"
           ? "border-brand-300 bg-brand-50 text-brand-700 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-brand-600 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:border-red-600 dark:hover:text-red-400"
           : "border-zinc-200 text-zinc-700 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
       }`}
     >
-      {effectiveIsFollowed ? (
+      {effectiveRelationship === "accepted" ? (
         <>
           <UserCheck className="h-4 w-4" aria-hidden="true" />
           Following
+        </>
+      ) : effectiveRelationship === "pending" ? (
+        <>
+          <UserCheck className="h-4 w-4" aria-hidden="true" />
+          Requested
         </>
       ) : (
         <>
@@ -327,6 +394,7 @@ export function CommunityProfileMockupPage() {
   const statsNode = (
     <>
       <ProfileStat value={feedPosts.length} label="Posts" />
+      {hasPublishingTabs ? <ProfileStat value={creatorArticles.length} label="Articles" /> : null}
       {followersEnabled ? <ProfileStat value={effectiveFollowerCount} label="Followers" /> : null}
       {followersEnabled ? <ProfileStat value={user.followingCount} label="Following" /> : null}
       {hasPublishingTabs ? <ProfileStat value={creatorProducts.length} label="Listings" /> : null}
@@ -346,172 +414,73 @@ export function CommunityProfileMockupPage() {
   return (
     <div className="grid gap-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Community", href: "/community" }, { label: user.displayName }]} />
-        <ViewSwitch label="Profile header layout" value={headerLayout} onChange={setHeaderLayout} options={PROFILE_HEADER_LAYOUT_OPTIONS} />
+        <Breadcrumbs
+          items={[
+            { label: "Home", href: "/" },
+            { label: "Community", href: "/community" },
+            ...(isCreator || isCollaborator ? [{ label: "Community authors", href: "/community-author" }] : []),
+            { label: user.displayName },
+          ]}
+        />
       </div>
 
-      {headerLayout === "immersive" ? (
-        <header className="relative grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800">
-          <div className="relative flex flex-col items-center gap-4 bg-gradient-to-br from-brand-600 via-brand-500 to-fuchsia-600 px-6 pb-16 pt-10 text-center sm:px-10 sm:pt-12">
-            {user.avatarUrl ? (
-              <ResponsiveImage src={user.avatarUrl} alt="" priority sizes="100vw" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-25 blur-md" />
-            ) : null}
-            <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
-              <span className="rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">{backLinkNode}</span>
-            </div>
-            <div className="relative z-10 grid place-items-center gap-4">
-              <div className="rounded-full border-4 border-white/80 shadow-glow">{avatarNode("xl")}</div>
-              <div className="grid gap-1.5">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <h1 className="m-0 font-display text-3xl font-bold text-white sm:text-4xl">{user.displayName}</h1>
-                </div>
-                <p className="m-0 text-sm font-semibold text-white/80">@{user.handle}</p>
-                <div className="flex flex-wrap items-center justify-center gap-2">{badgesNode}</div>
-              </div>
-              <p className="m-0 max-w-xl text-sm text-white/85">{user.bio}</p>
-              {actionButtonNode}
-            </div>
-          </div>
-          <div className="relative z-10 -mt-8 mx-4 grid grid-cols-2 gap-4 rounded-2xl bg-white p-5 shadow-soft-lg dark:bg-zinc-900 sm:mx-8 sm:flex sm:items-center sm:justify-center sm:gap-10">
-            {statsNode}
-          </div>
-        </header>
-      ) : headerLayout === "cover-banner" ? (
-        <header className="grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800">
-          <div className="relative h-36 bg-brand-gradient sm:h-44">
-            {user.avatarUrl ? (
-              <ResponsiveImage src={user.avatarUrl} alt="" priority sizes="100vw" aria-hidden="true" className="h-full w-full object-cover opacity-50 blur-sm" />
-            ) : null}
-            <div className="absolute left-4 top-4 sm:left-6 sm:top-6">{backLinkNode}</div>
-          </div>
-          <div className="relative z-10 grid gap-5 bg-white p-6 dark:bg-zinc-900 sm:p-8">
-            <div className="relative z-10 -mt-16 flex flex-wrap items-end justify-between gap-5 sm:-mt-20">
-              <div className="flex items-end gap-4">
-                <div className="rounded-full border-4 border-white shadow-glow dark:border-zinc-900">{avatarNode("xl")}</div>
-                <div className="grid gap-1.5 pb-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100 sm:text-3xl">{user.displayName}</h1>
-                    {badgesNode}
-                  </div>
-                  <p className="m-0 text-sm font-semibold text-brand-600 dark:text-brand-400">@{user.handle}</p>
-                </div>
-              </div>
-              {actionButtonNode}
-            </div>
-            <p className="m-0 max-w-2xl text-sm text-zinc-600 dark:text-zinc-300">{user.bio}</p>
-            <div className="flex flex-wrap items-center gap-6 border-t border-zinc-200/80 pt-5 dark:border-zinc-800">{statsNode}</div>
-          </div>
-        </header>
-      ) : headerLayout === "compact-list" ? (
-        <header className="grid gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
-          {backLinkNode}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-4">
-              {avatarNode("lg")}
-              <div className="grid gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{user.displayName}</h1>
-                  {badgesNode}
-                </div>
-                <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-                  <span className="font-semibold text-brand-600 dark:text-brand-400">@{user.handle}</span>
-                  <span className="mx-2 text-zinc-300 dark:text-zinc-700">&middot;</span>
-                  {user.bio}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-5 sm:gap-6">
-              <div className="hidden sm:flex sm:items-center sm:gap-5">{statsNode}</div>
-              {actionButtonNode}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-6 border-t border-zinc-200/80 pt-4 dark:border-zinc-800 sm:hidden">{statsNode}</div>
-        </header>
-      ) : headerLayout === "split" ? (
-        <header className="grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800 lg:grid-cols-[minmax(0,0.85fr),minmax(0,1.15fr)]">
-          <div className="relative min-h-[14rem] lg:min-h-full">
-            {user.avatarUrl ? (
-              <ResponsiveImage src={user.avatarUrl} alt="" priority sizes="(min-width: 1024px) 42vw, 100vw" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-500 to-fuchsia-600" aria-hidden="true" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent lg:bg-gradient-to-r" aria-hidden="true" />
-            <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
-              <span className="rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">{backLinkNode}</span>
-            </div>
-            <div className="absolute bottom-5 left-5 right-5 flex items-center gap-3 lg:hidden">
-              {avatarNode("lg")}
-              <div className="grid gap-0.5">
-                <h1 className="m-0 font-display text-xl font-bold text-white drop-shadow-sm">{user.displayName}</h1>
-                <p className="m-0 text-sm font-semibold text-white/85">@{user.handle}</p>
-              </div>
-            </div>
-          </div>
-          <div className="grid content-center gap-5 bg-white p-6 dark:bg-zinc-900 sm:p-8 lg:p-10">
-            <div className="hidden items-center gap-4 lg:flex">{avatarNode("xl")}</div>
-            <div className="grid gap-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="m-0 hidden font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100 lg:block">{user.displayName}</h1>
-                {badgesNode}
-              </div>
-              <p className="m-0 hidden text-sm font-semibold text-brand-600 dark:text-brand-400 lg:block">@{user.handle}</p>
-              <p className="m-0 max-w-lg text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{user.bio}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-6 border-t border-zinc-200/80 pt-5 dark:border-zinc-800">{statsNode}</div>
-            {actionButtonNode}
-          </div>
-        </header>
-      ) : headerLayout === "strip" ? (
-        <header className="flex flex-wrap items-center gap-4 rounded-full border border-zinc-200/80 bg-white px-4 py-3 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:px-6">
-          <span className="hidden sm:inline-flex">{backLinkNode}</span>
-          {avatarNode("lg")}
-          <div className="grid min-w-0 flex-1 gap-0.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="m-0 truncate font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{user.displayName}</h1>
-              {badgesNode}
-            </div>
-            <p className="m-0 truncate text-sm text-zinc-500 dark:text-zinc-400">
-              <span className="font-semibold text-brand-600 dark:text-brand-400">@{user.handle}</span>
-              <span className="mx-2 text-zinc-300 dark:text-zinc-700">&middot;</span>
-              {user.bio}
-            </p>
-          </div>
-          <div className="hidden items-center gap-5 md:flex">{statsNode}</div>
-          {actionButtonNode}
-        </header>
-      ) : (
-        <header className="grid gap-6 rounded-3xl border border-zinc-200/80 bg-gradient-to-br from-brand-50 to-white p-8 shadow-soft dark:border-zinc-800 dark:from-brand-950/30 dark:to-zinc-950 sm:p-10">
-          {backLinkNode}
+      <ProfileHeader
+        layout={headerLayout}
+        displayName={user.displayName}
+        initials={initials}
+        avatarColor={avatarColorFor(user.displayName)}
+        avatarUrl={user.avatarUrl}
+        coverUrl={user.coverUrl}
+        subtitle={<>@{user.handle}</>}
+        bio={user.bio}
+        badges={badgesNode}
+        actions={actionButtonNode}
+        stats={statsNode}
+        backLink={backLinkNode}
+      />
 
-          <div className="flex flex-wrap items-center justify-between gap-5">
-            <div className="flex flex-wrap items-center gap-5 sm:flex-nowrap">
-              {avatarNode("lg")}
-              <div className="grid gap-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="m-0 font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100 sm:text-4xl">{user.displayName}</h1>
-                  {badgesNode}
-                </div>
-                <p className="m-0 text-sm font-semibold text-brand-600 dark:text-brand-400">@{user.handle}</p>
-                <p className="m-0 max-w-2xl text-sm text-zinc-600 dark:text-zinc-300">{user.bio}</p>
-              </div>
-            </div>
-
-            {actionButtonNode}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6 border-t border-zinc-200/80 pt-5 dark:border-zinc-800">{statsNode}</div>
-        </header>
-      )}
-
-      {hasPublishingTabs ? (
+      {canViewFeed && (hasPublishingTabs || followersEnabled) ? (
         <div role="tablist" aria-label="Profile sections" className="flex flex-wrap gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
           <ProfileTabButton label={`Posts (${feedPosts.length})`} isActive={activeTab === "posts"} onClick={() => selectTab("posts")} />
-          <ProfileTabButton label={`Shop (${creatorProducts.length})`} isActive={activeTab === "shop"} onClick={() => selectTab("shop")} />
-          <ProfileTabButton label={`Articles (${creatorArticles.length})`} isActive={activeTab === "articles"} onClick={() => selectTab("articles")} />
+          {hasPublishingTabs ? <ProfileTabButton label={`Shop (${creatorProducts.length})`} isActive={activeTab === "shop"} onClick={() => selectTab("shop")} /> : null}
+          {hasPublishingTabs ? <ProfileTabButton label={`Articles (${creatorArticles.length})`} isActive={activeTab === "articles"} onClick={() => selectTab("articles")} /> : null}
+          {followersEnabled ? <ProfileTabButton label={`Followers (${effectiveFollowerCount})`} isActive={activeTab === "followers"} onClick={() => selectTab("followers")} /> : null}
+          {followersEnabled ? <ProfileTabButton label={`Following (${user.followingCount})`} isActive={activeTab === "following"} onClick={() => selectTab("following")} /> : null}
         </div>
       ) : null}
 
-      {hasPublishingTabs && activeTab === "shop" ? (
+      {!canViewFeed ? (
+        <div className="grid justify-items-center gap-3 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+            <Lock className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <p className="m-0 font-semibold text-zinc-700 dark:text-zinc-200">This profile is private</p>
+          <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+            {effectiveRelationship === "pending"
+              ? `Your request to follow @${user.handle} is waiting for approval.`
+              : `Request access to see @${user.handle}'s posts, shop, articles, followers, and following.`}
+          </p>
+        </div>
+      ) : activeTab === "followers" ? (
+        <CommunityProfileList
+          title={`${user.displayName}'s followers`}
+          connection={followersConnection}
+          isLoading={isLoadingConnection}
+          onLoadMore={() => loadMoreProfiles("followers")}
+        />
+      ) : activeTab === "following" ? (
+        <div className="grid gap-8">
+          <CommunityProfileList
+            title={`${user.displayName} follows`}
+            connection={followingConnection}
+            isLoading={isLoadingConnection}
+            onLoadMore={() => loadMoreProfiles("following")}
+          />
+          {currentProfileData?.followingFeed.length ? (
+            <SocialFeedGrid title="Posts from followed profiles" posts={currentProfileData.followingFeed} pageSize={12} defaultLayout="grid-3" />
+          ) : <EmptyTabNotice text="No posts from followed profiles yet." />}
+        </div>
+      ) : hasPublishingTabs && activeTab === "shop" ? (
         <div className="grid gap-5">
           {isOwnProfile ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -625,14 +594,6 @@ export function CommunityProfileMockupPage() {
             <EmptyTabNotice text="No articles yet." />
           )}
         </div>
-      ) : !canViewFeed ? (
-        <div className="grid justify-items-center gap-3 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-            <Lock className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <p className="m-0 font-semibold text-zinc-700 dark:text-zinc-200">This profile is private</p>
-          <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">Follow @{user.handle} to see their posts once they approve you.</p>
-        </div>
       ) : feedPosts.length ? (
         <SocialFeedGrid title={`${user.displayName}'s posts`} posts={feedPosts} pageSize={12} defaultLayout="grid-3" />
       ) : (
@@ -644,9 +605,23 @@ export function CommunityProfileMockupPage() {
       {isUploadOpen ? (
         <UploadPostModal
           onClose={() => setIsUploadOpen(false)}
+          defaultLanguageCode={languageCode}
+          searchTranslationCandidates={(query, selectedLanguage) =>
+            searchTranslationCandidateCommunityPosts(query, selectedLanguage)
+          }
           onSubmit={async (draft) => {
-            if (!draft.imagePreview) throw new Error("Choose an image before publishing");
-            await createCommunityPost({ imageDataUrl: draft.imagePreview, caption: draft.caption, tags: draft.tags, language: languageCode });
+            const media = draft.media.map(({ dataUrl }) => {
+              if (!dataUrl) throw new Error("New community media is missing its upload data");
+              return { dataUrl };
+            });
+            await createCommunityPost({
+              title: draft.title,
+              description: draft.description,
+              tags: draft.tags,
+              media,
+              language: draft.languageCode || languageCode,
+              translationOfId: draft.translationOfId,
+            });
             refresh();
           }}
         />
@@ -669,23 +644,35 @@ export function CommunityProfileMockupPage() {
               crossSellIds: draft.crossSellIds,
               sku: draft.sku,
               currency: baseCurrency,
-              price: draft.productType === "simple" ? convertSelectedToBase(draft.priceAmount) : 0,
+              price: convertSelectedToBase(resolveMarketplaceMutationPrice(
+                draft.productType,
+                draft.priceAmount,
+                draft.variations.map((variation) => variation.priceAmount),
+              )),
               regularPrice: draft.compareAtPriceAmount !== undefined ? convertSelectedToBase(draft.compareAtPriceAmount) : undefined,
               stockQuantity: draft.stockQuantity,
-              imageDataUrls: draft.imagePreviews,
+              imageDataUrls: draft.imageDataUrls,
               isVirtual: draft.isVirtual,
               isDownloadable: draft.isDownloadable,
               downloadableFiles: draft.downloadableFiles,
               downloadLimit: draft.downloadLimit,
               downloadExpiryDays: draft.downloadExpiryDays,
+              externalUrl: draft.externalUrl,
+              buttonText: draft.buttonText,
               attributes: draft.attributes,
               variations: draft.variations.map((variation) => ({
+                variationId: variation.variationId,
                 attributes: variation.attributes,
                 sku: variation.sku,
                 price: convertSelectedToBase(variation.priceAmount),
                 regularPrice: variation.compareAtPriceAmount !== undefined ? convertSelectedToBase(variation.compareAtPriceAmount) : undefined,
                 stockQuantity: variation.stockQuantity,
                 imageIndex: variation.imageIndex,
+                isVirtual: variation.isVirtual,
+                isDownloadable: variation.isDownloadable,
+                downloadableFiles: variation.downloadableFiles,
+                downloadLimit: variation.downloadLimit,
+                downloadExpiryDays: variation.downloadExpiryDays,
               })),
             };
             if (draft.productId) {
@@ -713,7 +700,7 @@ export function CommunityProfileMockupPage() {
               content: draft.body,
               category: draft.category,
               tags: draft.tags,
-              imageDataUrl: draft.imagePreview || undefined,
+              imageDataUrl: draft.imageDataUrl,
               slug: draft.slug,
               metaTitle: draft.metaTitle,
               metaDescription: draft.metaDescription,
@@ -728,21 +715,17 @@ export function CommunityProfileMockupPage() {
             setEditingArticle(null);
             refresh();
           }}
+          onDelete={async (postId) => {
+            await deleteCollaboratorPost(postId);
+            setEditingArticle(null);
+            refresh();
+          }}
         />
       ) : null}
     </div>
   );
 }
 
-
-function ProfileStat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="grid gap-0.5">
-      <p className="m-0 text-lg font-bold text-zinc-900 dark:text-zinc-100">{value.toLocaleString()}</p>
-      <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
-    </div>
-  );
-}
 
 function ProfileTabButton({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
   return (
@@ -767,5 +750,56 @@ function EmptyTabNotice({ text }: { text: string }) {
     <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
       {text}
     </p>
+  );
+}
+
+function CommunityProfileList({
+  title,
+  connection,
+  isLoading,
+  onLoadMore,
+}: {
+  title: string;
+  connection: CommunityProfileConnection | null;
+  isLoading: boolean;
+  onLoadMore: () => void;
+}) {
+  if (!connection?.nodes.length) return <EmptyTabNotice text="No profiles to show yet." />;
+  return (
+    <section className="grid gap-4">
+      <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
+      <div className="grid gap-2">
+        {connection.nodes.map((member) => (
+          <Link
+            key={member.databaseId}
+            to={`/community/${member.handle}`}
+            className="flex items-center gap-3 rounded-2xl border border-zinc-200/80 bg-white p-3 text-inherit no-underline transition hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            {member.avatarUrl ? (
+              <ResponsiveImage src={member.avatarUrl} alt="" sizes="3rem" className="h-12 w-12 rounded-full object-cover" />
+            ) : (
+              <span className="grid h-12 w-12 place-items-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: avatarColorFor(member.displayName) }}>
+                {member.displayName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <span className="grid min-w-0 flex-1">
+              <strong className="truncate text-sm text-zinc-900 dark:text-zinc-100">{member.displayName}</strong>
+              <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">@{member.handle}</span>
+            </span>
+            {member.isLocked ? <Lock className="h-4 w-4 text-zinc-400" aria-label="Private profile" /> : null}
+          </Link>
+        ))}
+      </div>
+      {connection.hasNextPage ? (
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={onLoadMore}
+          className="w-fit rounded-full border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+        >
+          {isLoading ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
+    </section>
   );
 }

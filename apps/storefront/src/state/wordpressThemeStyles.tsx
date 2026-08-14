@@ -1,17 +1,22 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { useIncrementalData } from "../lib/incrementalData";
-import { applyThemePresetVariables, mountPageStyles } from "../lib/pageStyles";
+import { useIncrementalData } from "@funky/sdk/react";
+import {
+  applyThemePresetVariables,
+  createWordPressElementTypographyCss,
+  mountPageStyles,
+} from "../lib/pageStyles";
 import { getWordPressThemeStyles } from "../lib/themeStyles";
 import type { CmsThemeStyles } from "../lib/pages";
+import { BACKEND_ORIGIN } from "@funky/sdk";
 
 const WordPressThemeStylesContext = createContext<CmsThemeStyles | null>(null);
 
-export function WordPressThemeStylesProvider({ children }: { children: ReactNode }) {
-  const { data } = useIncrementalData("wordpress-theme-styles:v3", getWordPressThemeStyles);
+export function WordPressThemeStylesProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
+  const { data } = useIncrementalData("wordpress-theme-styles:v5", getWordPressThemeStyles, enabled);
 
   useEffect(() => {
     if (!data) return undefined;
-    const unmountStyles = mountPageStyles(data);
+    const unmountStyles = mountPageStyles(data, BACKEND_ORIGIN);
     const restoreVariables = applyThemePresetVariables(data);
     const unmountThemePalette = mountWordPressThemePalette(data.colors);
     const unmountElementTypography = mountWordPressElementTypography(data.globalStyles);
@@ -95,33 +100,12 @@ function mixColor(
 }
 
 function mountWordPressElementTypography(globalStyles: string): () => void {
-  const textFont = findFontFamily(globalStyles, (selector) => selector.split(",").some((part) => part.trim() === "body"));
-  const linkFont = findFontFamily(globalStyles, (selector) => selector.includes("a:where")) || textFont;
-  const headingFont = findFontFamily(globalStyles, (selector) => /(^|,)\s*h[1-6](\s|,|$)/.test(selector)) || textFont;
-  const captionFont = findFontFamily(globalStyles, (selector) => selector.includes("caption")) || textFont;
-  const buttonFont = findFontFamily(globalStyles, (selector) => selector.includes("wp-element-button")) || textFont;
-  if (!textFont && !linkFont && !headingFont && !captionFont && !buttonFont) return () => undefined;
+  const css = createWordPressElementTypographyCss(globalStyles);
+  if (!css) return () => undefined;
 
   const style = document.createElement("style");
   style.dataset.funkyWordPressElementTypography = "true";
-  style.textContent = [
-    textFont ? `body{font-family:${textFont}!important}` : "",
-    linkFont ? `body :where(a:not(.wp-element-button):not(.wp-block-button__link)){font-family:${linkFont}!important}` : "",
-    headingFont ? `body :where(h1,h2,h3,h4,h5,h6,.wp-block-heading,.funky-brand-heading){font-family:${headingFont}!important}` : "",
-    captionFont ? `body :where(figcaption,.wp-element-caption,caption){font-family:${captionFont}!important}` : "",
-    buttonFont && buttonFont !== "inherit"
-      ? `body :where(.wp-element-button,.wp-block-button__link,button,input[type="button"],input[type="submit"],input[type="reset"]){font-family:${buttonFont}!important}`
-      : "",
-  ].join("");
+  style.textContent = css;
   document.head.appendChild(style);
   return () => style.remove();
-}
-
-function findFontFamily(css: string, matchesSelector: (selector: string) => boolean): string | null {
-  for (const match of css.matchAll(/([^{}]+)\{([^{}]+)\}/g)) {
-    if (!matchesSelector(match[1])) continue;
-    const declaration = match[2].match(/(?:^|;)\s*font-family\s*:\s*([^;]+)/i);
-    if (declaration) return declaration[1].trim();
-  }
-  return null;
 }

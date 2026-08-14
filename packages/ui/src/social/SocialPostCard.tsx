@@ -1,9 +1,10 @@
 import { Heart, MessageCircle } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { avatarColorFor } from "./socialColor";
 import type { SocialFeedLayout } from "./SocialFeedGrid";
 import { ResponsiveImage } from "../media";
+import { CommunityMediaGallery, type SocialPostMedia } from "./CommunityMediaGallery";
 
 export type SocialPostCardAuthor = { handle: string; displayName: string; avatarUrl?: string };
 
@@ -11,6 +12,9 @@ export type SocialPostCardData = {
   id: string;
   href?: string;
   image: string;
+  title?: string;
+  description?: string;
+  media?: SocialPostMedia[];
   /** CSS aspect-ratio value (e.g. `"4/5"`) — only used verbatim in `"masonry"` layout,
    * where the image renders at its intrinsic size instead of being cropped. */
   aspect: string;
@@ -92,12 +96,24 @@ function TagPills({ tags, max = 3 }: { tags: string[]; max?: number }) {
 /**
  * A single upload in the community feed — the `[social-post]` shortcode's
  * implementation. Renders differently depending on the active `SocialFeedGrid` layout:
- * `"masonry"` shows the image uncropped at its own aspect ratio, `"list"` lays the
- * image and caption out side-by-side, `"compact"` crops to a tight square thumbnail
- * (profile-grid style), and `"grid-3"`/`"grid-4"` crop to a consistent portrait card.
+ * `"masonry"` shows the image uncropped at its own aspect ratio, `"list"` uses a
+ * compact horizontal card, and the grid variants crop media to fill their cards.
  */
 export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPostCardProps) {
   const navigate = useNavigate();
+  const title = post.title?.trim() || post.caption;
+  const description = post.description ?? post.caption;
+  const media: SocialPostMedia[] = post.media?.length
+    ? post.media
+    : post.image
+      ? [{
+          databaseId: 0,
+          url: post.image,
+          mimeType: "image/jpeg",
+          mediaType: "image",
+          altText: title,
+        }]
+      : [];
   // Both the card and its nested author/tag links are clickable, so nested links
   // stop propagation (see AuthorChip/TagPills above) and this handler opens the post's
   // own discussion page for any other click on the card body.
@@ -108,10 +124,14 @@ export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPo
       openPost();
     }
   };
+  const handleClick = (event: MouseEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest("a, button, input, textarea, select")) return;
+    openPost();
+  };
   const clickableProps = {
     role: "button" as const,
     tabIndex: 0,
-    onClick: openPost,
+    onClick: handleClick,
     onKeyDown: handleKeyDown,
   };
 
@@ -119,17 +139,16 @@ export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPo
     return (
       <article
         {...clickableProps}
-        className="funky-social-post-card funky-social-post-card--list flex cursor-pointer gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-soft transition hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900"
+        className="sf-social-post funky-social-post-card funky-social-post-card--list grid cursor-pointer gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-soft transition hover:shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[10rem_minmax(0,1fr)]"
       >
-        <div className="relative w-28 shrink-0 overflow-hidden rounded-xl sm:w-40">
-          <ResponsiveImage
-            src={post.image}
-            alt=""
-            priority={imageLoading === "eager"}
-            loading={imageLoading}
-            sizes="(min-width: 640px) 10rem, 7rem"
-            draggable={false}
-            className="aspect-square h-full w-full object-cover"
+        <div className="relative min-h-44 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-950 sm:min-h-40">
+          <CommunityMediaGallery
+            media={media}
+            title={title}
+            imageLoading={imageLoading}
+            aspect="16/10"
+            lockAspect
+            className="h-full [&>div:first-child]:h-full"
           />
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
@@ -159,7 +178,8 @@ export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPo
             </Link>
             <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">{relativeTime(post.createdAt)}</span>
           </div>
-          <p className="m-0 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{post.caption}</p>
+          <h3 className="m-0 line-clamp-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{title}</h3>
+          {description ? <p className="m-0 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{description}</p> : null}
           <TagPills tags={post.tags} />
           <div className="mt-auto flex items-center gap-4 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
             <span className="inline-flex items-center gap-1">
@@ -178,15 +198,15 @@ export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPo
 
   if (layout === "compact") {
     return (
-      <article {...clickableProps} className="funky-social-post-card funky-social-post-card--compact group relative aspect-square cursor-pointer overflow-hidden rounded-lg">
-        <ResponsiveImage
-          src={post.image}
-          alt=""
-          priority={imageLoading === "eager"}
-          loading={imageLoading}
-          sizes="(min-width: 640px) 25vw, 50vw"
-          draggable={false}
-          className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+      <article {...clickableProps} className="sf-social-post funky-social-post-card funky-social-post-card--compact group relative aspect-square cursor-pointer overflow-hidden rounded-lg">
+        <CommunityMediaGallery
+          media={media}
+          title={title}
+          imageLoading={imageLoading}
+          aspect="1/1"
+          fit="contain-right"
+          lockAspect
+          className="h-full bg-zinc-100 dark:bg-zinc-950 [&>div:first-child]:h-full"
         />
         <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/0 opacity-0 transition group-hover:bg-black/50 group-hover:opacity-100">
           <span className="inline-flex items-center gap-1 text-xs font-bold text-white">
@@ -203,37 +223,32 @@ export function SocialPostCard({ post, layout, imageLoading = "lazy" }: SocialPo
   }
 
   // "masonry" | "grid-3" | "grid-4"
-  const imageClassName =
-    layout === "masonry"
-      ? "block w-full h-auto"
-      : "absolute inset-0 !h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105";
-
   return (
     <article
       {...clickableProps}
-      className={`group relative cursor-pointer overflow-hidden rounded-2xl shadow-soft transition hover:-translate-y-0.5 hover:shadow-soft-lg funky-social-post-card funky-social-post-card--${layout} ${
+      className={`sf-social-post group relative cursor-pointer overflow-hidden rounded-2xl shadow-soft transition hover:-translate-y-0.5 hover:shadow-soft-lg funky-social-post-card funky-social-post-card--${layout} ${
         layout === "masonry" ? "" : "aspect-[4/5]"
       }`}
     >
-      <ResponsiveImage
-        src={post.image}
-        alt=""
-        priority={imageLoading === "eager"}
-        loading={imageLoading}
-        sizes={layout === "grid-4" ? "(min-width: 1024px) 25vw, 50vw" : "(min-width: 768px) 33vw, 100vw"}
-        draggable={false}
-        style={layout === "masonry" ? { aspectRatio: post.aspect.replace("/", " / ") } : undefined}
-        className={imageClassName}
+      <CommunityMediaGallery
+        media={media}
+        title={title}
+        imageLoading={imageLoading}
+        aspect={post.aspect}
+        fit="cover"
+        lockAspect={layout !== "masonry"}
+        className={layout === "masonry" ? "relative" : "absolute inset-0 h-full bg-zinc-100 dark:bg-zinc-950 [&>div:first-child]:h-full"}
       />
       <div
-        className={`bg-gradient-to-t from-black/85 via-black/25 to-black/0 ${
+        className={`pointer-events-none bg-gradient-to-t from-black/85 via-black/25 to-black/0 ${
           layout === "masonry" ? "absolute inset-0" : "absolute inset-0"
         }`}
         aria-hidden="true"
       />
       <div className="absolute inset-x-0 bottom-0 grid gap-1.5 p-3">
         <AuthorChip author={post.author} />
-        <p className="m-0 line-clamp-2 text-xs text-white/90">{post.caption}</p>
+        <h3 className="m-0 line-clamp-1 text-sm font-bold text-white">{title}</h3>
+        {description ? <p className="m-0 line-clamp-2 text-xs text-white/90">{description}</p> : null}
         <div className="flex items-center justify-between gap-2">
           <TagPills tags={post.tags} max={2} />
           <div className="flex shrink-0 items-center gap-2.5 text-[0.68rem] font-bold text-white">

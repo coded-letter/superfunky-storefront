@@ -93,7 +93,7 @@ const MOCK_COOKIES: MockCookie[] = [
   {
     name: "woocommerce_cart_hash",
     category: "functional",
-    provider: "WooCommerce",
+    provider: "Store services",
     lifetime: "Session",
     deletable: true,
   },
@@ -152,7 +152,7 @@ const NEAR_BOTTOM_THRESHOLD_PX = 220;
 /** True once the user has scrolled close enough to the end of the page that a fixed
  * bottom-left element would start overlapping the footer's content (e.g. its "extra
  * wrapper" promo box). Re-evaluated on scroll/resize so it stays in sync as content loads. */
-function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
+export function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
   const [isNearBottom, setIsNearBottom] = useState(false);
 
   useEffect(() => {
@@ -178,7 +178,7 @@ function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
  * two-tab structure as the updated legacy prototype (Preferences grid + a grouped Cookies
  * list with provider/lifetime metadata and per-item delete), restyled to match this app's
  * design system instead of the legacy's hardcoded dark theme. */
-export function CookieConsentBanner() {
+export function CookieConsentBanner({ providerName = "Superfunky" }: { providerName?: string }) {
   const {
     consent,
     isManagerOpen,
@@ -206,7 +206,9 @@ export function CookieConsentBanner() {
     Object.keys(CATEGORY_LABELS) as MockCookie["category"][]
   ).map((category) => ({
     category,
-    items: storedCookies.filter((item) => item.category === category),
+    items: storedCookies
+      .filter((item) => item.category === category)
+      .map((item) => item.provider === "FunkyCommerce" ? { ...item, provider: providerName } : item),
   }));
 
   return (
@@ -218,7 +220,7 @@ export function CookieConsentBanner() {
           role="region"
           aria-label="Cookie consent"
           aria-hidden={isNearPageBottom}
-          className={`funky-cookie-consent-banner fixed inset-x-4 bottom-4 z-40 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white/95 p-5 shadow-soft-lg backdrop-blur transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-900/95 sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-sm ${
+          className={`sf-cookie-consent funky-cookie-consent-banner fixed inset-x-4 bottom-4 z-40 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white/95 p-5 shadow-soft-lg backdrop-blur transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-900/95 sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-sm ${
             isNearPageBottom ? "pointer-events-none translate-y-4 opacity-0" : "pointer-events-auto translate-y-0 opacity-100"
           }`}
         >
@@ -231,7 +233,7 @@ export function CookieConsentBanner() {
                 Cookie consent
               </span>
               <p className="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                FunkyCommerce uses cookies for the proper functioning of our
+                {providerName} uses cookies for the proper functioning of our
                 website, as well as for analytics and advertising purposes.
                 Learn more in our{" "}
                 <Link
@@ -303,7 +305,7 @@ export function CookieConsentBanner() {
             aria-modal="true"
             aria-label="Manage cookie preferences"
             onClick={(event) => event.stopPropagation()}
-            className="funky-cookie-consent-manager grid max-h-[85vh] w-full max-w-xl gap-4 overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white p-5 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+            className="sf-cookie-settings funky-cookie-consent-manager grid max-h-[85vh] w-full max-w-xl gap-4 overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white p-5 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">

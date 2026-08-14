@@ -6,6 +6,7 @@ import { useCart, useSoundUX, useToast } from "../state";
 import { useCurrency } from "../locale";
 import type { ProductCardData } from "./ProductCard";
 import { ResponsiveImage } from "../media";
+import { hasProductCardPrice } from "./productCardPrice";
 
 export type ProductQuickViewModalProps = {
   product: ProductCardData;
@@ -26,13 +27,31 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
   const previewImages = [product.imageUrl, ...(product.gallery ?? [])].filter(Boolean) as string[];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const activeImageUrl = previewImages[activeImageIndex];
-  const ctaLabel = product.productType === "external" ? "Buy now" : product.productType === "variable" ? "Select options" : "Add to cart";
   const variationAmounts = product.variations?.flatMap(({ priceAmount }) => priceAmount === undefined ? [] : [priceAmount]) || [];
   const priceLabel = product.priceAmount !== undefined ? formatBaseAmount(product.priceAmount) : product.priceLabel;
   const compareAtPriceLabel = product.compareAtPriceAmount !== undefined ? formatBaseAmount(product.compareAtPriceAmount) : product.compareAtPriceLabel;
   const rangeLabel = variationAmounts.length
     ? `${formatBaseAmount(Math.min(...variationAmounts))} – ${formatBaseAmount(Math.max(...variationAmounts))}`
     : product.priceRangeLabel;
+  const hasPrice = hasProductCardPrice({
+    priceAmount: product.priceAmount,
+    priceLabel,
+    priceRangeLabel: rangeLabel,
+    variationPriceAmounts: variationAmounts,
+  });
+  const showLearnMore = product.productType !== "external" && product.productType !== "grouped" && product.productType !== "variable" && !hasPrice;
+  const ctaLabel =
+    showLearnMore
+      ? "Learn more"
+      : product.productType === "external"
+        ? product.externalUrl
+          ? "Buy now"
+          : "View product"
+        : product.productType === "grouped"
+          ? "View products"
+          : product.productType === "variable"
+            ? "Select options"
+            : "Add to cart";
 
   // Lock page scroll while open, matching the image lightbox's behaviour.
   useEffect(() => {
@@ -53,7 +72,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+      className="sf-product-quick-view fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`Quick view — ${product.name}`}
@@ -140,22 +159,21 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
           </div>
 
           <div className="mt-2 flex gap-2">
-            {product.productType === "variable" ? (
-              // Variable products must select a variation on the PDP — navigate instead of cart.
+            {showLearnMore || product.productType === "variable" || product.productType === "grouped" || (product.productType === "external" && !product.externalUrl) ? (
               <Link
-                to={product.href ?? `/shop/${product.id}`}
+                to={product.href ?? `/shop/${encodeURIComponent(product.id)}`}
                 onClick={onClose}
-                className="flex-1 rounded-full bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+                className="flex-1 rounded-control bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
               >
                 {ctaLabel}
               </Link>
-            ) : product.productType === "external" ? (
+            ) : product.productType === "external" && product.externalUrl ? (
               <a
-                href={product.externalUrl ?? "#"}
+                href={product.externalUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 onClick={onClose}
-                className="flex-1 rounded-full bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+                className="flex-1 rounded-control bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
               >
                 {ctaLabel}
               </a>
@@ -179,7 +197,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                   });
                   onClose();
                 }}
-                className="flex-1 rounded-full bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+                className="flex-1 rounded-control bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
               >
                 {ctaLabel}
               </button>

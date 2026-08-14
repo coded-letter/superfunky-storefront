@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { PaginablePostGrid, Seo, ViewSwitch, useLanguage } from "@funky/ui";
+import { useEffect, useRef, type RefObject } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { PaginablePostGrid, Seo, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { HeroMock, type HeroVariant } from "../components/HeroMock";
-import { useIncrementalData } from "../lib/incrementalData";
-import { executeContentScripts, mountEnqueuedScripts } from "../lib/pageScripts";
+import { HeroMock } from "../components/HeroMock";
+import { useIncrementalData } from "@funky/sdk/react";
+import { mountCmsBehaviors } from "../lib/cmsBehaviors";
+import { mountEnqueuedScripts } from "../lib/pageScripts";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import {
   getPostTaxonomyArchive,
@@ -13,7 +14,8 @@ import {
   type PostTaxonomy,
   type TaxonomyIdentifierType,
 } from "../lib/postArchives";
-import { ARCHIVE_HERO_OPTIONS, ArchiveDescriptionSection } from "./shared";
+import { ArchiveDescriptionSection } from "./shared";
+import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
 
 export function PostTaxonomyArchivePage({ taxonomy }: { taxonomy: PostTaxonomy }) {
   const { pathname } = useLocation();
@@ -44,42 +46,37 @@ function PostTaxonomyArchiveLoader({
   idType: TaxonomyIdentifierType;
   pathname: string;
 }) {
-  const navigate = useNavigate();
-  const { languageCode, hasLanguagePreference, syncLanguageCode } = useLanguage();
   const descriptionRef = useRef<HTMLDivElement>(null);
-  const { data: archive, isLoading, error } = useIncrementalData(
+  const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
     `post-${taxonomy}-archive:${idType}:${identifier}`,
     () => getPostTaxonomyArchive(taxonomy, identifier, idType),
   );
 
-  useEffect(() => {
-    if (!archive) return;
-    if (!hasLanguagePreference) {
-      syncLanguageCode(archive.languageCode);
-      return;
-    }
-    if (archive.languageCode.toLowerCase() === languageCode.toLowerCase()) return;
-    const translation = archive.translations.find(({ languageCode: translatedLanguage }) => translatedLanguage.toLowerCase() === languageCode.toLowerCase());
-    if (translation) {
-      const translationPath = toInternalPath(translation.uri);
-      if (translationPath !== pathname) navigate(translationPath);
-    }
-  }, [archive, hasLanguagePreference, languageCode, navigate, pathname, syncLanguageCode]);
+  useCanonicalContentLanguage(
+    archive?.languageCode,
+    archive?.translations || [],
+    pathname,
+    !isLoading && !isRevalidating,
+  );
 
   useEffect(() => {
     if (!archive) return;
-    if (descriptionRef.current) executeContentScripts(descriptionRef.current);
-    return mountEnqueuedScripts(archive.scripts);
+    const unmountBehaviors = descriptionRef.current ? mountCmsBehaviors(descriptionRef.current) : () => undefined;
+    const unmountScripts = mountEnqueuedScripts(archive.scripts);
+    return () => {
+      unmountBehaviors();
+      unmountScripts();
+    };
   }, [archive]);
 
   if (isLoading) {
     return <ContentLoadingState label={`Loading ${taxonomy} archive`} />;
   }
   if (error) {
-    return <ArchiveStatus title={`${capitalize(taxonomy)} unavailable`} message={error.message} />;
+    return <ArchiveStatus title={`${capitalize(taxonomy)} unavailable`} message="This collection is temporarily unavailable." />;
   }
   if (!archive) {
-    return <ArchiveStatus title={`${capitalize(taxonomy)} not found`} message={`WordPress has no ${taxonomy} matching “${identifier}”.`} />;
+    return <ArchiveStatus title={`${capitalize(taxonomy)} not found`} message="This collection is unavailable." />;
   }
 
   return <PostTaxonomyArchive archive={archive} descriptionRef={descriptionRef} />;
@@ -92,7 +89,7 @@ function PostTaxonomyArchive({
   archive: CmsPostArchive;
   descriptionRef: RefObject<HTMLDivElement>;
 }) {
-  const [heroVariant, setHeroVariant] = useState<HeroVariant>(archive.taxonomy === "category" ? "split" : "minimal");
+  const { postArchiveHeroLayout: heroVariant } = useLayoutPreferences();
   const blogPath = useStorefrontPath("blog", "/blog");
   const isTag = archive.taxonomy === "tag";
   const displayTitle = isTag ? `#${archive.name}` : archive.name;
@@ -131,7 +128,6 @@ function PostTaxonomyArchive({
       <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
 
       <div className="grid gap-3">
-        <ViewSwitch label="Hero layout" value={heroVariant} onChange={setHeroVariant} options={ARCHIVE_HERO_OPTIONS} />
         <HeroMock
           variant={heroVariant}
           headingLevel="h1"
@@ -180,7 +176,7 @@ function PostTaxonomyArchive({
 
       {archive.hasMorePosts ? (
         <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
-          This archive contains more than 100 posts. Showing the latest 100 returned by WordPress.
+          This archive contains more than 100 posts. Showing the latest 100 available posts.
         </p>
       ) : null}
 
@@ -211,7 +207,7 @@ function getVisibleBreadcrumbs(archive: CmsPostArchive, blogPath: string): Bread
 function ArchiveStatus({ title, message }: { title: string; message: string }) {
   const blogPath = useStorefrontPath("blog", "/blog");
   return (
-    <section className="mx-auto grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="mx-auto mt-16 grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
       <p className="m-0 text-zinc-500 dark:text-zinc-400">{message}</p>
       <Link to={blogPath} className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">

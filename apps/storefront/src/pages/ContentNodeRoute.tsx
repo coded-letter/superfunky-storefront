@@ -1,8 +1,10 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useLanguage } from "@funky/ui";
 import { getContentNodeInfo } from "../lib/contentNodes";
-import { useIncrementalData } from "../lib/incrementalData";
+import { useIncrementalData } from "@funky/sdk/react";
 import { getPageByUri } from "../lib/pages";
-import { getSpecialStorefrontRouteRegistry, matchStorefrontRouteKey } from "../lib/storefrontPaths";
+import { getStorefrontRouteRegistry, matchStorefrontRoute } from "../lib/storefrontPaths";
 import { PageMockupPage } from "./PageMockupPage";
 import { PostCategoryMockupPage } from "./PostCategoryMockupPage";
 import { PostMockupPage } from "./PostMockupPage";
@@ -13,36 +15,124 @@ import { ProductTagMockupPage } from "./ProductTagMockupPage";
 import { ProductBrandMockupPage } from "./ProductBrandMockupPage";
 import { CommunityPostMockupPage } from "./CommunityPostMockupPage";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortcodeRenderers";
 import { WordPressSpecialPageContent } from "../components/WordPressSpecialPageContent";
+import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
+import { resolveContentLanguageFallback } from "../lib/contentLanguageFallback";
+import { resolveRouteLanguageSync } from "../lib/contentRouteLanguageSync";
+import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { shouldPreferCoreGraphqlQueries } from "../lib/profileGraphqlCompatibility";
 
 export function ContentNodeRoute() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const {
+    configuredLanguageCodes,
+    languageCode,
+    languageSelectionRevision,
+    setLanguageCodeFromRoute,
+  } = useLanguage();
+  const handledSelectionRevision = useRef(languageSelectionRevision);
+  const pendingSelectionPath = useRef<string | null>(null);
   const uri = pathname.endsWith("/") ? pathname : `${pathname}/`;
-  const { data: specialRegistry, isLoading: isLoadingSpecialRegistry } = useIncrementalData(
-    "special-storefront-route-registry:v1",
-    getSpecialStorefrontRouteRegistry,
+  const useRouteRegistry = !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
+  const loadConcurrentPage = useRouteRegistry || uri.split("/").filter(Boolean).length !== 1;
+  const { data: routeRegistry, isLoading: isLoadingRouteRegistry } = useIncrementalData(
+    "storefront-route-registry:v4",
+    getStorefrontRouteRegistry,
+    useRouteRegistry,
   );
-  const { data: page, isLoading: isLoadingPage } = useIncrementalData(
+  const {
+    data: page,
+    isLoading: isLoadingPage,
+    isRevalidating: isRevalidatingPage,
+    error: pageError,
+  } = useIncrementalData(
     `content-page-by-uri:v1:${uri}`,
     () => getPageByUri(uri),
+    loadConcurrentPage,
   );
-  const matchedRouteKey = matchStorefrontRouteKey(specialRegistry || [], pathname);
+  const matchedRoute = useRouteRegistry
+    ? matchStorefrontRoute(routeRegistry || [], pathname)
+    : null;
+  useCanonicalContentLanguage(
+    page?.languageCode,
+    page?.translations || [],
+    pathname,
+    !isLoadingPage && !isRevalidatingPage,
+    !isLoadingRouteRegistry && !matchedRoute,
+  );
+  const languageSelectionChanged = handledSelectionRevision.current !== languageSelectionRevision;
+  const languageSelectionPending = languageSelectionChanged || pendingSelectionPath.current === pathname;
   const { data: nodeInfo, isLoading, error } = useIncrementalData(`content-node:v2:${uri}`, () => getContentNodeInfo(uri));
+  const shouldResolveLanguageFallback = !isLoadingRouteRegistry
+    && !isLoadingPage
+    && !isLoading
+    && !pageError
+    && !error
+    && !matchedRoute
+    && !page
+    && !nodeInfo;
+  const {
+    data: languageFallbackPath,
+    isLoading: isLoadingLanguageFallback,
+    error: languageFallbackError,
+  } = useIncrementalData(
+    `content-language-fallback:v1:${uri}:${languageCode}:${configuredLanguageCodes.join(",")}:${shouldResolveLanguageFallback ? "resolve" : "skip"}`,
+    () => shouldResolveLanguageFallback
+      ? resolveContentLanguageFallback(pathname, languageCode, configuredLanguageCodes, {
+          getPage: getPageByUri,
+          getNodeInfo: getContentNodeInfo,
+        })
+      : Promise.resolve(null),
+  );
 
-  // Special pages resolved from the registry take highest priority.
-  if (matchedRouteKey && ["home", "shop", "blog", "cart", "checkout", "account"].includes(matchedRouteKey)) {
-    return <WordPressSpecialPageContent pageKey={matchedRouteKey} shortcodeRenderers={APPLICATION_SHORTCODE_RENDERERS} />;
+  useEffect(() => {
+    if (!matchedRoute) return;
+    const decision = resolveRouteLanguageSync(
+      pendingSelectionPath.current,
+      pathname,
+      languageSelectionChanged,
+    );
+    if (languageSelectionChanged) {
+      handledSelectionRevision.current = languageSelectionRevision;
+    }
+    pendingSelectionPath.current = decision.pendingSelectionPath;
+    if (!decision.shouldSynchronizeRouteLanguage) return;
+    if (matchedRoute.languageCode !== languageCode) {
+      setLanguageCodeFromRoute(matchedRoute.languageCode);
+    }
+  }, [
+    languageCode,
+    languageSelectionChanged,
+    languageSelectionRevision,
+    matchedRoute,
+    pathname,
+    setLanguageCodeFromRoute,
+  ]);
+
+  useEffect(() => {
+    if (!shouldResolveLanguageFallback || !languageFallbackPath) return;
+    navigate(languageFallbackPath, { replace: true });
+  }, [languageFallbackPath, navigate, shouldResolveLanguageFallback]);
+
+  // CMS route pages resolved from the ordinary Page registry take highest priority.
+  if (matchedRoute) {
+    if (!languageSelectionPending && matchedRoute.languageCode !== languageCode) {
+      return <ContentLoadingState label="Selecting route language" />;
+    }
+
+    return <PageMockupPage routeKey={matchedRoute.key} synchronizeLanguage={false} />;
   }
 
-  // Wait for both the page lookup and the type classifier before committing to
-  // a template, so that community posts / posts at language-prefixed URIs are
-  // never incorrectly rendered as PageMockupPage.
-  if (isLoadingSpecialRegistry || isLoadingPage || isLoading) {
+  // Render whichever authoritative lookup resolves first. The remaining lookup
+  // may still refine the route type without holding a known page or post off-screen.
+  if (isLoadingRouteRegistry || (isLoading && !page) || (isLoadingPage && !nodeInfo)) {
     return <ContentLoadingState label="Resolving content" />;
   }
-  if (error) {
-    return <RouteStatus title="Content unavailable" message={error.message} />;
+  const fatalPageError = nodeInfo ? null : pageError;
+  if (error || fatalPageError || languageFallbackError) return <NotFoundContent />;
+  if (shouldResolveLanguageFallback && (isLoadingLanguageFallback || languageFallbackPath)) {
+    return <ContentLoadingState label="Finding available translation" />;
   }
 
   // nodeInfo.__typename is the authoritative type. Only fall back to the page
@@ -73,14 +163,19 @@ export function ContentNodeRoute() {
     return <PostTagMockupPage />;
   }
   if (nodeInfo?.type === "Page" || page) {
-    return <PageMockupPage />;
+    return <PageMockupPage synchronizeLanguage={false} />;
   }
-  return <RouteStatus title="Content not found" message={`WordPress has no published content or taxonomy archive at "${uri}".`} />;
+  return <NotFoundContent />;
+}
+
+function NotFoundContent() {
+  const fallback = <RouteStatus title="Content not found" message="This page is unavailable." />;
+  return <WordPressSpecialPageContent pageSlug="404" fallback={fallback} />;
 }
 
 function RouteStatus({ title, message }: { title: string; message: string }) {
   return (
-    <section className="mx-auto grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+    <section id="sf-404" className="sf-404 mx-auto mt-16 grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
       <p className="m-0 text-zinc-500 dark:text-zinc-400">{message}</p>
       <Link to="/" className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">

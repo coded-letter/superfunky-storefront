@@ -1,4 +1,4 @@
-import { WordPressSpecialPageContent } from "../components/WordPressSpecialPageContent";
+import { PageMockupPage } from "./PageMockupPage";
 
 /**
  * Home composition is owned by the translated WordPress Page. Each validated
@@ -7,7 +7,7 @@ import { WordPressSpecialPageContent } from "../components/WordPressSpecialPageC
 export function HomeMockupPage() {
   return (
     <div className="grid gap-14">
-      <WordPressSpecialPageContent pageKey="home" className="-mt-8" />
+      <PageMockupPage routeKey="home" />
     </div>
   );
 }

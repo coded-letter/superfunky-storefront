@@ -1,5 +1,5 @@
-import { WordPressSpecialPageContent } from "../components/WordPressSpecialPageContent";
+import { PageMockupPage } from "./PageMockupPage";
 
 export function CatalogMockupPage() {
-  return <WordPressSpecialPageContent pageKey="shop" />;
+  return <PageMockupPage routeKey="shop" />;
 }

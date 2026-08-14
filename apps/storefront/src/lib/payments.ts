@@ -8,11 +8,30 @@
  * to that already-configured gateway without ever touching the secret key. */
 
 import { useEffect, useState } from "react";
-import { isBackendConfigured } from "./env";
-import { graphqlRequest } from "./graphqlClient";
-import { submitStoreCheckout, type StoreApiAddress, type StoreApiCheckoutResult } from "./wcStoreApi";
+import { getOrCreateCaptureKey } from "./abandonedCart";
+import { buildStoreCheckoutPayload } from "./checkoutContext";
+import { BACKEND_ORIGIN, graphqlRequest, isBackendConfigured } from "@funky/sdk";
+import { getStripe } from "./stripe";
+import {
+  buildStripePaymentData,
+  buildStripeOrderStatusRequest,
+  parseStripeConfirmationRedirect,
+  stripeOrderStatusError,
+  type StripeOrderStatusResponse,
+  toStripeBillingDetails,
+} from "./stripePaymentData";
+import {
+  submitStoreCheckout,
+  type StoreApiCheckoutResult,
+} from "./wcStoreApi";
+import {
+  blikReconciliationOutcome,
+  buildBlikReconciliationRequest,
+  type BlikReconciliationResponse,
+} from "./blikPayment";
 
-export { isStripeConfigured, getStripe, currencyCodeFromSymbol } from "./stripe";
+export { isStripeConfigured, getStripe, currencyCodeFromSymbol } from "./stripe.ts";
+export { buildStripePaymentData, toStripeBillingDetails } from "./stripePaymentData.ts";
 
 const PAYMENT_GATEWAYS_QUERY = /* GraphQL */ `
   query StorefrontPaymentGateways {
@@ -83,7 +102,7 @@ export type PaymentGatewayAvailability = {
    * Payment Element only submits for real once this is true (otherwise the checkout
    * page shows its existing "not connected" fallback). */
   isStripeGatewayEnabled: boolean;
-  /** True if BLIK is available through Stripe (PLN only). */
+  /** True if WooCommerce exposes its distinct `stripe_blik` gateway (PLN only). */
   isBlikAvailable: boolean;
   /** True if FunkyCommerce Crypto Wallet is enabled on the backend and has assets configured. */
   isCryptoAvailable: boolean;
@@ -102,19 +121,18 @@ export type PaymentGatewayAvailability = {
 /** Live payment-gateway availability, sourced from WPGraphQL's `paymentGateways` query
  * (public, confirmed working on the live backend — lists whichever gateways are
  * actually enabled in wp-admin, so this never drifts out of sync with the real store
- * configuration). Resolves to "not enabled" immediately when no backend is configured. 
- * For BLIK, WooCommerce Stripe exposes it under the main `stripe` gateway rather than a
- * separate `stripe_blik` payment-gateway node on this backend, so PLN + Stripe-enabled is
- * the correct availability rule here.
+ * configuration). Resolves to "not enabled" immediately when no backend is configured.
+ * BLIK is a distinct Woo Stripe gateway and must never be inferred from PLN + card Stripe:
+ * its plugin/account/currency availability is represented by the `stripe_blik` node.
  * For Crypto, checks the real gateway plus whether at least one wallet asset is configured. */
 export function usePaymentGateways(currencyCode?: string): PaymentGatewayAvailability {
   const [state, setState] = useState<PaymentGatewayAvailability>({
     isStripeGatewayEnabled: cachedGatewaySnapshot?.ids.has("stripe") ?? false,
-    isBlikAvailable: currencyCode === "PLN" && (cachedGatewaySnapshot?.ids.has("stripe") ?? false),
+    isBlikAvailable: currencyCode === "PLN" && (cachedGatewaySnapshot?.ids.has("stripe_blik") ?? false),
     isCryptoAvailable:
       (cachedGatewaySnapshot?.ids.has("funkycommerce_crypto") ?? false) &&
       (cachedGatewaySnapshot?.cryptoAssets.length ?? 0) > 0,
-    cryptoGatewayTitle: cachedGatewaySnapshot?.gateways.get("funkycommerce_crypto")?.title || "FunkyCommerce Crypto Wallet",
+    cryptoGatewayTitle: cachedGatewaySnapshot?.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
     cryptoGatewayDescription:
       cachedGatewaySnapshot?.gateways.get("funkycommerce_crypto")?.description ||
       "Pay directly with one of the configured store wallets.",
@@ -132,11 +150,11 @@ export function usePaymentGateways(currencyCode?: string): PaymentGatewayAvailab
       if (!cancelled) {
         setState({
           isStripeGatewayEnabled: snapshot.ids.has("stripe"),
-          isBlikAvailable: currencyCode === "PLN" && snapshot.ids.has("stripe"),
+          isBlikAvailable: currencyCode === "PLN" && snapshot.ids.has("stripe_blik"),
           isCryptoAvailable:
             snapshot.ids.has("funkycommerce_crypto") &&
             snapshot.cryptoAssets.length > 0,
-          cryptoGatewayTitle: snapshot.gateways.get("funkycommerce_crypto")?.title || "FunkyCommerce Crypto Wallet",
+          cryptoGatewayTitle: snapshot.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
           cryptoGatewayDescription:
             snapshot.gateways.get("funkycommerce_crypto")?.description ||
             "Pay directly with one of the configured store wallets.",
@@ -159,6 +177,7 @@ export function usePaymentGateways(currencyCode?: string): PaymentGatewayAvailab
 export type CheckoutBillingDetails = {
   firstName: string;
   lastName: string;
+  company?: string;
   addressLine1: string;
   addressLine2?: string;
   city: string;
@@ -170,102 +189,292 @@ export type CheckoutBillingDetails = {
   phone: string;
 };
 
-function toStoreApiAddress(details: CheckoutBillingDetails): StoreApiAddress {
+export type PaymentSubmissionResult =
+  | { ok: true; order: StoreApiCheckoutResult }
+  | { ok: false; error: string; order?: StoreApiCheckoutResult };
+
+export type CheckoutSubmissionOptions = {
+  createAccount?: boolean;
+  accountUsername?: string;
+  customerPassword?: string;
+  subscribeToNewsletter?: boolean;
+  marketingConsentLabel?: string;
+  requireAuthenticatedUser?: boolean;
+  language?: string;
+  backendLanguage?: string;
+  captureKey?: string;
+  customerNote?: string;
+  shippingAddress?: CheckoutBillingDetails;
+  cryptoAssetCode?: string;
+  stripePaymentMethodId?: string;
+  stripePaymentType?: string;
+  blikCode?: string;
+};
+
+function paymentDetailsMap(order: StoreApiCheckoutResult): Map<string, string> {
+  return new Map((order.payment_result.payment_details ?? []).map(({ key, value }) => [key, value]));
+}
+
+function paymentFailureMessage(order: StoreApiCheckoutResult): string {
+  const details = paymentDetailsMap(order);
+  return (
+    details.get("errorMessage") ||
+    details.get("error_message") ||
+    details.get("message") ||
+    "The store could not process this payment."
+  );
+}
+
+/** Creates the BLIK PaymentMethod before Woo checkout. Woo then creates the order
+ * with billing details before attempting payment, so a gateway failure remains visible
+ * to merchants as a failed/pending order. */
+export async function createBlikPaymentMethod(
+  billing: CheckoutBillingDetails,
+): Promise<{ ok: true; paymentMethodId: string } | { ok: false; error: string }> {
+  const stripePromise = getStripe();
+  if (!stripePromise) return { ok: false, error: "Stripe is not configured." };
+  const stripe = await stripePromise;
+  if (!stripe) return { ok: false, error: "Stripe could not be loaded." };
+
+  const result = await stripe.createPaymentMethod({
+    type: "blik",
+    blik: {},
+    billing_details: toStripeBillingDetails(billing),
+  });
+  if (result.error) {
+    return { ok: false, error: result.error.message || "Could not prepare the BLIK payment." };
+  }
+  return { ok: true, paymentMethodId: result.paymentMethod.id };
+}
+
+/** Completes SCA/redirect-capable Stripe intents encoded by the Woo Stripe plugin in
+ * its standard `#wc-stripe-confirm-pi|si:order:client_secret:nonce` redirect fragment.
+ * Woo webhooks remain the source of truth for the final order status. */
+export async function completeStripePayment(
+  order: StoreApiCheckoutResult,
+): Promise<PaymentSubmissionResult> {
+  if (order.payment_result.payment_status === "failure" || order.payment_result.payment_status === "error") {
+    return { ok: false, error: paymentFailureMessage(order), order };
+  }
+
+  const redirectUrl = order.payment_result.redirect_url || paymentDetailsMap(order).get("redirect") || "";
+  const confirmation = parseStripeConfirmationRedirect(redirectUrl);
+  if (!confirmation) {
+    return order.payment_result.payment_status === "pending"
+      ? {
+          ok: false,
+          error: "The store did not return the Stripe confirmation details needed to finish this payment.",
+          order,
+        }
+      : { ok: true, order };
+  }
+  if (!order.order_key) {
+    return {
+      ok: false,
+      error: "The store did not return the order key needed to securely finish this payment.",
+      order,
+    };
+  }
+
+  const stripePromise = getStripe();
+  if (!stripePromise) return { ok: false, error: "Stripe is not configured.", order };
+  const stripe = await stripePromise;
+  if (!stripe) return { ok: false, error: "Stripe could not be loaded.", order };
+
+  const result = confirmation.intentType === "si"
+    ? await stripe.confirmSetup({ clientSecret: confirmation.clientSecret, redirect: "if_required" })
+    : await stripe.confirmPayment({ clientSecret: confirmation.clientSecret, redirect: "if_required" });
+  const intentId =
+    ("paymentIntent" in result ? result.paymentIntent?.id : result.setupIntent?.id) ||
+    confirmation.clientSecret.split("_secret_", 1)[0];
+
+  if (!intentId || !BACKEND_ORIGIN) {
+    return {
+      ok: false,
+      error: result.error?.message || "Stripe did not return the payment intent needed to finish the order.",
+      order,
+    };
+  }
+
+  const verificationRequest = buildStripeOrderStatusRequest(
+    BACKEND_ORIGIN,
+    confirmation,
+    intentId,
+    order.order_key,
+  );
+  let verification: StripeOrderStatusResponse;
+  try {
+    const response = await fetch(verificationRequest.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: verificationRequest.body,
+    });
+    verification = (await response.json().catch(() => null)) as StripeOrderStatusResponse | null ?? {};
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: result.error?.message || `WooCommerce payment reconciliation failed with status ${response.status}.`,
+        order,
+      };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        result.error?.message ||
+        (error instanceof Error ? error.message : "Store payment reconciliation failed."),
+      order,
+    };
+  }
+
+  const verificationError = stripeOrderStatusError(verification);
+  if (result.error || verificationError) {
+    return {
+      ok: false,
+      error: result.error?.message || verificationError || "Stripe could not confirm the payment.",
+      order,
+    };
+  }
+
   return {
-    first_name: details.firstName,
-    last_name: details.lastName,
-    address_1: details.addressLine1,
-    address_2: details.addressLine2,
-    city: details.city,
-    state: details.state,
-    postcode: details.postcode,
-    country: details.countryCode,
-    email: details.email,
-    phone: details.phone,
+    ok: true,
+    order: {
+      ...order,
+      payment_result: {
+        ...order.payment_result,
+        payment_status: "success",
+        redirect_url: verification.data?.return_url || confirmation.returnUrl,
+      },
+    },
   };
 }
 
-export type PaymentSubmissionResult =
-  | { ok: true; order: StoreApiCheckoutResult }
-  | { ok: false; error: string };
+const BLIK_RECONCILIATION_TIMEOUT_MS = 90_000;
+const BLIK_RECONCILIATION_INTERVAL_MS = 2_000;
 
-/** Submits a real WooCommerce Store API checkout for the card/Stripe payment method.
- * The returned `payment_result.payment_details` is where a Stripe `client_secret`
- * would appear for the caller to finish confirming with `stripe.confirmPayment()`. */
-export async function submitStripeCheckout(billing: CheckoutBillingDetails): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: "stripe",
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
-}
+/** Polls the backend after the customer submits a BLIK code. Woo Stripe normally
+ * finalizes BLIK asynchronously via webhook; this verifies the live intent with Stripe
+ * and invokes the gateway's own webhook handler when delivery is delayed. */
+export async function completeBlikPayment(
+  order: StoreApiCheckoutResult,
+  billingEmail: string,
+): Promise<PaymentSubmissionResult> {
+  if (!BACKEND_ORIGIN || !order.order_key) {
+    return {
+      ok: false,
+      error: "The store did not return the credentials needed to verify the BLIK payment.",
+      order,
+    };
+  }
 
-/** Same as `submitStripeCheckout`, but for the `stripe_blik` Store API payment method
- * — the WooCommerce Stripe Gateway plugin's BLIK integration, confirmed as its own
- * distinct payment method ID via live schema introspection (not just a Stripe Payment
- * Element option). Pass the 6-digit BLIK code the shopper entered as `payment_data`. */
-export async function submitBlikCheckout(billing: CheckoutBillingDetails, blikCode: string): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: "stripe_blik",
-    payment_data: [{ key: "blik_code", value: blikCode }],
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
-}
+  const request = buildBlikReconciliationRequest(BACKEND_ORIGIN, order, billingEmail);
+  const deadline = Date.now() + BLIK_RECONCILIATION_TIMEOUT_MS;
 
-/** Submits checkout with Cash on Delivery payment method. */
-export async function submitCodCheckout(billing: CheckoutBillingDetails): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: "cod",
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
-}
+  while (Date.now() < deadline) {
+    let response: Response;
+    let payload: BlikReconciliationResponse | null;
+    try {
+      response = await fetch(request.url, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request.body),
+      });
+      payload = (await response.json().catch(() => null)) as BlikReconciliationResponse | null;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "The BLIK payment status could not be verified.",
+        order,
+      };
+    }
 
-/** Submits checkout with Check/Cheque payment method. */
-export async function submitCheckCheckout(billing: CheckoutBillingDetails): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: "cheque",
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
-}
+    if (response.status === 409) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, BLIK_RECONCILIATION_INTERVAL_MS));
+      continue;
+    }
+    if (!response.ok || !payload) {
+      return {
+        ok: false,
+        error: payload?.message || `BLIK payment verification failed with status ${response.status}.`,
+        order,
+      };
+    }
 
-/** Submits checkout with WooCommerce's BACS (direct bank transfer) payment method. */
-export async function submitBacsCheckout(billing: CheckoutBillingDetails): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: "bacs",
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
+    const outcome = blikReconciliationOutcome(payload);
+    if (outcome === "success" || outcome === "processing") {
+      return {
+        ok: true,
+        order: {
+          ...order,
+          status: payload.order_status || order.status,
+          payment_result: {
+            ...order.payment_result,
+            payment_status: outcome === "success" ? "success" : "pending",
+          },
+        },
+      };
+    }
+    if (outcome === "failure") {
+      return {
+        ok: false,
+        error: payload.message || "The BLIK payment was declined or canceled.",
+        order: {
+          ...order,
+          status: payload.order_status || order.status,
+          payment_result: { ...order.payment_result, payment_status: "failure" },
+        },
+      };
+    }
+
+    await new Promise((resolve) => globalThis.setTimeout(resolve, BLIK_RECONCILIATION_INTERVAL_MS));
+  }
+
+  return {
+    ok: false,
+    error: "BLIK approval was not confirmed in time. Check your banking app before retrying the payment.",
+    order,
+  };
 }
 
 /** Submits checkout with customer account creation and optional newsletter subscription. */
 export async function submitCheckoutWithAccount(
   billing: CheckoutBillingDetails,
   paymentMethod: "stripe" | "stripe_blik" | "cod" | "cheque" | "bacs" | "funkycommerce_crypto",
-  options?: {
-    createAccount?: boolean;
-    subscribeToNewsletter?: boolean;
-    customerId?: number;
-    customerNote?: string;
-    blikCode?: string;
-    cryptoAssetCode?: string;
-  }
+  options?: CheckoutSubmissionOptions,
 ): Promise<PaymentSubmissionResult> {
-  const result = await submitStoreCheckout({
-    billing_address: toStoreApiAddress(billing),
-    payment_method: paymentMethod,
-    create_account: options?.createAccount,
-    subscribe_to_newsletter: options?.subscribeToNewsletter,
-    customer_id: options?.customerId,
-    customer_note: options?.customerNote,
-    payment_data:
-      paymentMethod === "stripe_blik" && options?.blikCode
-        ? [{ key: "blik_code", value: options.blikCode }]
-        : paymentMethod === "funkycommerce_crypto" && options?.cryptoAssetCode
-          ? [{ key: "funkycommerce_crypto_asset", value: options.cryptoAssetCode.toUpperCase() }]
-          : undefined,
-  });
-  return result.ok ? { ok: true, order: result.data } : { ok: false, error: result.error };
+  const stripePaymentData =
+    (paymentMethod === "stripe" || paymentMethod === "stripe_blik") &&
+    options?.stripePaymentMethodId
+      ? buildStripePaymentData(billing, options.stripePaymentMethodId, {
+          gatewayId: paymentMethod,
+          blikCode: paymentMethod === "stripe_blik" ? options.blikCode : undefined,
+          selectedPaymentType: options.stripePaymentType,
+        })
+      : undefined;
+
+  if ((paymentMethod === "stripe" || paymentMethod === "stripe_blik") && !stripePaymentData) {
+    return { ok: false, error: "Stripe payment details are missing. Please re-enter them and try again." };
+  }
+
+  const result = await submitStoreCheckout(
+    buildStoreCheckoutPayload(
+      billing,
+      paymentMethod,
+      { ...options, captureKey: getOrCreateCaptureKey() || undefined },
+      stripePaymentData,
+    ),
+    { requireAuthenticatedUser: options?.requireAuthenticatedUser },
+  );
+  if (!result.ok) return { ok: false, error: result.error };
+  if (
+    result.data.payment_result.payment_status === "failure" ||
+    result.data.payment_result.payment_status === "error"
+  ) {
+    return { ok: false, error: paymentFailureMessage(result.data), order: result.data };
+  }
+  return { ok: true, order: result.data };
 }

@@ -1,10 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { useCurrency, useLanguage, useUiStrings } from "@funky/ui";
 import { DEFAULT_STOREFRONT_CONFIGURATION, getNavigationData, type CmsNavigationData } from "../lib/navigation";
-import { useIncrementalData, type IncrementalDataState } from "../lib/incrementalData";
+import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 import { setStripePublishableKey } from "../lib/stripe";
 import { fetchGeolocation, isGeolocationBackendConfigured } from "../lib/geolocation";
-import { isBackendConfigured } from "../lib/env";
 
 /** Best-effort mapping: ISO 3166-1 alpha-2 country code → ISO 4217 currency code.
  *  Covers the most-common e-commerce markets; falls back to baseCurrency otherwise. */
@@ -20,13 +19,14 @@ const COUNTRY_TO_CURRENCY: Record<string, string> = {
 
 const NavigationDataContext = createContext<IncrementalDataState<CmsNavigationData> | null>(null);
 
-export function NavigationDataProvider({ children }: { children: ReactNode }) {
-  const { languageCode, hasBackendLanguageOptions, syncLanguageOptions } = useLanguage();
+export function NavigationDataProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
+  const { languageCode, syncLanguageOptions } = useLanguage();
   const { syncCurrencyOptions, setCurrencyCode, currencyOptions } = useCurrency();
   const { syncUiStrings } = useUiStrings();
   const rawState = useIncrementalData(
     `navigation-data:v7:${languageCode}`,
     () => getNavigationData(languageCode),
+    enabled,
   );
   const state = useMemo<IncrementalDataState<CmsNavigationData>>(() => ({
     ...rawState,
@@ -41,9 +41,9 @@ export function NavigationDataProvider({ children }: { children: ReactNode }) {
         }
       : null,
   }), [rawState]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const languages = state.data?.languages;
-    if (!state.isRevalidating && Array.isArray(languages) && languages.length) syncLanguageOptions(languages);
+    if (!state.isRevalidating && Array.isArray(languages)) syncLanguageOptions(languages);
   }, [state.data?.languages, state.isRevalidating, syncLanguageOptions]);
   useEffect(() => {
     const configuration = state.data?.storefrontConfig;
@@ -77,10 +77,9 @@ export function NavigationDataProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currencyOptions.length > 0]);
 
-  const isResolvingBackendLanguages = isBackendConfigured && !hasBackendLanguageOptions && !state.error;
   return (
     <NavigationDataContext.Provider value={state}>
-      {isResolvingBackendLanguages ? null : children}
+      {children}
     </NavigationDataContext.Provider>
   );
 }

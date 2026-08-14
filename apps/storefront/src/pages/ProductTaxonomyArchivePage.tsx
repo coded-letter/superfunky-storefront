@@ -1,43 +1,38 @@
-import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { PaginableProductGrid, Seo, ViewSwitch } from "@funky/ui";
-import { Breadcrumbs } from "../components/Breadcrumbs";
+import { PaginableProductGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { Breadcrumbs, seoBreadcrumbsToItems } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { HeroMock, type HeroVariant } from "../components/HeroMock";
-import { useIncrementalData } from "../lib/incrementalData";
+import { HeroMock } from "../components/HeroMock";
+import { useIncrementalData } from "@funky/sdk/react";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import {
   getProductArchive,
   type CmsProductArchive,
   type CommerceTaxonomy,
-  type CommerceTaxonomyIdentifierType,
 } from "../lib/commerce";
-import { ARCHIVE_HERO_OPTIONS, ArchiveDescriptionSection } from "./shared";
-
-const TAXONOMY_URI_PREFIX: Record<CommerceTaxonomy, string> = {
-  category: "/product-category/",
-  tag: "/product-tag/",
-  brand: "/brand/",
-};
+import {
+  resolveTaxonomyArchiveIdentifier,
+  taxonomyEmptyMessage,
+  taxonomyNotFoundMessage,
+} from "../lib/taxonomyRoutes";
+import { ArchiveDescriptionSection } from "./shared";
 
 export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTaxonomy }) {
   const { pathname } = useLocation();
-  const { slug = "" } = useParams();
-  const isCanonicalUri = pathname.startsWith(TAXONOMY_URI_PREFIX[taxonomy]);
-  const identifier = isCanonicalUri ? withTrailingSlash(pathname) : slug;
-  const idType: CommerceTaxonomyIdentifierType = isCanonicalUri ? "URI" : "SLUG";
+  const { slug } = useParams();
+  const { identifier, idType } = resolveTaxonomyArchiveIdentifier(pathname, slug);
   const { data: archive, isLoading, error } = useIncrementalData(
     `product-${taxonomy}:${idType}:${identifier}`,
     () => getProductArchive(taxonomy, identifier, idType),
   );
 
   if (isLoading) return <ContentLoadingState label="Loading product archive" />;
-  if (error) return <ArchiveStatus title="Archive unavailable" message={error.message} />;
+  if (error) return <ArchiveStatus title="Archive unavailable" message="This collection is temporarily unavailable." />;
   if (!archive) {
     return (
       <ArchiveStatus
         title={`Product ${taxonomy} not found`}
-        message={`WooCommerce has no published ${taxonomy} matching “${identifier}”.`}
+        message={taxonomyNotFoundMessage(taxonomy)}
       />
     );
   }
@@ -52,12 +47,22 @@ const TAXONOMY_LABELS: Record<CommerceTaxonomy, string> = {
 };
 
 function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
-  const [heroVariant, setHeroVariant] = useState<HeroVariant>(archive.taxonomy === "category" ? "split" : "minimal");
+  const { languageCode } = useLanguage();
+  const { productArchiveHeroLayout: heroVariant } = useLayoutPreferences();
   const shopPath = useStorefrontPath("shop", "/shop");
   const taxonomyLabel = TAXONOMY_LABELS[archive.taxonomy];
   const title = archive.taxonomy === "tag" ? `#${archive.name}` : archive.name;
   const description = stripHtml(archive.descriptionHtml) ||
     `Browse products in the ${archive.name} ${archive.taxonomy}.`;
+  const breadcrumbs = seoBreadcrumbsToItems(
+    archive.seo.breadcrumbs,
+    [
+      { label: "Home", href: "/" },
+      { label: "Shop", href: shopPath },
+      ...(archive.taxonomy === "brand" ? [{ label: "Product brands", href: "/product-brand" }] : []),
+      { label: title },
+    ],
+  );
 
   return (
     <div className="grid gap-8">
@@ -65,7 +70,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         title={archive.seo.title || title}
         description={archive.seo.description || archive.seo.opengraphDescription || description}
         canonical={archive.seo.canonical || archive.seo.opengraphUrl || archive.uri}
-        languageCode="pl"
+        languageCode={languageCode}
         keywords={archive.seo.keywords || undefined}
         siteName={archive.seo.siteName || undefined}
         appendSiteName={false}
@@ -73,16 +78,19 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         opengraphType="website"
         opengraphTitle={archive.seo.opengraphTitle || title}
         opengraphDescription={archive.seo.opengraphDescription || description}
-        opengraphImage={archive.seo.opengraphImage || archive.imageUrl || undefined}
+        image={archive.imageUrl
+          ? { url: archive.imageUrl, alt: archive.name }
+          : archive.seo.opengraphImage
+            ? { url: archive.seo.opengraphImage, alt: archive.name }
+            : undefined}
         twitterTitle={archive.seo.twitterTitle || undefined}
         twitterDescription={archive.seo.twitterDescription || undefined}
         schema={{ pageType: archive.seo.pageType || "CollectionPage" }}
         breadcrumbs={archive.seo.breadcrumbs}
       />
-      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Shop", href: shopPath }, { label: title }]} includeStructuredData={false} />
+      <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
 
       <div className="grid gap-3">
-        <ViewSwitch label="Hero layout" value={heroVariant} onChange={setHeroVariant} options={ARCHIVE_HERO_OPTIONS} />
         <HeroMock
           variant={heroVariant}
           headingLevel="h1"
@@ -90,7 +98,9 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
           title={title}
           description={description}
           image={archive.imageUrl || undefined}
-          secondaryCta={{ label: "All products", href: shopPath }}
+          secondaryCta={archive.taxonomy === "brand"
+            ? { label: "All brands", href: "/product-brand" }
+            : { label: "All products", href: shopPath }}
         />
       </div>
 
@@ -124,7 +134,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         <section className="grid gap-3 rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <h2 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">No products yet</h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            WooCommerce currently has no published products assigned to this {archive.taxonomy}.
+            {taxonomyEmptyMessage(archive.taxonomy)}
           </p>
         </section>
       )}
@@ -150,10 +160,6 @@ function ArchiveStatus({ title, message }: { title: string; message: string }) {
       <Link to={shopPath} className="mx-auto rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white no-underline">Browse the shop</Link>
     </section>
   );
-}
-
-function withTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
 }
 
 function stripHtml(value: string): string {

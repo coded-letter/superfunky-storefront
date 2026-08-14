@@ -143,7 +143,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
 
   return createPortal(
     <div
-      className="funky-product-image-lightbox fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/90 p-4 backdrop-blur-sm"
+      className="sf-product-lightbox funky-product-image-lightbox fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/90 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Image viewer"

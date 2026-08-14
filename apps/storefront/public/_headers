@@ -12,6 +12,10 @@
   X-XSS-Protection: 1; mode=block
   Cache-Control: public, max-age=0, must-revalidate
 
+/order/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  Cache-Control: private, no-store, max-age=0
+
 # Long-cache immutable hashed build assets (Vite fingerprints every file in /assets).
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

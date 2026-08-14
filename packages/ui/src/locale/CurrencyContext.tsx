@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { CURRENCY_OPTIONS, type CurrencyOption } from "./options";
+import { formatCurrencyAmount } from "./pricing";
 import { useLanguage } from "./LanguageContext";
 
 type CurrencyContextValue = {
@@ -69,30 +70,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     || currencyOptions.find(({ code }) => code === baseCurrency)
     || currencyOptions[0];
   const selectedRate = selectedOption?.code === baseCurrency ? 1 : selectedOption?.rate || 1;
-// Crypto assets use non-ISO-4217 codes — Intl.NumberFormat rejects them.
-// Map each to its unicode symbol and appropriate decimal precision.
-const CRYPTO_CURRENCY_FORMAT: Record<string, { symbol: string; decimals: number }> = {
-  BTC: { symbol: "₿", decimals: 8 },
-  ETH: { symbol: "Ξ", decimals: 6 },
-};
 
   const formatBaseAmount = useCallback((amount: number) => {
     const converted = amount * selectedRate;
     const code = selectedOption?.code || baseCurrency;
-    const crypto = CRYPTO_CURRENCY_FORMAT[code.toUpperCase()];
-    if (crypto) {
-      // Trim trailing zeros but keep at least 4 significant decimal places for readability.
-      const formatted = converted.toFixed(crypto.decimals).replace(/\.?0+$/, "");
-      return `${crypto.symbol}\u202F${formatted}`;
-    }
-    try {
-      return new Intl.NumberFormat(languageCode, {
-        style: "currency",
-        currency: code,
-      }).format(converted);
-    } catch {
-      return `${selectedOption?.symbol || code} ${converted.toFixed(2)}`;
-    }
+    return formatCurrencyAmount(converted, code, selectedOption?.symbol || code, languageCode);
   }, [baseCurrency, languageCode, selectedOption?.code, selectedOption?.symbol, selectedRate]);
   const convertSelectedToBase = useCallback(
     (amount: number) => amount / selectedRate,
@@ -111,33 +93,6 @@ const CRYPTO_CURRENCY_FORMAT: Record<string, { symbol: string; decimals: number 
   }), [baseCurrency, convertSelectedToBase, currency.code, currencyOptions, formatBaseAmount, selectedRate, setCurrencyCode, syncCurrencyOptions]);
 
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
-}
-
-export function parseLocalizedPrice(value: string): number | null {
-  const normalized = value
-    .replace(/&(?:nbsp|#160|#x0*a0);/gi, "")
-    .trim()
-    .replace(/\s|\u00a0/g, "")
-    .replace(/[^\d,.-]/g, "");
-  if (!normalized) return null;
-  const commaIndex = normalized.lastIndexOf(",");
-  const dotIndex = normalized.lastIndexOf(".");
-  let numeric = normalized;
-  if (commaIndex >= 0 && dotIndex >= 0) {
-    const decimalSeparator = commaIndex > dotIndex ? "," : ".";
-    const thousandsSeparator = decimalSeparator === "," ? "." : ",";
-    numeric = normalized.split(thousandsSeparator).join("").replace(decimalSeparator, ".");
-  } else {
-    const separator = commaIndex >= 0 ? "," : dotIndex >= 0 ? "." : "";
-    if (separator) {
-      const fractionalDigits = normalized.length - normalized.lastIndexOf(separator) - 1;
-      numeric = fractionalDigits > 0 && fractionalDigits <= 2
-        ? normalized.replace(separator, ".")
-        : normalized.split(separator).join("");
-    }
-  }
-  const amount = Number(numeric);
-  return Number.isFinite(amount) ? amount : null;
 }
 
 export function useCurrency() {

@@ -80,6 +80,7 @@ export function SoundUXProvider({
 }) {
   const [isEnabled, setIsEnabled] = useState(readStoredEnabled);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const userActivatedRef = useRef(false);
 
   const soundConfig = useMemo(() => {
     const merged = {
@@ -105,31 +106,38 @@ export function SoundUXProvider({
       const descriptor = soundConfig.mappings[action];
       if (!descriptor) return;
 
-      const context = audioContextRef.current?.state === "closed" ? null : audioContextRef.current ?? createAudioContext();
+      const currentContext = audioContextRef.current?.state === "closed" ? null : audioContextRef.current;
+      if (!currentContext && !userActivatedRef.current) return;
+      const context = currentContext ?? createAudioContext();
       if (!context) return;
 
       audioContextRef.current = context;
 
+      const play = () => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = descriptor.type;
+        oscillator.frequency.setValueAtTime(descriptor.frequency, context.currentTime);
+        if (descriptor.detune) {
+          oscillator.detune.setValueAtTime(descriptor.detune, context.currentTime);
+        }
+
+        gain.gain.setValueAtTime(0.0001, context.currentTime);
+        gain.gain.exponentialRampToValueAtTime((descriptor.gain ?? 0.03) * soundConfig.volume, context.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + Math.max(descriptor.duration, 0.05));
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + descriptor.duration + 0.04);
+      };
       if (context.state === "suspended") {
-        void context.resume();
+        void context.resume().then(play).catch((error: unknown) => {
+          console.warn("[Sound UX] Audio playback could not be started.", error);
+        });
+        return;
       }
-
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = descriptor.type;
-      oscillator.frequency.setValueAtTime(descriptor.frequency, context.currentTime);
-      if (descriptor.detune) {
-        oscillator.detune.setValueAtTime(descriptor.detune, context.currentTime);
-      }
-
-      gain.gain.setValueAtTime(0.0001, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime((descriptor.gain ?? 0.03) * soundConfig.volume, context.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + Math.max(descriptor.duration, 0.05));
-
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start();
-      oscillator.stop(context.currentTime + descriptor.duration + 0.04);
+      play();
     },
     [isEnabled, soundConfig.enabled, soundConfig.mappings, soundConfig.volume],
   );
@@ -147,6 +155,9 @@ export function SoundUXProvider({
   useEffect(() => {
     if (!soundConfig.enabled || !isEnabled) return;
 
+    const markUserActivated = () => {
+      userActivatedRef.current = true;
+    };
     const handleClick = (event: MouseEvent) => {
       const action = resolveActionFromTarget(event.target);
       if (action) {
@@ -191,6 +202,10 @@ export function SoundUXProvider({
       }
     };
 
+    document.addEventListener("pointerdown", markUserActivated, true);
+    document.addEventListener("touchstart", markUserActivated, true);
+    document.addEventListener("keydown", markUserActivated, true);
+    document.addEventListener("click", markUserActivated, true);
     document.addEventListener("click", handleClick, true);
     document.addEventListener("mouseover", handleHover, true);
     document.addEventListener("focusin", handleFocusIn, true);
@@ -198,6 +213,10 @@ export function SoundUXProvider({
     document.addEventListener("input", handleInput, true);
 
     return () => {
+      document.removeEventListener("pointerdown", markUserActivated, true);
+      document.removeEventListener("touchstart", markUserActivated, true);
+      document.removeEventListener("keydown", markUserActivated, true);
+      document.removeEventListener("click", markUserActivated, true);
       document.removeEventListener("click", handleClick, true);
       document.removeEventListener("mouseover", handleHover, true);
       document.removeEventListener("focusin", handleFocusIn, true);
@@ -207,16 +226,10 @@ export function SoundUXProvider({
   }, [isEnabled, soundConfig.enabled, playAction]);
 
   useEffect(() => {
-    const context = createAudioContext();
-    audioContextRef.current = context;
     return () => {
+      const context = audioContextRef.current;
+      audioContextRef.current = null;
       void context?.close();
-      // Prevent a later playAction call from reusing this now-closed context (e.g. after
-      // React 18 StrictMode's dev-mode double-mount, or a genuine provider remount) —
-      // resuming a closed AudioContext throws, so the stale ref must be cleared here.
-      if (audioContextRef.current === context) {
-        audioContextRef.current = null;
-      }
     };
   }, []);
 

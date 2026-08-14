@@ -1,16 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Heart, Lock, MessageCircle, Sparkles, Store } from "lucide-react";
-import { ResponsiveImage, avatarColorFor, useLanguage } from "@funky/ui";
+import { ArrowLeft, Heart, Lock, MessageCircle, Pencil, Sparkles, Store, Trash2 } from "lucide-react";
+import { CommunityMediaGallery, ResponsiveImage, UploadPostModal, avatarColorFor, useLanguage, useLayoutPreferences, type SocialPostMedia } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
+import { GuestStarRating } from "../components/GuestStarRating";
 import { ShareButtonsRow } from "./ShareButtons";
 import { NotFoundMockupPage } from "./NotFoundMockupPage";
 import { CommentsSection } from "./CommentThread";
 import { useCreatorContent } from "../state/creatorContent";
 import { createReview } from "../lib/comments";
-import { getCommunityPostByDatabaseId, getCommunityPostByUri, toggleCommunityPostLike } from "../lib/community";
-import { useIncrementalData } from "../lib/incrementalData";
+import {
+  deleteCommunityPost,
+  getCommunityPostByDatabaseId,
+  getCommunityPostByUri,
+  searchTranslationCandidateCommunityPosts,
+  toggleCommunityPostLike,
+  updateCommunityPost,
+} from "../lib/community";
+import { useIncrementalData } from "@funky/sdk/react";
+import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
 import { useCommunityData } from "../state/communityData";
 import {
   getPostComments,
@@ -35,17 +44,22 @@ export function CommunityPostMockupPage() {
   const navigate = useNavigate();
   const { hasLanguagePreference, languageCode, syncLanguageCode } = useLanguage();
   const creatorContent = useCreatorContent();
-  const { data: liveCommunity, viewer } = useCommunityData();
+  const { data: liveCommunity, viewer, refresh } = useCommunityData();
+  const { discussionLayout } = useLayoutPreferences();
+  const [postRevision, setPostRevision] = useState(0);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const {
     data: directPost,
     isLoading: isDirectPostLoading,
     error: directPostError,
   } = useIncrementalData(
-    `community-post:v2:${postId || pathname}`,
+    `community-post:v5:${postId || pathname}:${postRevision}`,
     () => postId ? getCommunityPostByDatabaseId(postId) : getCommunityPostByUri(pathname),
   );
   const livePost = liveCommunity?.posts.find((candidate) => candidate.id === postId || String(candidate.databaseId) === postId);
-  const wordpressPost = livePost || directPost?.post;
+  const wordpressPost = directPost?.post || livePost;
   const fallbackPost = getSocialPostById(postId, creatorContent.posts);
   const post = wordpressPost || fallbackPost;
   const liveAuthor = livePost
@@ -63,6 +77,7 @@ export function CommunityPostMockupPage() {
   const [likesCount, setLikesCount] = useState(wordpressPost?.likes ?? fallbackPost?.likes ?? 0);
   const [liked, setLiked] = useState(wordpressPost?.likedByViewer ?? false);
   const [likeError, setLikeError] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLikesCount(wordpressPost?.likes ?? fallbackPost?.likes ?? 0);
@@ -71,14 +86,20 @@ export function CommunityPostMockupPage() {
 
   useEffect(() => {
     if (!directPost) return;
+    const sourceLanguageCode = directPost.languageCode || "en";
     if (!hasLanguagePreference) {
-      syncLanguageCode(directPost.languageCode);
+      syncLanguageCode(sourceLanguageCode);
       return;
     }
-    if (directPost.languageCode.toLowerCase() === languageCode.toLowerCase()) return;
-    const translation = directPost.translations.find(({ languageCode: translatedLanguage }) => translatedLanguage.toLowerCase() === languageCode.toLowerCase());
+    if (sourceLanguageCode.toLowerCase() === languageCode.toLowerCase()) return;
+    const translation = (directPost.translations || []).find(({ languageCode: translatedLanguage }) => translatedLanguage.toLowerCase() === languageCode.toLowerCase());
     if (translation) navigate(translation.uri || `/community/post/${translation.databaseId}`, { replace: true });
   }, [directPost, hasLanguagePreference, languageCode, navigate, syncLanguageCode]);
+
+  useEffect(() => {
+    if (!contentRef.current || !wordpressPost?.contentHtml) return;
+    return mountCmsBehaviors(contentRef.current);
+  }, [wordpressPost?.contentHtml]);
 
   if (!post && isDirectPostLoading) {
     return <ContentLoadingState label="Loading community post" />;
@@ -91,6 +112,18 @@ export function CommunityPostMockupPage() {
   const isOwnPost = Boolean(viewer && author.handle === viewer.handle);
   const canView = author.isPublic || isOwnPost;
   const isSeller = author.role === "collaborator" || isCreatorHandle(author.handle);
+  const title = post.title?.trim() || post.caption;
+  const media: SocialPostMedia[] = post.media?.length
+    ? post.media
+    : post.image
+      ? [{
+          databaseId: 0,
+          url: post.image,
+          mimeType: "image/jpeg",
+          mediaType: "image",
+          altText: title,
+        }]
+      : [];
 
   const initials = author.displayName
     .split(" ")
@@ -100,7 +133,7 @@ export function CommunityPostMockupPage() {
     .toUpperCase();
 
   return (
-    <div className="grid gap-8">
+    <div ref={contentRef} className="grid gap-8">
       <Breadcrumbs
         items={[
           { label: "Home", href: "/" },
@@ -127,18 +160,9 @@ export function CommunityPostMockupPage() {
           <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">Follow @{author.handle} to see their posts once they approve you.</p>
         </div>
       ) : (
-        <article className={`grid gap-8 lg:items-start ${post.image ? "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]" : "mx-auto w-full max-w-3xl"}`}>
-          {post.image ? (
-            <div className="overflow-hidden rounded-3xl bg-zinc-100 shadow-soft dark:bg-zinc-900">
-              <ResponsiveImage
-                src={post.image}
-                alt={post.caption}
-                priority
-                sizes="(min-width: 1024px) 58vw, 100vw"
-                style={{ aspectRatio: post.aspect.replace("/", " / ") }}
-                className="h-auto w-full object-cover"
-              />
-            </div>
+        <article className={`grid gap-8 lg:items-start ${media.length ? "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]" : "mx-auto w-full max-w-3xl"}`}>
+          {media.length ? (
+            <CommunityMediaGallery media={media} title={title} variant="detail" imageLoading="eager" aspect={post.aspect} />
           ) : null}
 
           <div className="grid gap-6 self-start">
@@ -163,32 +187,81 @@ export function CommunityPostMockupPage() {
                   </span>
                 </span>
               </Link>
-              {isSeller ? (
-                <Link
-                  to={`/community/${author.handle}?tab=shop`}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 no-underline transition hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900"
-                >
-                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
-                  Shop @{author.handle}
-                </Link>
-              ) : null}
+              <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {directPost?.post.canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:text-brand-700 dark:border-zinc-700 dark:text-zinc-200"
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    Edit
+                  </button>
+                ) : null}
+                {wordpressPost?.canDelete ? (
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete “${title}”? This cannot be undone.`)) return;
+                      setIsDeleting(true);
+                      setDeleteError(null);
+                      try {
+                        await deleteCommunityPost(wordpressPost.databaseId);
+                        refresh();
+                        navigate(`/community/${author.handle}`, { replace: true });
+                      } catch (error) {
+                        setDeleteError(error instanceof Error ? error.message : "The community post could not be deleted.");
+                        setIsDeleting(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {isDeleting ? "Deleting…" : "Delete"}
+                  </button>
+                ) : null}
+                {isSeller ? (
+                  <Link
+                    to={`/community/${author.handle}?tab=shop`}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 no-underline transition hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900"
+                  >
+                    <Store className="h-3.5 w-3.5" aria-hidden="true" />
+                    Shop @{author.handle}
+                  </Link>
+                ) : null}
+              </span>
             </div>
 
+            <h1 className="m-0 font-display text-3xl font-bold text-zinc-950 dark:text-zinc-50">{title}</h1>
+
             {wordpressPost ? (
-              <div
-                className="wp-site-blocks entry-content is-layout-flow text-base leading-relaxed text-zinc-700 dark:text-zinc-200"
-                dangerouslySetInnerHTML={{ __html: wordpressPost.contentHtml }}
+              <GuestStarRating
+                targetType="community_post"
+                targetId={wordpressPost.databaseId}
+                initialSummary={wordpressPost.engagementRating}
               />
+            ) : null}
+
+            {wordpressPost ? (
+              wordpressPost.contentHtml ? (
+                <div
+                  className="wp-site-blocks entry-content is-layout-flow text-base leading-relaxed text-zinc-700 dark:text-zinc-200"
+                  dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(wordpressPost.contentHtml) }}
+                />
+              ) : null
             ) : (
-              <p className="m-0 whitespace-pre-line text-base leading-relaxed text-zinc-700 dark:text-zinc-200">{post.caption}</p>
+              post.description || post.caption ? (
+                <p className="m-0 whitespace-pre-line text-base leading-relaxed text-zinc-700 dark:text-zinc-200">{post.description || post.caption}</p>
+              ) : null
             )}
 
             {post.tags.length ? (
               <div className="flex flex-wrap gap-2">
-                {post.tags.map((tag) => (
+                {post.tags.map((tag, index) => (
                   <Link
                     key={tag}
-                    to={`/community?tag=${encodeURIComponent(tag)}`}
+                    to={communityTagPath(wordpressPost?.tagSlugs?.[index], tag)}
                     className="inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 no-underline transition hover:bg-brand-100 dark:bg-brand-950 dark:text-brand-300 dark:hover:bg-brand-900"
                   >
                     #{tag}
@@ -229,8 +302,9 @@ export function CommunityPostMockupPage() {
               ) : null}
             </div>
             {likeError ? <p role="alert" className="m-0 text-xs font-medium text-red-600 dark:text-red-400">{likeError}</p> : null}
+            {deleteError ? <p role="alert" className="m-0 text-xs font-medium text-red-600 dark:text-red-400">{deleteError}</p> : null}
 
-            <ShareButtonsRow title={post.caption} />
+            <ShareButtonsRow title={title} />
           </div>
         </article>
       )}
@@ -238,16 +312,18 @@ export function CommunityPostMockupPage() {
       {canView ? (
         <CommentsSection
           anchorId="discussion"
+          contentKey={`community-post:${postId || pathname}`}
           heading="Discussion"
           initialReviews={comments}
           formTitle="Join the discussion"
-          formNote="Comments are held for moderation, just like a standard WordPress comment, and only appear once approved."
+          formNote="Comments are held for moderation and only appear once approved."
+          showRatingField={false}
+          discussionLayout={discussionLayout}
           onSubmitReview={wordpressPost ? (review) => createReview({
             commentOn: wordpressPost.databaseId,
             author: review.author,
             authorEmail: review.email,
             content: review.content,
-            rating: review.rating,
           }) : undefined}
           onSubmitReply={wordpressPost ? (parent, reply) => {
             if (!parent.databaseId) throw new Error("This discussion reply target is unavailable");
@@ -259,6 +335,44 @@ export function CommunityPostMockupPage() {
               parent: parent.databaseId,
             });
           } : undefined}
+        />
+      ) : null}
+
+      {isEditOpen && directPost ? (
+        <UploadPostModal
+          initialValues={{
+            title: directPost.post.title,
+            description: directPost.post.description,
+            tags: directPost.post.tags,
+            media: directPost.post.media.map((item) => ({
+              attachmentId: item.databaseId,
+              url: item.url,
+              mimeType: item.mimeType,
+              mediaType: item.mediaType,
+            })),
+            languageCode: directPost.languageCode || "en",
+            translationOfId: directPost.translations?.[0]?.databaseId,
+          }}
+          searchTranslationCandidates={(query, selectedLanguage) =>
+            searchTranslationCandidateCommunityPosts(query, selectedLanguage, directPost.post.databaseId)
+          }
+          onClose={() => setIsEditOpen(false)}
+          onSubmit={async (draft) => {
+            const updatedMedia = draft.media.map((item) => {
+              if (item.attachmentId) return { attachmentId: item.attachmentId };
+              if (item.dataUrl) return { dataUrl: item.dataUrl };
+              throw new Error("A community media item is missing its upload data");
+            });
+            await updateCommunityPost(directPost.post.databaseId, {
+              title: draft.title,
+              description: draft.description,
+              tags: draft.tags,
+              media: updatedMedia,
+              translationOfId: draft.translationOfId,
+            });
+            refresh();
+            setPostRevision((revision) => revision + 1);
+          }}
         />
       ) : null}
     </div>
@@ -274,4 +388,9 @@ function CommunityPostStatus({ title, message }: { title: string; message: strin
       </div>
     </section>
   );
+}
+
+function communityTagPath(slug: string | undefined, name: string): string {
+  const fallbackSlug = name.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
+  return `/community-tag/${encodeURIComponent(slug || fallbackSlug)}`;
 }

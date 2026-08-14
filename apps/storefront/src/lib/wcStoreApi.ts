@@ -3,32 +3,31 @@
  * carries cart/checkout/payment state, as distinct from WPGraphQL (which only exposes
  * read-only shop data like products/settings on this backend).
  *
- * Headless auth model: the Store API identifies an anonymous cart via a `Cart-Token`
- * response header (replay it as a request header on later calls instead of relying on
- * cookies, which don't survive cross-origin requests) and requires a `Nonce` response
- * header to be replayed for state-changing requests (POST/PUT/PATCH/DELETE).
- *
- * KNOWN LIMITATION (confirmed live against v1.superfunky.pro): this backend's actual
- * GET/POST responses send `Access-Control-Expose-Headers:` empty, so cross-origin
- * `fetch()` cannot read the `Cart-Token`/`Nonce` response headers at all (only the CORS
- * *preflight* response lists them as allowed — that doesn't help). Until the backend
- * adds those two header names to `Access-Control-Expose-Headers` (a one-line WordPress
- * fix, e.g. hooking `rest_pre_serve_request`), every cross-origin call here behaves as
- * a fresh anonymous session with no nonce — fine for read-only calls (shop currency),
- * not enough for a real stateful add-to-cart/checkout flow. This client still
- * implements the correct/standard flow so it starts working automatically the moment
- * that header is exposed, and warns once in dev instead of failing silently. */
+ * Headless auth model: the Store API identifies a cart via a `Cart-Token` (cookies
+ * don't survive cross-origin requests), while logged-in requests also carry the
+ * WPGraphQL Login bearer token so WooCommerce can assign orders to the current user.
+ * A `Nonce` is only needed when there is not yet a Cart-Token; sending both can make
+ * concurrent requests race on a rotating nonce. */
 
-import { BACKEND_ORIGIN, isBackendConfigured } from "./env";
+import { BACKEND_ORIGIN, isBackendConfigured } from "@funky/sdk";
+import { normalizeBackendError } from "@funky/ui";
+import { getAuthTokenForRequest } from "./auth";
+import { buildStoreApiHeaders, isStoreApiNonceError } from "./storeApiAuth";
 
 const CART_TOKEN_STORAGE_KEY = "funkycommerce-wc-cart-token";
 
 let cachedNonce: string | null = null;
 let warnedAboutMissingHeaders = false;
+let mutationQueue: Promise<void> = Promise.resolve();
+let sessionInitialization: Promise<StoreApiResponse<StoreApiCart>> | null = null;
 
 function storeApiUrl(route: string): string | undefined {
   if (!BACKEND_ORIGIN) return undefined;
-  return `${BACKEND_ORIGIN}/index.php?rest_route=/wc/store/v1/${route.replace(/^\/+/, "")}`;
+  const [path, query = ""] = route.split("?", 2);
+  const url = new URL(`${BACKEND_ORIGIN}/index.php`);
+  url.searchParams.set("rest_route", `/wc/store/v1/${path.replace(/^\/+/, "")}`);
+  new URLSearchParams(query).forEach((value, key) => url.searchParams.append(key, value));
+  return url.toString();
 }
 
 function getStoredCartToken(): string | null {
@@ -39,6 +38,65 @@ function getStoredCartToken(): string | null {
 function setStoredCartToken(token: string): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(CART_TOKEN_STORAGE_KEY, token);
+}
+
+function applyStoreApiSessionHeaders(response: Response): void {
+  const newCartToken = response.headers.get("cart-token");
+  const newNonce = response.headers.get("nonce");
+  if (newCartToken) setStoredCartToken(newCartToken);
+  if (newNonce) cachedNonce = newNonce;
+}
+
+async function initializeStoreApiSession(): Promise<StoreApiResponse<StoreApiCart>> {
+  const url = storeApiUrl("cart");
+  if (!url) return { ok: false, status: 0, error: "No backend configured (VITE_GRAPHQL_ENDPOINT)" };
+  if (sessionInitialization) return sessionInitialization;
+
+  sessionInitialization = (async () => {
+    try {
+      const authToken = await getAuthTokenForRequest();
+      const response = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: buildStoreApiHeaders({
+          authToken,
+          cartToken: getStoredCartToken(),
+          nonce: null,
+          isStateChanging: false,
+        }),
+      });
+      applyStoreApiSessionHeaders(response);
+      const payload = (await response.json().catch(() => null)) as StoreApiCart | { message?: string } | null;
+      if (!response.ok) {
+        const message = payload && "message" in payload && typeof payload.message === "string"
+          ? normalizeBackendError(payload.message)
+          : `Store API request failed with status ${response.status}`;
+        return { ok: false, status: response.status, error: message };
+      }
+      if (!getStoredCartToken() && !cachedNonce) warnAboutMissingHeadersOnce();
+      return { ok: true, data: payload as StoreApiCart };
+    } catch (error) {
+      return {
+        ok: false,
+        status: 0,
+        error: error instanceof Error ? error.message : "Store API session initialization failed",
+      };
+    } finally {
+      sessionInitialization = null;
+    }
+  })();
+
+  return sessionInitialization;
+}
+
+/** Drops an invalid anonymous Store API session. The next cart read creates a fresh
+ * WooCommerce cart and obtains a new Cart-Token/Nonce pair. */
+export function resetStoreApiSession(): void {
+  cachedNonce = null;
+  sessionInitialization = null;
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(CART_TOKEN_STORAGE_KEY);
+  }
 }
 
 function warnAboutMissingHeadersOnce(): void {
@@ -54,12 +112,14 @@ function warnAboutMissingHeadersOnce(): void {
 
 export type StoreApiResponse<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
 
-/** Executes a Store API request, persisting the `Cart-Token` header across calls
- * (falls back to a fresh anonymous cart each time if the backend doesn't expose it —
- * see the module-level comment) and attaching the `Nonce` header for state-changing
- * methods. Resolves to a not-ok result (never throws) with no network call when no
- * backend is configured. */
-export async function storeApiRequest<T>(route: string, init?: { method?: string; body?: unknown }): Promise<StoreApiResponse<T>> {
+/** Executes a Store API request, persisting the `Cart-Token` across calls and
+ * serializing mutations so response tokens/nonces cannot be applied out of order.
+ * Resolves to a not-ok result (never throws) with no network call when no backend is
+ * configured. */
+export async function storeApiRequest<T>(
+  route: string,
+  init?: { method?: string; body?: unknown; requireAuthenticatedUser?: boolean },
+): Promise<StoreApiResponse<T>> {
   const url = storeApiUrl(route);
   if (!isBackendConfigured || !url) {
     return { ok: false, status: 0, error: "No backend configured (VITE_GRAPHQL_ENDPOINT)" };
@@ -67,35 +127,71 @@ export async function storeApiRequest<T>(route: string, init?: { method?: string
 
   const method = init?.method ?? "GET";
   const isStateChanging = method !== "GET" && method !== "HEAD";
-  const cartToken = getStoredCartToken();
-
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(cartToken ? { "Cart-Token": cartToken } : {}),
-        ...(isStateChanging && cachedNonce ? { Nonce: cachedNonce } : {}),
-      },
-      body: init?.body ? JSON.stringify(init.body) : undefined,
-    });
-
-    const newCartToken = response.headers.get("cart-token");
-    const newNonce = response.headers.get("nonce");
-    if (newCartToken) setStoredCartToken(newCartToken);
-    else if (isStateChanging || !cartToken) warnAboutMissingHeadersOnce();
-    if (newNonce) cachedNonce = newNonce;
-
-    const payload = (await response.json().catch(() => null)) as T | { message?: string } | null;
-    if (!response.ok) {
-      const message = payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string" ? payload.message : `Store API request failed with status ${response.status}`;
-      return { ok: false, status: response.status, error: message };
+  const execute = async (retryNonce = true): Promise<StoreApiResponse<T>> => {
+    if (isStateChanging && !getStoredCartToken() && !cachedNonce) {
+      const initialized = await initializeStoreApiSession();
+      if (!initialized.ok) return initialized;
     }
 
-    return { ok: true, data: payload as T };
-  } catch (error) {
-    return { ok: false, status: 0, error: error instanceof Error ? error.message : "Store API request failed" };
+    const cartToken = getStoredCartToken();
+    const authToken = await getAuthTokenForRequest();
+    if (init?.requireAuthenticatedUser && !authToken) {
+      return {
+        ok: false,
+        status: 401,
+        error: "Your account session expired. Sign in again before placing the order.",
+      };
+    }
+    try {
+      const response = await fetch(url, {
+        method,
+        cache: "no-store",
+        headers: buildStoreApiHeaders({
+          authToken,
+          cartToken,
+          nonce: cachedNonce,
+          isStateChanging,
+        }),
+        body: init?.body ? JSON.stringify(init.body) : undefined,
+      });
+
+      applyStoreApiSessionHeaders(response);
+      if (!response.headers.get("cart-token") && (isStateChanging || !cartToken)) warnAboutMissingHeadersOnce();
+
+      const payload = (await response.json().catch(() => null)) as T | { message?: string } | null;
+      if (!response.ok) {
+        const message = payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
+          ? normalizeBackendError(payload.message)
+          : `Store API request failed with status ${response.status}`;
+        if (isStateChanging && retryNonce && isStoreApiNonceError(message)) {
+          resetStoreApiSession();
+          const initialized = await initializeStoreApiSession();
+          if (!initialized.ok) return initialized;
+          return execute(false);
+        }
+        return { ok: false, status: response.status, error: message };
+      }
+
+      return { ok: true, data: payload as T };
+    } catch (error) {
+      return { ok: false, status: 0, error: error instanceof Error ? error.message : "Store API request failed" };
+    }
+  };
+
+  if (!isStateChanging) {
+    await mutationQueue;
+    return execute();
   }
+
+  const queuedRequest = mutationQueue.then(
+    () => execute(),
+    () => execute(),
+  );
+  mutationQueue = queuedRequest.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queuedRequest;
 }
 
 export type StoreApiCartTotals = {
@@ -126,8 +222,10 @@ export type StoreApiCartItem = {
   name: string;
   sku: string;
   price: string;
-  product_id: number;
-  variation_id: number;
+  /** Some Store API extensions add explicit parent/variation IDs, but core uses `id`
+   * for the purchasable product or variation. */
+  product_id?: number;
+  variation_id?: number;
   images: { id: number; src: string; thumbnail: string; srcset: string; alt: string }[];
   virtual?: boolean;
 };
@@ -148,8 +246,18 @@ export type StoreApiCart = {
  * yet) — this is the authoritative source for shop currency (`totals.currency_code`,
  * `currency_symbol`, decimal/thousand separators) since it's public/unauthenticated and
  * always reflects the store's actual configured currency, unlike a hardcoded env var. */
-export function getCart(): Promise<StoreApiResponse<StoreApiCart>> {
-  return storeApiRequest<StoreApiCart>("cart");
+export async function getCart(): Promise<StoreApiResponse<StoreApiCart>> {
+  const hadCartToken = Boolean(getStoredCartToken());
+  const result = await storeApiRequest<StoreApiCart>("cart");
+  if (
+    !result.ok &&
+    hadCartToken &&
+    (result.status === 400 || result.status === 401 || result.status === 403)
+  ) {
+    resetStoreApiSession();
+    return storeApiRequest<StoreApiCart>("cart");
+  }
+  return result;
 }
 
 /** Alias for backward compatibility. */
@@ -204,12 +312,14 @@ export type StoreApiCheckoutPayload = {
   payment_data?: { key: string; value: string }[];
   customer_note?: string;
   create_account?: boolean;
-  customer_id?: number;
+  customer_password?: string;
   subscribe_to_newsletter?: boolean;
+  extensions?: Record<string, Record<string, string | boolean>>;
 };
 
 export type StoreApiCheckoutResult = {
   order_id: number;
+  customer_id?: number;
   order_key?: string;
   order_number?: string;
   status: string;
@@ -223,24 +333,95 @@ export type StoreApiCheckoutResult = {
   };
 };
 
+export type StoreApiOrderItem = {
+  id: number;
+  quantity: number;
+  name: string;
+  variation?: Array<{ attribute: string; value: string }>;
+  item_data?: Array<{ key: string; value: string }>;
+  totals: {
+    line_subtotal: string;
+    line_subtotal_tax: string;
+    line_total: string;
+    line_total_tax: string;
+    currency_code: string;
+    currency_symbol: string;
+    currency_minor_unit: number;
+    currency_decimal_separator: string;
+    currency_thousand_separator: string;
+    currency_prefix: string;
+    currency_suffix: string;
+  };
+};
+
+export type StoreApiOrder = {
+  id: number;
+  status: string;
+  items: StoreApiOrderItem[];
+  coupons: Array<{
+    code: string;
+    totals?: {
+      total_discount?: string;
+      total_discount_tax?: string;
+    };
+  }>;
+  totals: StoreApiCartTotals & {
+    subtotal: string;
+    total_discount: string;
+    total_shipping: string | null;
+    total_fees: string;
+    total_tax: string;
+    total_refund: string;
+    total_items: string;
+  };
+  shipping_address: StoreApiAddress;
+  billing_address: StoreApiAddress;
+  needs_payment: boolean;
+  needs_shipping: boolean;
+};
+
 /** Submits the WooCommerce Store API checkout — this is the real, standard REST call
  * the WooCommerce Stripe Gateway plugin (and its BLIK sub-method, `stripe_blik`) hook
  * into on the backend, replacing the legacy prototype's raw-secret-key Netlify
  * function. On success, `payment_result.payment_details` carries whatever the active
  * gateway needs client-side to finish confirmation (e.g. a Stripe `client_secret`). */
-export function submitStoreCheckout(payload: StoreApiCheckoutPayload): Promise<StoreApiResponse<StoreApiCheckoutResult>> {
-  return storeApiRequest<StoreApiCheckoutResult>("checkout", { method: "POST", body: payload });
+export function submitStoreCheckout(
+  payload: StoreApiCheckoutPayload,
+  options?: { requireAuthenticatedUser?: boolean },
+): Promise<StoreApiResponse<StoreApiCheckoutResult>> {
+  return storeApiRequest<StoreApiCheckoutResult>("checkout", {
+    method: "POST",
+    body: payload,
+    requireAuthenticatedUser: options?.requireAuthenticatedUser,
+  });
+}
+
+/** Retrieves a completed guest order using the authorization values returned by
+ * checkout. Registered-customer orders may require the authenticated account API. */
+export function getOrder(
+  orderId: number,
+  orderKey: string,
+  billingEmail: string,
+): Promise<StoreApiResponse<StoreApiOrder>> {
+  const query = new URLSearchParams({
+    key: orderKey,
+    billing_email: billingEmail,
+  });
+  return storeApiRequest<StoreApiOrder>(`order/${orderId}?${query.toString()}`);
 }
 
 export type StoreApiShippingMethod = {
-  id: string;
+  /** Canonical WooCommerce Store API rate identifier. */
+  rate_id?: string;
+  /** Compatibility fields returned by some Store API extensions. */
+  id?: string;
+  rate?: string;
   name: string;
-  description: string;
-  delivery_time: string;
+  description?: string;
+  delivery_time?: string;
   price: string;
-  rate: string;
-  taxes: string;
-  choice_disabled: boolean;
+  taxes?: string;
+  choice_disabled?: boolean;
   /** Only present if this is the currently selected method */
   selected?: boolean;
 };
@@ -257,24 +438,33 @@ export type StoreApiShippingOption = {
     country: string;
   };
   items: Array<{ key: string; name: string; quantity: number }>;
-  shipping_methods: StoreApiShippingMethod[];
+  /** Canonical nested rate collection returned by WooCommerce core. */
+  shipping_rates?: StoreApiShippingMethod[];
+  /** Compatibility collection returned by older/custom Store API implementations. */
+  shipping_methods?: StoreApiShippingMethod[];
 };
 
 /** Syncs the current cart customer addresses, allowing WooCommerce to recalculate
  * shipping/tax/payment availability for the active anonymous cart session. */
-export function updateCartCustomer(address: StoreApiAddress): Promise<StoreApiResponse<StoreApiCart>> {
+export function updateCartCustomer(
+  billingAddress: StoreApiAddress,
+  shippingAddress: StoreApiAddress = billingAddress,
+): Promise<StoreApiResponse<StoreApiCart>> {
   return storeApiRequest<StoreApiCart>("cart/update-customer", {
     method: "POST",
     body: {
-      billing_address: address,
-      shipping_address: address,
+      billing_address: billingAddress,
+      shipping_address: shippingAddress,
     },
   });
 }
 
 /** Fetches available shipping methods for the current cart after syncing the address. */
-export async function getShippingMethods(address: StoreApiAddress): Promise<StoreApiResponse<StoreApiShippingOption[]>> {
-  const updated = await updateCartCustomer(address);
+export async function getShippingMethods(
+  billingAddress: StoreApiAddress,
+  shippingAddress: StoreApiAddress = billingAddress,
+): Promise<StoreApiResponse<StoreApiShippingOption[]>> {
+  const updated = await updateCartCustomer(billingAddress, shippingAddress);
   if (!updated.ok) return updated;
   return { ok: true, data: updated.data.shipping_rates ?? [] };
 }
@@ -284,10 +474,7 @@ export function selectShippingMethod(method: { package_id: number; rate_id: stri
   return storeApiRequest<StoreApiCart>("cart/select-shipping-rate", { method: "POST", body: method });
 }
 
-export type StoreApiCouponResponse = {
-  totals: StoreApiCartTotals;
-  errors?: Array<{ code: string; message: string }>;
-};
+export type StoreApiCouponResponse = StoreApiCart;
 
 /** Applies a coupon code to the cart. */
 export function applyCoupon(code: string): Promise<StoreApiResponse<StoreApiCouponResponse>> {
@@ -306,8 +493,11 @@ export type StoreApiTaxResult = {
 };
 
 /** Calculates taxes for the cart based on the billing/shipping address. */
-export async function calculateTaxes(address: StoreApiAddress): Promise<StoreApiResponse<StoreApiTaxResult>> {
-  const updated = await updateCartCustomer(address);
+export async function calculateTaxes(
+  billingAddress: StoreApiAddress,
+  shippingAddress: StoreApiAddress = billingAddress,
+): Promise<StoreApiResponse<StoreApiTaxResult>> {
+  const updated = await updateCartCustomer(billingAddress, shippingAddress);
   if (!updated.ok) return updated;
   const totals = updated.data.totals;
   return {

@@ -2,8 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { useLanguage } from "./LanguageContext";
 import enStrings from "./en.json";
 import plStrings from "./pl.json";
-
-type UiStringsMap = Record<string, string>;
+import { resolveUiString, type UiStringsMap } from "./uiStrings";
 
 const BUILTIN_STRINGS: Record<string, UiStringsMap> = {
   en: enStrings,
@@ -19,17 +18,6 @@ type UiStringsContextValue = {
 };
 
 const UiStringsContext = createContext<UiStringsContextValue | null>(null);
-
-function applyReplacements(
-  template: string,
-  replacements?: Record<string, string | number>,
-): string {
-  if (!replacements) return template;
-  return Object.entries(replacements).reduce(
-    (acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, "g"), String(v)),
-    template,
-  );
-}
 
 export function UiStringsProvider({ children }: { children: ReactNode }) {
   const { languageCode } = useLanguage();
@@ -48,8 +36,7 @@ export function UiStringsProvider({ children }: { children: ReactNode }) {
     (key: string, replacements?: Record<string, string | number>): string => {
       const lang = languageCode.toLowerCase().split("-")[0];
       const builtIn = BUILTIN_STRINGS[lang] ?? BUILTIN_STRINGS["en"];
-      const raw = overrides[key] ?? builtIn?.[key] ?? BUILTIN_STRINGS["en"]?.[key] ?? key;
-      return applyReplacements(raw, replacements);
+      return resolveUiString(key, builtIn ?? {}, BUILTIN_STRINGS["en"] ?? {}, overrides, replacements);
     },
     [languageCode, overrides],
   );

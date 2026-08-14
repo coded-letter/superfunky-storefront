@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ReadArticlesProvider, ReadingListProvider, TagInterestsProvider, WishlistProvider } from "./collections";
+import type { PersistedIdCollectionRemote } from "./createPersistedIdCollection";
 import { CartProvider } from "./CartContext";
 import { CookieConsentProvider } from "./CookieConsentContext";
 import { LayoutPreferencesProvider } from "./LayoutPreferencesContext";
@@ -23,8 +24,24 @@ const MOCK_BACKEND_SOUND_CONFIG: SoundUXBackendConfig = {
 /**
  * Combines every mockup-only persisted store (theme, wishlist, reading list, cookie
  * consent) so the app only needs to mount a single provider near its root.
+ *
+ * `accountId`/`wishlistRemote`/`readingListRemote` are optional so this stays a
+ * drop-in guest-only mockup provider by default; the storefront app supplies them
+ * (via its own auth state and GraphQL adapters, see `lib/savedLists.ts`) to turn the
+ * wishlist/reading list into authenticated, backend-synced collections without this
+ * shared UI package depending on any app-specific auth or GraphQL client.
  */
-export function AppStateProvider({ children }: { children: ReactNode }) {
+export function AppStateProvider({
+  children,
+  accountId = null,
+  wishlistRemote,
+  readingListRemote,
+}: {
+  children: ReactNode;
+  accountId?: string | number | null;
+  wishlistRemote?: PersistedIdCollectionRemote;
+  readingListRemote?: PersistedIdCollectionRemote;
+}) {
   return (
     <LanguageProvider>
       <UiStringsProvider>
@@ -32,8 +49,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <SoundUXProvider backendConfig={MOCK_BACKEND_SOUND_CONFIG}>
             <ToastProvider>
-              <WishlistProvider>
-                <ReadingListProvider>
+              <WishlistProvider accountId={accountId} remote={wishlistRemote}>
+                <ReadingListProvider accountId={accountId} remote={readingListRemote}>
                   <ReadArticlesProvider>
                     <TagInterestsProvider>
                       <CartProvider>
@@ -48,7 +65,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             </ToastProvider>
           </SoundUXProvider>
         </ThemeProvider>
-      </CurrencyProvider>
+        </CurrencyProvider>
       </UiStringsProvider>
     </LanguageProvider>
   );

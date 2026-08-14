@@ -3,7 +3,7 @@
  *  instant cache hits never flash it at all. */
 export function ContentLoadingState({ label = "Loading content" }: { compact?: boolean; label?: string }) {
   return (
-    <div role="status" aria-live="polite" aria-busy="true" className="pointer-events-none relative h-0 w-full overflow-visible">
+    <div role="status" aria-live="polite" aria-busy="true" className="sf-loading pointer-events-none relative h-0 w-full overflow-visible">
       <span className="sr-only">{label}</span>
       <div
         aria-hidden="true"

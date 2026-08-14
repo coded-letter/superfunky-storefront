@@ -1,4 +1,4 @@
-import { graphqlRequest } from "./graphqlClient";
+import { graphqlRequest } from "@funky/sdk";
 import { THEME_STYLES_FIELDS, type CmsThemeStyles } from "./pages";
 
 type ThemeStylesResult = {
@@ -16,6 +16,6 @@ const THEME_STYLES_QUERY = /* GraphQL */ `
 export async function getWordPressThemeStyles(): Promise<CmsThemeStyles> {
   const { data, errors } = await graphqlRequest<ThemeStylesResult>(THEME_STYLES_QUERY);
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  if (!data?.funkycommerceThemeStyles) throw new Error("The WordPress theme styles query returned no data");
+  if (!data?.funkycommerceThemeStyles) throw new Error("The site theme styles query returned no data");
   return data.funkycommerceThemeStyles;
 }

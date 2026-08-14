@@ -1,11 +1,8 @@
-// FunkyCommerce service worker — prepares the storefront for installable/offline PWA
-// behavior and for push notifications that will be *sent* by the WordPress backend
-// (this file only handles receiving/displaying them; subscribing is driven from
-// `src/lib/push.ts`). Kept dependency-free (no Workbox) since this is still a
-// frontend-only mockup — swap in a build-time precache manifest once the app is wired
-// to a real backend and asset hashes are meaningful to precache deterministically.
+// FunkyCommerce service worker for installable/offline behavior and notifications sent
+// by the protected WordPress backend. Browser registration and synchronization live in
+// `src/lib/push.ts`.
 
-const VERSION = "v1";
+const VERSION = "v2";
 const APP_SHELL_CACHE = `funkycommerce-shell-${VERSION}`;
 const RUNTIME_CACHE = `funkycommerce-runtime-${VERSION}`;
 
@@ -60,16 +57,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const network = fetch(request).then(async (response) => {
+    if (response.ok) {
+      const cacheCopy = response.clone();
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(request, cacheCopy);
+    }
+    return response;
+  });
+  event.waitUntil(network.then(() => undefined).catch(() => undefined));
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response.ok) caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
-          return response;
-        })
-        .catch(() => cached);
-      return cached ?? network;
-    })
+    caches.match(request).then((cached) => cached ?? network)
   );
 });
 
@@ -86,14 +84,23 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data ? event.data.text() : undefined };
   }
 
-  const title = payload.title ?? "FunkyCommerce";
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) payload = {};
+  const title = typeof payload.title === "string" ? payload.title.slice(0, 120) : "Superfunky";
+  const requestedUrl = typeof payload.url === "string" ? payload.url : "/";
+  let safeUrl = "/";
+  try {
+    const parsedUrl = new URL(requestedUrl, self.location.origin);
+    if (parsedUrl.origin === self.location.origin) safeUrl = `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+  } catch {
+    safeUrl = "/";
+  }
   const options = {
-    body: payload.body ?? "You have a new notification.",
-    icon: payload.icon ?? "/icons/app/icon-192.png",
-    badge: payload.badge ?? "/icons/app/badge-96.png",
-    image: payload.image,
-    tag: payload.tag ?? "funkycommerce-notification",
-    data: { url: payload.url ?? "/", ...payload.data },
+    body: typeof payload.body === "string" ? payload.body.slice(0, 240) : "You have a new notification.",
+    icon: typeof payload.icon === "string" ? payload.icon : "/icons/app/icon-192.png",
+    badge: typeof payload.badge === "string" ? payload.badge : "/icons/app/icon-192.png",
+    image: typeof payload.image === "string" ? payload.image : undefined,
+    tag: typeof payload.tag === "string" ? payload.tag.slice(0, 64) : "funkycommerce-notification",
+    data: { ...(payload.data && typeof payload.data === "object" ? payload.data : {}), url: safeUrl },
     actions: Array.isArray(payload.actions) ? payload.actions : undefined,
     vibrate: payload.silent ? undefined : [100, 50, 100],
     renotify: Boolean(payload.tag),
@@ -106,7 +113,13 @@ self.addEventListener("push", (event) => {
 // one — standard "deep link back into the SPA" pattern for notification taps.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url ?? "/";
+  let targetUrl = new URL("/", self.location.origin).href;
+  try {
+    const requestedUrl = new URL(event.notification.data?.url ?? "/", self.location.origin);
+    if (requestedUrl.origin === self.location.origin) targetUrl = requestedUrl.href;
+  } catch {
+    targetUrl = new URL("/", self.location.origin).href;
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
@@ -123,18 +136,21 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 self.addEventListener("pushsubscriptionchange", (event) => {
-  // The browser rotated the push subscription (expired keys, etc). Re-subscribe with
-  // the same application server key and hand the fresh subscription back to the page
-  // (or, once a backend exists, POST it directly from here) so the WP backend's stored
-  // subscription doesn't silently go stale.
+  // The browser rotated the subscription. Re-subscribe with the existing application
+  // server key and hand the fresh record to a page for backend synchronization.
+  const applicationServerKey = event.oldSubscription?.options?.applicationServerKey;
+  const notifyClients = (message) =>
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      clientList.forEach((client) => client.postMessage(message));
+    });
   event.waitUntil(
-    self.registration.pushManager
-      .subscribe(event.oldSubscription ? { applicationServerKey: event.oldSubscription.options.applicationServerKey, userVisibleOnly: true } : undefined)
-      .then((subscription) =>
-        self.clients.matchAll().then((clientList) => {
-          clientList.forEach((client) => client.postMessage({ type: "PUSH_SUBSCRIPTION_CHANGED", subscription: subscription.toJSON() }));
-        })
-      )
-      .catch(() => undefined)
+    (applicationServerKey
+      ? self.registration.pushManager
+          .subscribe({ applicationServerKey, userVisibleOnly: true })
+          .then((subscription) =>
+            notifyClients({ type: "PUSH_SUBSCRIPTION_CHANGED", subscription: subscription.toJSON() })
+          )
+      : notifyClients({ type: "PUSH_SUBSCRIPTION_SYNC_REQUIRED" })
+    ).catch(() => notifyClients({ type: "PUSH_SUBSCRIPTION_SYNC_REQUIRED" }))
   );
 });

@@ -71,7 +71,7 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
     <div
       role="presentation"
       onClick={handleClose}
-      className={`fixed inset-0 z-[70] flex justify-end bg-zinc-950/60 backdrop-blur-sm transition-opacity duration-300 ${
+      className={`sf-cart-drawer fixed inset-0 z-[70] flex justify-end bg-zinc-950/60 backdrop-blur-sm transition-opacity duration-300 ${
         isVisible ? "opacity-100" : "opacity-0"
       }`}
     >

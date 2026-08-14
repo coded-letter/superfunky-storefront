@@ -1,33 +1,28 @@
-import { useLanguage } from "@funky/ui";
-import { useIncrementalData } from "./incrementalData";
-import { graphqlRequest } from "./graphqlClient";
+import {
+  normalizeLanguagePath,
+  resolveCanonicalLanguagePath,
+  resolveCanonicalLanguageRoute,
+  useLanguage,
+  type CanonicalLanguageRouteResolution,
+} from "@funky/ui";
+import { useIncrementalData } from "@funky/sdk/react";
+import { graphqlRequest } from "@funky/sdk";
+import {
+  missingGraphqlFieldRule,
+  requestGraphqlWithCompatibility,
+  type GraphqlCompatibilityRule,
+} from "./graphqlFieldFallback";
+import {
+  classifyPageRouteKeys,
+  type RoutePageNode,
+  type StorefrontRouteKey,
+} from "./storefrontRouteClassification";
+import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility";
 
-export type StorefrontRouteKey =
-  | "home"
-  | "shop"
-  | "blog"
-  | "cart"
-  | "checkout"
-  | "account"
-  | "wishlist"
-  | "reading-list"
-  | "community"
-  | "auth-login"
-  | "auth-register"
-  | "auth-forgot-password"
-  | "order-success"
-  | "order-success-digital"
-  | "unsubscribe";
+export type { StorefrontRouteKey } from "./storefrontRouteClassification";
 
-type RoutePageNode = {
-  uri: string | null;
-  slug: string | null;
-  language: { code: string | null } | null;
-  funkycommerceSpecialPageKey?: string | null;
-  headlessShortcodes?: (string | null)[] | null;
-};
-
-type RouteRegistryEntry = {
+export type RouteRegistryEntry = {
   key: StorefrontRouteKey;
   uri: string;
   languageCode: string;
@@ -36,124 +31,44 @@ type RouteRegistryEntry = {
 type RouteRegistryResult = {
   pages: {
     nodes: RoutePageNode[];
+    pageInfo: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    };
   } | null;
 };
 
+const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v4";
+
 const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
-  query StorefrontRouteRegistry {
-    pages(where: { status: PUBLISH }, first: 150) {
+  query StorefrontRouteRegistry($after: String) {
+    pages(where: { status: PUBLISH }, first: 100, after: $after) {
       nodes {
         uri
         slug
+        isFrontPage
         language {
           code
         }
-        funkycommerceSpecialPageKey
         headlessShortcodes
       }
-    }
-  }
-`;
-
-const SPECIAL_ROUTE_REGISTRY_QUERY = /* GraphQL */ `
-  query StorefrontSpecialRouteRegistry {
-    home: funkycommerceSpecialPage(key: "home") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
-      }
-    }
-    shop: funkycommerceSpecialPage(key: "shop") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
-      }
-    }
-    blog: funkycommerceSpecialPage(key: "blog") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
-      }
-    }
-    cart: funkycommerceSpecialPage(key: "cart") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
-      }
-    }
-    checkout: funkycommerceSpecialPage(key: "checkout") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
-      }
-    }
-    account: funkycommerceSpecialPage(key: "account") {
-      uri
-      language {
-        code
-      }
-      translations {
-        uri
-        language {
-          code
-        }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
 `;
 
-const SPECIAL_PAGE_ROUTE_KEYS: Record<string, StorefrontRouteKey> = {
-  home: "home",
-  shop: "shop",
-  blog: "blog",
-  cart: "cart",
-  checkout: "checkout",
-  account: "account",
-};
-type SpecialRegistryPage = {
-  uri: string | null;
-  language?: { code: string | null } | null;
-  translations?: ({ uri: string | null; language?: { code: string | null } | null } | null)[] | null;
+const PAGE_STATUS_COMPATIBILITY_RULE: GraphqlCompatibilityRule = {
+  matches: (message) => message.includes("Cannot access offset of type string on string"),
+  transform: (query) => query.replace(/where:\s*\{\s*status:\s*PUBLISH\s*\}\s*,\s*/g, ""),
 };
 
-type SpecialRouteRegistryResult = {
-  home: SpecialRegistryPage | null;
-  shop: SpecialRegistryPage | null;
-  blog: SpecialRegistryPage | null;
-  cart: SpecialRegistryPage | null;
-  checkout: SpecialRegistryPage | null;
-  account: SpecialRegistryPage | null;
-};
+const ROUTE_REGISTRY_COMPATIBILITY_RULES = [
+  PAGE_STATUS_COMPATIBILITY_RULE,
+  missingGraphqlFieldRule("language"),
+] as const;
 
 function normalizeUri(uri: string): string {
   const pathname = uri.startsWith("/") ? uri : `/${uri}`;
@@ -168,129 +83,38 @@ function normalizeLanguageCode(languageCode: string | null | undefined): string 
   return languageCode?.toLowerCase() || "en";
 }
 
-function parseShortcodeAttributes(shortcode: string): Record<string, string> {
-  const attributes: Record<string, string> = {};
-  for (const match of shortcode.matchAll(/([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))/g)) {
-    attributes[match[1].replaceAll("_", "-")] = match[2] ?? match[3] ?? match[4] ?? "";
-  }
-  return attributes;
-}
+export async function getStorefrontRouteRegistry(): Promise<RouteRegistryEntry[]> {
+  const entries: RouteRegistryEntry[] = [];
+  let after: string | null = null;
+  do {
+    const result = await requestGraphqlWithCompatibility<RouteRegistryResult>(
+      graphqlRequest,
+      ROUTE_REGISTRY_QUERY,
+      { after },
+      ROUTE_REGISTRY_COMPATIBILITY_RULES,
+    );
+    const { data, errors } = result;
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    const pages: RouteRegistryResult["pages"] = data?.pages ?? null;
+    if (!pages) throw new Error("The storefront route registry query returned no pages");
 
-function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[] {
-  const keys = new Set<StorefrontRouteKey>();
-  const specialPageKey = page.funkycommerceSpecialPageKey || "";
-  const specialRouteKey = SPECIAL_PAGE_ROUTE_KEYS[specialPageKey];
-  if (specialRouteKey) {
-    keys.add(specialRouteKey);
-  }
-
-  const normalizedSlug = (page.slug || "").toLowerCase();
-  const shortcodes = page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [];
-
-  for (const shortcode of shortcodes) {
-    if (shortcode.startsWith("[funkycommerce_wishlist")) {
-      keys.add("wishlist");
-      continue;
-    }
-    if (shortcode.startsWith("[funkycommerce_reading_list")) {
-      keys.add("reading-list");
-      continue;
-    }
-    if (shortcode.startsWith("[community-feed") || shortcode.startsWith("[community-hero")) {
-      keys.add("community");
-      continue;
-    }
-    if (shortcode.startsWith("[unsubscribe-form")) {
-      keys.add("unsubscribe");
-      continue;
-    }
-    if (shortcode.startsWith("[order-success")) {
-      const attributes = parseShortcodeAttributes(shortcode);
-      keys.add(attributes.mode === "digital" ? "order-success-digital" : "order-success");
-      continue;
-    }
-    if (shortcode.startsWith("[funkycommerce_auth")) {
-      const attributes = parseShortcodeAttributes(shortcode);
-      if (attributes.mode === "register") {
-        keys.add("auth-register");
-      } else if (attributes.mode === "forgot-password") {
-        keys.add("auth-forgot-password");
-      } else {
-        keys.add("auth-login");
+    for (const page of pages.nodes) {
+      if (!page.uri) continue;
+      for (const key of classifyPageRouteKeys(page)) {
+        entries.push({
+          key,
+          uri: normalizeUri(page.uri),
+          languageCode: normalizeLanguageCode(page.language?.code),
+        });
       }
     }
-  }
 
-  if (normalizedSlug === "community") keys.add("community");
-  if (normalizedSlug === "unsubscribe") keys.add("unsubscribe");
-
-  return [...keys];
-}
-
-export async function getStorefrontRouteRegistry(): Promise<RouteRegistryEntry[]> {
-  const { data, errors } = await graphqlRequest<RouteRegistryResult>(ROUTE_REGISTRY_QUERY);
-  if (errors?.length) {
-    const fatalErrors = errors.filter(
-      (error) => !error.message.includes("funkycommerceSpecialPageKey") && !error.message.includes("headlessShortcodes"),
-    );
-    if (fatalErrors.length) {
-      throw new Error(fatalErrors.map(({ message }) => message).join("; "));
+    if (!pages.pageInfo.hasNextPage) break;
+    if (!pages.pageInfo.endCursor) {
+      throw new Error("The storefront route registry returned an incomplete pagination cursor");
     }
-  }
-  if (!data?.pages?.nodes) {
-    return [];
-  }
-
-  const entries = data.pages.nodes.flatMap((page) => {
-    const uri = page.uri ? normalizeUri(page.uri) : "";
-    if (!uri) return [];
-
-    return classifyPageRouteKeys(page).map((key) => ({
-      key,
-      uri,
-      languageCode: normalizeLanguageCode(page.language?.code),
-    }));
-  });
-
-  for (const entry of await getSpecialStorefrontRouteRegistry()) {
-    if (!entries.some((existing) => existing.key === entry.key && existing.uri === entry.uri && existing.languageCode === entry.languageCode)) {
-      entries.push(entry);
-    }
-  }
-
-  return entries;
-}
-
-export async function getSpecialStorefrontRouteRegistry(): Promise<RouteRegistryEntry[]> {
-  const { data: specialData, errors: specialErrors } = await graphqlRequest<SpecialRouteRegistryResult>(SPECIAL_ROUTE_REGISTRY_QUERY);
-  if (specialErrors?.length) {
-    throw new Error(specialErrors.map(({ message }) => message).join("; "));
-  }
-
-  const entries: RouteRegistryEntry[] = [];
-  for (const [specialKey, routeKey] of Object.entries(SPECIAL_PAGE_ROUTE_KEYS) as [keyof SpecialRouteRegistryResult, StorefrontRouteKey][]) {
-    const page = specialData?.[specialKey];
-    const candidates = [
-      page?.uri && page?.language?.code
-        ? { uri: page.uri, languageCode: page.language.code }
-        : null,
-      ...(page?.translations?.flatMap((translation) =>
-        translation?.uri && translation.language?.code
-          ? [{ uri: translation.uri, languageCode: translation.language.code }]
-          : [],
-      ) || []),
-    ];
-
-    for (const candidate of candidates) {
-      if (!candidate) continue;
-      entries.push({
-        key: routeKey,
-        uri: normalizeUri(candidate.uri),
-        languageCode: normalizeLanguageCode(candidate.languageCode),
-      });
-    }
-  }
-
+    after = pages.pageInfo.endCursor;
+  } while (after);
   return entries;
 }
 
@@ -315,35 +139,79 @@ export function matchStorefrontRouteKey(
   registry: RouteRegistryEntry[],
   pathname: string,
 ): StorefrontRouteKey | null {
+  return matchStorefrontRoute(registry, pathname)?.key || null;
+}
+
+export function matchStorefrontRoute(
+  registry: RouteRegistryEntry[],
+  pathname: string,
+): RouteRegistryEntry | null {
   const normalizedPathname = normalizePathname(pathname);
-  const match = registry.find((entry) => entry.uri === normalizedPathname);
-  return match?.key || null;
+  return registry.find((entry) => entry.uri === normalizedPathname) || null;
 }
 
 export function useStorefrontPath(key: StorefrontRouteKey, fallback: string): string {
   return useResolvedStorefrontPath(key, fallback).path;
 }
 
+export function orderDetailsPath(
+  orderId: number,
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): string {
+  return normalizeLanguagePath(`/order/${orderId}`, languageCode, configuredLanguageCodes);
+}
+
 export function useResolvedStorefrontPath(
   key: StorefrontRouteKey,
   fallback: string,
+  targetLanguageCode?: string,
 ): { path: string; isLoading: boolean } {
-  const { languageCode } = useLanguage();
+  const { configuredLanguageCodes, languageCode: selectedLanguageCode } = useLanguage();
+  const languageCode = targetLanguageCode?.toLowerCase() || selectedLanguageCode;
   const { data: registry, isLoading } = useIncrementalData(
-    "storefront-route-registry:v2",
+    ROUTE_REGISTRY_CACHE_KEY,
     getStorefrontRouteRegistry,
+    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
   );
 
   return {
-    path: resolveStorefrontPath(registry || [], key, languageCode, fallback),
+    path: resolveCanonicalLanguagePath(
+      registry || [],
+      key,
+      languageCode,
+      configuredLanguageCodes,
+      fallback,
+    ),
+    isLoading,
+  };
+}
+
+export function useResolvedStorefrontLanguageRoute(
+  pathname: string,
+): { resolution: CanonicalLanguageRouteResolution<StorefrontRouteKey> | null; isLoading: boolean } {
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const { data: registry, isLoading } = useIncrementalData(
+    ROUTE_REGISTRY_CACHE_KEY,
+    getStorefrontRouteRegistry,
+    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+  );
+  return {
+    resolution: resolveCanonicalLanguageRoute(
+      registry || [],
+      pathname,
+      languageCode,
+      configuredLanguageCodes,
+    ),
     isLoading,
   };
 }
 
 export function useMatchedStorefrontRouteKey(pathname: string): StorefrontRouteKey | null {
   const { data: registry } = useIncrementalData(
-    "storefront-route-registry:v2",
+    ROUTE_REGISTRY_CACHE_KEY,
     getStorefrontRouteRegistry,
+    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
   );
   return matchStorefrontRouteKey(registry || [], pathname);
 }

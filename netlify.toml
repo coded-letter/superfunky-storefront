@@ -1,0 +1,18 @@
+# Netlify build config for the standalone public storefront repository.
+# Commands run from the repository root, which is the pnpm workspace root.
+[build]
+  command = "pnpm install --frozen-lockfile && pnpm run build"
+  publish = "apps/storefront/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "10"
+
+# VITE_GRAPHQL_ENDPOINT is intentionally site-specific and must not contain credentials.
+# When omitted, the storefront uses the public development reference backend.
+# The prebuild CMS Tailwind extractor fails on an unreachable configured endpoint so a
+# deployment cannot silently omit WordPress-authored utilities.
+
+# Route policy is generated into dist/_redirects by the prerender step. Keeping a
+# second catch-all here would take precedence over route-specific artifact proxies
+# and could accidentally send private or bypass traffic through document delivery.

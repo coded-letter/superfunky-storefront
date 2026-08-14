@@ -10,6 +10,9 @@ const frontendRoot = fileURLToPath(new URL("../..", import.meta.url));
 // aliasing needed for it to share a single instance of those libraries.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    sourcemap: true,
+  },
   server: {
     host: "127.0.0.1",
     port: 4173,

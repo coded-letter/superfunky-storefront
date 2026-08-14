@@ -1,19 +1,31 @@
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Elements, PaymentElement } from "@stripe/react-stripe-js";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { AlertTriangle, Banknote, Bitcoin, Check, ChevronDown, Copy, CreditCard, PackageCheck, QrCode, ShieldCheck, Tag, Truck } from "lucide-react";
-import { useCart, useCurrency, useLayoutPreferences } from "@funky/ui";
-import { CustomerShortcodePage } from "../components/CustomerShortcodePage";
-import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
-import { saveCheckoutEmail, saveNewsletterEmail, useAbandonedCartTracking } from "../lib/abandonedCart";
+import { useCart, useCurrency, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { saveCheckoutEmail, saveNewsletterEmail, useAbandonedCartPublicConfig, useAbandonedCartTracking } from "../lib/abandonedCart";
 import { syncCartToBackend } from "../lib/backendCart";
-import { checkoutApplyCoupon, checkoutRemoveCoupon, isCartVirtual, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, type DisplayShippingMethod, useShippingMethods, useTaxCalculation } from "../lib/checkout";
-import { isBackendConfigured } from "../lib/env";
+import { checkoutApplyCoupon, checkoutRemoveCoupon, DEFAULT_FREE_SHIPPING_METHOD, isDigitalOnlyCart, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, type DisplayShippingMethod, useCheckoutCart } from "../lib/checkout";
+import { isBackendConfigured } from "@funky/sdk";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { getStripe, getStripePublishableKey, isStripeConfigured } from "../lib/stripe";
-import { submitCheckoutWithAccount, usePaymentGateways, type CheckoutBillingDetails, type CryptoAsset } from "../lib/payments";
-import { isUserLoggedIn } from "../lib/auth";
+import {
+  completeBlikPayment,
+  completeStripePayment,
+  createBlikPaymentMethod,
+  submitCheckoutWithAccount,
+  toStripeBillingDetails,
+  usePaymentGateways,
+  type CheckoutBillingDetails,
+  type CryptoAsset,
+  type PaymentSubmissionResult,
+} from "../lib/payments";
+import { login, useIsUserLoggedIn } from "../lib/auth";
 import { getStorefrontAccount } from "../lib/account";
+import { claimCheckoutOrder } from "../lib/checkoutAccount";
+import { createOrderConfirmation, saveOrderConfirmation } from "../lib/orderConfirmation";
+import { storeApiAmount } from "../lib/storeApiMoney";
 import { isValidEmail, isValidPhone, validateCheckoutForm } from "../lib/validation";
 import { FREE_SHIPPING_THRESHOLD, InputMock, OrderSummaryCard } from "./shared";
 import { type StoreApiAddress } from "../lib/wcStoreApi";
@@ -43,8 +55,35 @@ const FALLBACK_COUNTRIES: { code: string; label: string }[] = [
 type PaymentMethod = "stripe" | "blik" | "crypto" | "cod" | "cheque" | "bacs";
 type ShippingMethodId = string; // Backend methods can have arbitrary IDs; mocks use "standard" | "express"
 type CryptoCoin = string;
+type AddressFormState = {
+  firstName: string;
+  lastName: string;
+  company: string;
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  postcode: string;
+  countryCode: string;
+};
+type CheckoutFieldErrors = Partial<Record<
+  "firstName" | "lastName" | "address1" | "city" | "state" | "postcode" | "countryCode" | "phone" | "email" | "blikCode" | "accountUsername" | "accountPassword",
+  string | undefined
+>>;
+type StripePaymentController = {
+  createPaymentMethod: (
+    billing: CheckoutBillingDetails,
+  ) => Promise<{ paymentMethodId: string; selectedPaymentType: string }>;
+};
 
 const BLIK_WINDOW_SECONDS = 120;
+const CHECKOUT_COUPON_COPY = {
+  title: "Have a coupon?",
+  label: "Coupon code",
+  apply: "Apply code",
+} as const;
+const DEFAULT_MARKETING_CONSENT_LABEL = "Keep me posted about new drops, offers, and restocks by email.";
+const BLIK_RENDERED_HEIGHT_PX = 33.28;
 // Mock exchange-rate lock window for crypto invoices (BTCPay/Coinbase Commerce-style
 // checkouts typically quote a fixed rate for ~15 minutes before it needs refreshing).
 const CRYPTO_RATE_WINDOW_SECONDS = 15 * 60;
@@ -86,24 +125,7 @@ const FALLBACK_SHIPPING_METHODS: DisplayShippingMethod[] = [
 export function CheckoutMockupPage() {
   const embedded = useEmbeddedApplicationShortcode();
   if (!embedded) {
-    return (
-      <CustomerShortcodePage
-        pageKey="checkout"
-        defaultShortcode="checkout"
-        defaultAttributes={{
-          mode: "physical",
-          "coupon-position": "inline",
-          "payment-position": "left",
-          "summary-position": "sticky",
-          "hide-optional-billing-fields": "false",
-          "hide-optional-shipping-fields": "false",
-          "show-order-notes": "true",
-          "show-terms": "true",
-          "show-privacy": "true",
-          "allow-guest-checkout": "true",
-        }}
-      />
-    );
+    return <StandaloneApplicationNotice shortcode="checkout" />;
   }
   const { data: navigationData } = useNavigationData();
   const {
@@ -117,24 +139,33 @@ export function CheckoutMockupPage() {
     checkoutShowTerms,
     checkoutShowPrivacy,
   } = useLayoutPreferences();
+  const abandonedCartConfig = useAbandonedCartPublicConfig();
   const config = useApplicationShortcode(["funkycommerce_checkout", "woocommerce_checkout"], {
-    mode: "physical",
-    "coupon-position": "inline",
-    "payment-position": "left",
-    "summary-position": "sticky",
-    "hide-optional-billing-fields": "false",
-    "hide-optional-shipping-fields": "false",
-    "show-order-notes": "true",
-    "show-terms": "true",
-    "show-privacy": "true",
+    mode: checkoutStoreMode,
+    "coupon-position": checkoutCouponPosition,
+    "payment-position": checkoutPaymentPosition,
+    "summary-position": checkoutSummaryPosition,
+    "hide-optional-billing-fields": String(checkoutHideOptionalBillingFields),
+    "hide-optional-shipping-fields": String(checkoutHideOptionalShippingFields),
+    "show-order-notes": String(checkoutShowOrderNotes),
+    "show-terms": String(checkoutShowTerms),
+    "show-privacy": String(checkoutShowPrivacy),
     "allow-guest-checkout": "true",
   });
   const navigate = useNavigate();
   const cartPath = useStorefrontPath("cart", "/cart");
   const orderSuccessPath = useStorefrontPath("order-success", "/order-success");
   const orderSuccessDigitalPath = useStorefrontPath("order-success-digital", "/order-success/digital");
-  const { items, subtotalAmount, subtotalLabel } = useCart();
+  const { items, subtotalAmount, subtotalLabel, isHydrated: isCartHydrated, clear: clearCart } = useCart();
   const { baseCurrency, currencyCode, formatBaseAmount, selectedRate } = useCurrency();
+  const { languageCode, languageBackendCode } = useLanguage();
+  const isLoggedIn = useIsUserLoggedIn();
+  const orderCompletedRef = useRef(false);
+  useEffect(() => {
+    if (!orderCompletedRef.current && isCartHydrated && items.length === 0) {
+      navigate(cartPath, { replace: true });
+    }
+  }, [cartPath, isCartHydrated, items.length, navigate]);
   const configuredCountries =
     navigationData?.storefrontConfig.shippingCountries
       ?.map((country) => ({ code: country.code, label: country.name }))
@@ -143,51 +174,58 @@ export function CheckoutMockupPage() {
   const defaultCountryCode = navigationData?.storefrontConfig.defaultCustomerCountry || checkoutCountries[0]?.code || "PL";
   const freeShippingZones = navigationData?.storefrontConfig.freeShippingZones ?? [];
   const checkoutPresentation = navigationData?.storefrontConfig.checkout;
+  const marketingConsentLabel = checkoutPresentation?.marketingLabel || DEFAULT_MARKETING_CONSENT_LABEL;
 
-  const virtualOnly = embedded ? config.mode === "digital" : checkoutStoreMode === "digital";
-  
-  // Detect if the actual cart contains only virtual products
-  const actuallyVirtualOnly = isCartVirtual(items);
-  // Use either the preview toggle or the actual detection
-  const shouldHideShipping = virtualOnly || actuallyVirtualOnly;
-  
   // Guest checkout setting from config (default: true, allow guests)
   const allowGuestCheckout = config["allow-guest-checkout"] !== "false";
   // If guest checkout is disabled, account creation is required
-  const requireAccountCreation = !allowGuestCheckout;
+  const requireAccountCreation = !allowGuestCheckout && !isLoggedIn;
 
   const [createAccount, setCreateAccount] = useState(requireAccountCreation);
+  const [accountUsername, setAccountUsername] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
   const [marketingConsent, setMarketingConsent] = useState(false);
+  useEffect(() => {
+    if (requireAccountCreation) setCreateAccount(true);
+  }, [requireAccountCreation]);
+  const [abandonedCartConsentAccepted, setAbandonedCartConsentAccepted] = useState(false);
   const [shipToDifferentAddress, setShipToDifferentAddress] = useState(false);
   const [couponVisible, setCouponVisible] = useState(true);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupons, setAppliedCoupons] = useState<string[]>([]);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
-
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
-  // Layout-studio-style page-local switches — content/positional options specific to
-  // this page, not the site-wide chrome, so kept local rather than in
-  // `LayoutPreferencesContext` (same pattern as the reading-list/wishlist/community
-  // profile page-local view switches).
-  const couponPosition: CouponPosition = embedded && config["coupon-position"] === "top" ? "top" : embedded ? "inline" : checkoutCouponPosition;
-  const hideOptionalBillingFields = embedded ? config["hide-optional-billing-fields"] === "true" : checkoutHideOptionalBillingFields;
-  const hideOptionalShippingFields = embedded ? config["hide-optional-shipping-fields"] === "true" : checkoutHideOptionalShippingFields;
-  const showOrderNotes = embedded ? config["show-order-notes"] !== "false" : checkoutShowOrderNotes;
-  const showTermsCheckbox = embedded ? config["show-terms"] !== "false" : checkoutShowTerms;
-  const showPrivacyCheckbox = embedded ? config["show-privacy"] !== "false" : checkoutShowPrivacy;
-  const paymentMethodsPosition: PaymentMethodsPosition = embedded && config["payment-position"] === "right" ? "right" : embedded ? "left" : checkoutPaymentPosition;
-  const summaryPosition: SummaryPosition = embedded && config["summary-position"] === "static" ? "static" : embedded ? "sticky" : checkoutSummaryPosition;
+  const couponPosition: CouponPosition = config["coupon-position"] === "top" ? "top" : "inline";
+  const hideOptionalBillingFields = config["hide-optional-billing-fields"] === "true";
+  const hideOptionalShippingFields = config["hide-optional-shipping-fields"] === "true";
+  const showOrderNotes = config["show-order-notes"] !== "false";
+  const showTermsCheckbox = config["show-terms"] !== "false";
+  const showPrivacyCheckbox = config["show-privacy"] !== "false";
+  const paymentMethodsPosition: PaymentMethodsPosition = config["payment-position"] === "right" ? "right" : "left";
+  const summaryPosition: SummaryPosition = config["summary-position"] === "static" ? "static" : "sticky";
 
   // Billing address fields kept in real controlled state (not the mockup's usual
   // uncontrolled `InputMock`s) because they're exactly what the WooCommerce Store
   // API's `checkout` route requires in `billing_address` to place a real order —
   // see `submitStripeCheckout`/`submitBlikCheckout` in `lib/payments.ts`.
-  const [billingAddress, setBillingAddress] = useState({
+  const [billingAddress, setBillingAddress] = useState<AddressFormState>({
     firstName: "",
     lastName: "",
+    company: "",
+    address1: "",
+    address2: "",
+    city: "",
+    state: "",
+    postcode: "",
+    countryCode: defaultCountryCode,
+  });
+  const [deliveryAddress, setDeliveryAddress] = useState<AddressFormState>({
+    firstName: "",
+    lastName: "",
+    company: "",
     address1: "",
     address2: "",
     city: "",
@@ -197,17 +235,31 @@ export function CheckoutMockupPage() {
   });
   const [billingEmail, setBillingEmail] = useState("");
   const [billingPhone, setBillingPhone] = useState("");
-  const [billingErrors, setBillingErrors] = useState<Partial<Record<
-    "firstName" | "lastName" | "address1" | "city" | "postcode" | "countryCode" | "phone" | "email" | "blikCode",
-    string | undefined
-  >>>({});
+  const [billingErrors, setBillingErrors] = useState<CheckoutFieldErrors>({});
+  const [deliveryErrors, setDeliveryErrors] = useState<CheckoutFieldErrors>({});
+  const [orderNotes, setOrderNotes] = useState("");
 
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const stripePaymentControllerRef = useRef<StripePaymentController | null>(null);
+  const registerStripePaymentController = useCallback((controller: StripePaymentController | null) => {
+    stripePaymentControllerRef.current = controller;
+  }, []);
 
+  const abandonedCartConsentRequired = abandonedCartConfig.loaded
+    ? Boolean(abandonedCartConfig.config?.checkout.required)
+    : false;
+  const abandonedCartConsentLabel =
+    abandonedCartConfig.config?.checkout.consentLabel ||
+    (abandonedCartConfig.config?.checkout.mode === "legitimate_interest"
+      ? "We will use your checkout email under legitimate interests to recover your cart."
+      : "I consent to abandoned-cart recovery emails.");
+  const abandonedCartTrackingConsent = abandonedCartConfig.loaded
+    ? (abandonedCartConsentRequired ? abandonedCartConsentAccepted : true)
+    : false;
   const { completeCapture: completeAbandonedCartCapture } = useAbandonedCartTracking(
     billingEmail,
-    agreedToPrivacy,
+    abandonedCartTrackingConsent,
     baseCurrency,
   );
 
@@ -217,7 +269,7 @@ export function CheckoutMockupPage() {
 
   // Autofill checkout form with logged-in user data
   useEffect(() => {
-    if (!isUserLoggedIn() || !isBackendConfigured) return;
+    if (!isLoggedIn || !isBackendConfigured) return;
     
     let cancelled = false;
     void getStorefrontAccount().then((account) => {
@@ -231,6 +283,7 @@ export function CheckoutMockupPage() {
           ...prev,
           firstName: account.billingAddress?.firstName || account.firstName || prev.firstName,
           lastName: account.billingAddress?.lastName || account.lastName || prev.lastName,
+          company: account.billingAddress?.company || prev.company,
           address1: account.billingAddress?.address1 || prev.address1,
           address2: account.billingAddress?.address2 || prev.address2,
           city: account.billingAddress?.city || prev.city,
@@ -244,7 +297,7 @@ export function CheckoutMockupPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLoggedIn]);
 
   const [shippingMethod, setShippingMethod] = useState<ShippingMethodId>("standard");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
@@ -260,30 +313,42 @@ export function CheckoutMockupPage() {
     isCheckAvailable,
   } = usePaymentGateways(currencyCode);
 
+  // BTC/ETH are checkout-currency options (see `CurrencyContext`'s crypto formatting),
+  // not ISO-4217 codes Stripe (or any of the other fiat-rail gateways) can process.
+  // When one of these is selected as the storefront currency, every fiat payment
+  // method must fall back to inactive and only the crypto wallet method remains usable.
+  const isCryptoOnlyCurrency = ["BTC", "ETH"].includes(currencyCode.trim().toUpperCase());
+
   useEffect(() => {
     if (!billingAddress.countryCode && defaultCountryCode) {
       setBillingAddress((previous) => ({ ...previous, countryCode: defaultCountryCode }));
     }
-  }, [billingAddress.countryCode, defaultCountryCode]);
+    if (!deliveryAddress.countryCode && defaultCountryCode) {
+      setDeliveryAddress((previous) => ({ ...previous, countryCode: defaultCountryCode }));
+    }
+  }, [billingAddress.countryCode, defaultCountryCode, deliveryAddress.countryCode]);
   
   useEffect(() => {
+    if (isCryptoOnlyCurrency) {
+      if (paymentMethod !== "crypto") setPaymentMethod("crypto");
+      return;
+    }
     if (paymentMethod === "blik" && !isBlikAvailable) setPaymentMethod("stripe");
-  }, [paymentMethod, isBlikAvailable]);
+  }, [paymentMethod, isBlikAvailable, isCryptoOnlyCurrency]);
   useEffect(() => {
-    if (paymentMethod === "crypto" && isBackendConfigured && !isCryptoAvailable) setPaymentMethod("stripe");
-  }, [paymentMethod, isCryptoAvailable]);
+    if (paymentMethod === "crypto" && !isCryptoOnlyCurrency && isBackendConfigured && !isCryptoAvailable) setPaymentMethod("stripe");
+  }, [paymentMethod, isCryptoAvailable, isCryptoOnlyCurrency]);
   useEffect(() => {
+    if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "bacs" && !isBacsAvailable) setPaymentMethod("stripe");
-  }, [paymentMethod, isBacsAvailable]);
+  }, [paymentMethod, isBacsAvailable, isCryptoOnlyCurrency]);
   useEffect(() => {
+    if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "cheque" && !isCheckAvailable) setPaymentMethod("stripe");
-  }, [paymentMethod, isCheckAvailable]);
+  }, [paymentMethod, isCheckAvailable, isCryptoOnlyCurrency]);
   useEffect(() => {
-    if (paymentMethod === "cod" && (shouldHideShipping || !isCodAvailable)) setPaymentMethod(isBacsAvailable ? "bacs" : "stripe");
-  }, [paymentMethod, shouldHideShipping, isCodAvailable, isBacsAvailable]);
-  useEffect(() => {
-    if (requireAccountCreation) setCreateAccount(true);
-  }, [requireAccountCreation]);
+    setCreateAccount(requireAccountCreation);
+  }, [isLoggedIn, requireAccountCreation]);
   const [blikCode, setBlikCode] = useState("");
   const [blikSecondsLeft, setBlikSecondsLeft] = useState(BLIK_WINDOW_SECONDS);
   const [cryptoCoin, setCryptoCoin] = useState<CryptoCoin>("btc");
@@ -296,11 +361,11 @@ export function CheckoutMockupPage() {
     }
   }, [cryptoAssets, cryptoCoin]);
 
-  // Fetch shipping methods from backend based on billing address
-  const shippingAddress: StoreApiAddress | null = billingAddress.countryCode
+  const billingStoreAddress: StoreApiAddress | null = billingAddress.countryCode
     ? {
         first_name: billingAddress.firstName,
         last_name: billingAddress.lastName,
+        company: billingAddress.company,
         address_1: billingAddress.address1,
         address_2: billingAddress.address2,
         city: billingAddress.city,
@@ -311,9 +376,42 @@ export function CheckoutMockupPage() {
         phone: billingPhone,
       }
     : null;
-
-  const { methods: backendShippingMethods, loading: shippingLoading, error: shippingError } = useShippingMethods(shippingAddress);
-  const { taxTotal, taxLines, loading: taxLoading } = useTaxCalculation(shippingAddress);
+  const deliveryStoreAddress: StoreApiAddress | null =
+    shipToDifferentAddress && deliveryAddress.countryCode
+      ? {
+          first_name: deliveryAddress.firstName,
+          last_name: deliveryAddress.lastName,
+          company: deliveryAddress.company,
+          address_1: deliveryAddress.address1,
+          address_2: deliveryAddress.address2,
+          city: deliveryAddress.city,
+          state: deliveryAddress.state,
+          postcode: deliveryAddress.postcode,
+          country: deliveryAddress.countryCode,
+        }
+      : billingStoreAddress;
+  const cartRevision = items.map((item) => `${item.id}:${item.quantity}`).join("|");
+  const {
+    cart: checkoutCart,
+    methods: backendShippingMethods,
+    totals: checkoutTotals,
+    coupons: backendCoupons,
+    loading: shippingLoading,
+    error: shippingError,
+    adoptCart: adoptCheckoutCart,
+    selectMethod: selectCheckoutShippingMethod,
+  } = useCheckoutCart(billingStoreAddress, deliveryStoreAddress, cartRevision, items);
+  const shouldHideShipping = config.mode === "digital" || isDigitalOnlyCart(checkoutCart, items);
+  useEffect(() => {
+    if (isCryptoOnlyCurrency) return;
+    if (paymentMethod === "cod" && (shouldHideShipping || !isCodAvailable)) {
+      setPaymentMethod(isBacsAvailable ? "bacs" : "stripe");
+    }
+  }, [paymentMethod, shouldHideShipping, isCodAvailable, isBacsAvailable, isCryptoOnlyCurrency]);
+  const backendCouponKey = backendCoupons.map(({ code }) => code).join("|");
+  useEffect(() => {
+    setAppliedCoupons(backendCoupons.map(({ code }) => code));
+  }, [backendCouponKey]);
 
   // Real 2-minute BLIK authorization countdown: resets to 02:00 every time BLIK becomes
   // the selected method (including re-selecting it after switching away), and only ticks
@@ -366,6 +464,7 @@ export function CheckoutMockupPage() {
       lastName: "lastName",
       address1: "address1",
       city: "city",
+      state: "state",
       postcode: "postcode",
       countryCode: "countryCode",
     };
@@ -376,14 +475,32 @@ export function CheckoutMockupPage() {
     }
   }
 
+  function updateDeliveryAddress<K extends keyof AddressFormState>(field: K, value: string) {
+    const errorFieldMap: Partial<Record<keyof AddressFormState, keyof CheckoutFieldErrors>> = {
+      firstName: "firstName",
+      lastName: "lastName",
+      address1: "address1",
+      city: "city",
+      state: "state",
+      postcode: "postcode",
+      countryCode: "countryCode",
+    };
+    setDeliveryAddress((previous) => ({ ...previous, [field]: value }));
+    const errorField = errorFieldMap[field];
+    if (errorField) {
+      setDeliveryErrors((previous) => ({ ...previous, [errorField]: undefined }));
+    }
+  }
+
   async function handleApplyCoupon() {
     if (!couponCode.trim()) return;
     setCouponLoading(true);
     setCouponError(null);
     const result = await checkoutApplyCoupon(couponCode.trim());
     setCouponLoading(false);
-    if (result.ok) {
-      setAppliedCoupons((prev) => [...new Set([...prev, couponCode.trim()])]);
+    if (result.ok && result.totals) {
+      adoptCheckoutCart(result.totals);
+      setAppliedCoupons((result.totals.coupons || []).map(({ code }) => code));
       setCouponCode("");
     } else {
       setCouponError(result.error || "Failed to apply coupon");
@@ -392,9 +509,17 @@ export function CheckoutMockupPage() {
 
   async function handleRemoveCoupon(code: string) {
     const result = await checkoutRemoveCoupon(code);
-    if (result.ok) {
-      setAppliedCoupons((prev) => prev.filter((c) => c !== code));
+    if (result.ok && result.totals) {
+      adoptCheckoutCart(result.totals);
+      setAppliedCoupons((result.totals.coupons || []).map((coupon) => coupon.code));
     }
+  }
+
+  async function handleShippingMethodChange(method: DisplayShippingMethod) {
+    setShippingMethod(method.id);
+    if (method.packageId === undefined || !method.rateId) return;
+    const result = await selectCheckoutShippingMethod(method.packageId, method.rateId);
+    if (!result.ok) setOrderError(result.error);
   }
 
   // Real order submission — every live WooCommerce gateway that the backend exposes
@@ -404,12 +529,12 @@ export function CheckoutMockupPage() {
     const canSubmitRealOrder =
       isBackendConfigured &&
       (
-        (paymentMethod === "stripe" && isStripeGatewayEnabled) ||
-        (paymentMethod === "blik" && isBlikAvailable && isStripeGatewayEnabled) ||
+        (paymentMethod === "stripe" && !isCryptoOnlyCurrency && isStripeGatewayEnabled) ||
+        (paymentMethod === "blik" && !isCryptoOnlyCurrency && isBlikAvailable && isStripeGatewayEnabled) ||
         (paymentMethod === "crypto" && isCryptoAvailable) ||
-        (paymentMethod === "bacs" && isBacsAvailable) ||
-        (paymentMethod === "cod" && isCodAvailable) ||
-        (paymentMethod === "cheque" && isCheckAvailable)
+        (paymentMethod === "bacs" && !isCryptoOnlyCurrency && isBacsAvailable) ||
+        (paymentMethod === "cod" && !isCryptoOnlyCurrency && isCodAvailable) ||
+        (paymentMethod === "cheque" && !isCryptoOnlyCurrency && isCheckAvailable)
       );
     if (!canSubmitRealOrder) {
       if (isBackendConfigured) {
@@ -417,7 +542,9 @@ export function CheckoutMockupPage() {
         setOrderError(
           paymentMethod === "crypto"
             ? "Crypto checkout is not currently available on this backend."
-            : "The selected payment method is not currently available.",
+            : isCryptoOnlyCurrency
+              ? "Only the crypto wallet payment method is available while paying in BTC/ETH."
+              : "The selected payment method is not currently available.",
         );
       }
       return;
@@ -436,13 +563,25 @@ export function CheckoutMockupPage() {
       postcode: billingAddress.postcode,
       phone: billingPhone,
       email: billingEmail,
+      customerNote: orderNotes,
       requiresShipping: !shouldHideShipping,
     });
+    const shouldCreateAccount = !isLoggedIn && (createAccount || requireAccountCreation);
+    const normalizedUsername = accountUsername.trim();
+    const accountUsernameError = shouldCreateAccount
+      ? !/^[A-Za-z0-9._-]{3,60}$/.test(normalizedUsername)
+        ? "Use 3–60 letters, numbers, dots, underscores, or hyphens"
+        : undefined
+      : undefined;
+    const accountPasswordError = shouldCreateAccount && accountPassword.length < 8
+      ? "Password must be at least 8 characters"
+      : undefined;
     const nextBillingErrors = {
       firstName: checkoutValidation.errors.firstName,
       lastName: checkoutValidation.errors.lastName,
       address1: checkoutValidation.errors.address1,
       city: checkoutValidation.errors.city,
+      state: checkoutValidation.errors.state,
       postcode: checkoutValidation.errors.postcode,
       countryCode: checkoutValidation.errors.country,
       phone: checkoutValidation.errors.phone,
@@ -451,13 +590,55 @@ export function CheckoutMockupPage() {
         paymentMethod === "blik" && !/^\d{6}$/.test(blikCode.trim())
           ? "BLIK code must be 6 digits"
           : undefined,
+      accountUsername: accountUsernameError,
+      accountPassword: accountPasswordError,
     };
     setBillingErrors(nextBillingErrors);
-    if (!checkoutValidation.isValid || nextBillingErrors.blikCode) {
+    const deliveryValidation = shipToDifferentAddress && !shouldHideShipping
+      ? validateCheckoutForm({
+          firstName: deliveryAddress.firstName,
+          lastName: deliveryAddress.lastName,
+          country: deliveryAddress.countryCode,
+          address1: deliveryAddress.address1,
+          city: deliveryAddress.city,
+          state: deliveryAddress.state,
+          postcode: deliveryAddress.postcode,
+          phone: billingPhone,
+          email: billingEmail,
+          requiresShipping: true,
+        })
+      : null;
+    const nextDeliveryErrors: CheckoutFieldErrors = {
+      firstName: deliveryValidation?.errors.firstName,
+      lastName: deliveryValidation?.errors.lastName,
+      address1: deliveryValidation?.errors.address1,
+      city: deliveryValidation?.errors.city,
+      state: deliveryValidation?.errors.state,
+      postcode: deliveryValidation?.errors.postcode,
+      countryCode: deliveryValidation?.errors.country,
+    };
+    setDeliveryErrors(nextDeliveryErrors);
+    if (
+      !checkoutValidation.isValid ||
+      deliveryValidation?.isValid === false ||
+      nextBillingErrors.blikCode ||
+      accountUsernameError ||
+      accountPasswordError
+    ) {
       setOrderError(
-        nextBillingErrors.blikCode
-          ? nextBillingErrors.blikCode
-          : "Complete the required billing details before placing the order.",
+        accountUsernameError || accountPasswordError
+          ? accountUsernameError || accountPasswordError || "Complete the account details."
+          : nextBillingErrors.blikCode
+            ? nextBillingErrors.blikCode
+          : `Complete the required ${deliveryValidation?.isValid === false ? "shipping" : "billing"} details before placing the order.`,
+      );
+      return;
+    }
+    if (!shouldHideShipping && isBackendConfigured && (shippingLoading || !selectedShipping)) {
+      setOrderError(
+        shippingLoading
+          ? "Wait for the available shipping methods to finish loading."
+          : "No shipping method is available for this address.",
       );
       return;
     }
@@ -465,6 +646,7 @@ export function CheckoutMockupPage() {
     const billing: CheckoutBillingDetails = {
       firstName: billingAddress.firstName,
       lastName: billingAddress.lastName,
+      company: billingAddress.company || undefined,
       addressLine1: billingAddress.address1,
       addressLine2: billingAddress.address2 || undefined,
       city: billingAddress.city,
@@ -474,6 +656,23 @@ export function CheckoutMockupPage() {
       email: billingEmail,
       phone: billingPhone,
     };
+    const shippingDetails: CheckoutBillingDetails | undefined =
+      shipToDifferentAddress && !shouldHideShipping
+        ? {
+            firstName: deliveryAddress.firstName,
+            lastName: deliveryAddress.lastName,
+            company: deliveryAddress.company || undefined,
+            addressLine1: deliveryAddress.address1,
+            addressLine2: deliveryAddress.address2 || undefined,
+            city: deliveryAddress.city,
+            state: deliveryAddress.state || undefined,
+            postcode: deliveryAddress.postcode,
+            countryCode: deliveryAddress.countryCode,
+            email: billingEmail,
+            phone: billingPhone,
+          }
+        : undefined;
+    const requireAuthenticatedUser = isLoggedIn;
 
     setOrderSubmitting(true);
     const syncResult = await syncCartToBackend(items, { force: true, verifyForCheckout: true });
@@ -482,58 +681,118 @@ export function CheckoutMockupPage() {
       setOrderError(syncResult.error);
       return;
     }
-    
-    // Determine which payment method to use and submit with account creation options
-    let result;
-    if (paymentMethod === "blik") {
-      result = await submitCheckoutWithAccount(billing, "stripe_blik", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-        blikCode,
-      });
-    } else if (paymentMethod === "bacs") {
-      result = await submitCheckoutWithAccount(billing, "bacs", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-      });
-    } else if (paymentMethod === "crypto") {
-      result = await submitCheckoutWithAccount(billing, "funkycommerce_crypto", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-        cryptoAssetCode: cryptoCoin.toUpperCase(),
-      });
-    } else if (paymentMethod === "stripe") {
-      result = await submitCheckoutWithAccount(billing, "stripe", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-      });
-    } else if (paymentMethod === "cod") {
-      result = await submitCheckoutWithAccount(billing, "cod", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-      });
-    } else if (paymentMethod === "cheque") {
-      result = await submitCheckoutWithAccount(billing, "cheque", {
-        createAccount,
-        subscribeToNewsletter: marketingConsent,
-      });
-    } else {
-      result = { ok: false as const, error: "Selected payment method is unavailable." };
+
+    let stripePaymentMethodId: string | undefined;
+    let stripePaymentType: string | undefined;
+    if (paymentMethod === "stripe") {
+      const controller = stripePaymentControllerRef.current;
+      if (!controller) {
+        setOrderSubmitting(false);
+        setOrderError("The Stripe payment form is still loading. Please wait a moment and try again.");
+        return;
+      }
+      try {
+        const preparedPayment = await controller.createPaymentMethod(billing);
+        stripePaymentMethodId = preparedPayment.paymentMethodId;
+        stripePaymentType = preparedPayment.selectedPaymentType;
+      } catch (error) {
+        setOrderSubmitting(false);
+        setOrderError(error instanceof Error ? error.message : "Stripe could not validate the payment details.");
+        return;
+      }
+    } else if (paymentMethod === "blik") {
+      const preparedPayment = await createBlikPaymentMethod(billing);
+      if (!preparedPayment.ok) {
+        setOrderSubmitting(false);
+        setOrderError(preparedPayment.error);
+        return;
+      }
+      stripePaymentMethodId = preparedPayment.paymentMethodId;
+      stripePaymentType = "blik";
     }
-    
+
+    const gateway = paymentMethod === "blik"
+      ? "stripe_blik"
+      : paymentMethod === "crypto"
+        ? "funkycommerce_crypto"
+        : paymentMethod;
+    let result: PaymentSubmissionResult = await submitCheckoutWithAccount(billing, gateway, {
+      createAccount: shouldCreateAccount,
+      accountUsername: shouldCreateAccount ? normalizedUsername : undefined,
+      customerPassword: shouldCreateAccount ? accountPassword : undefined,
+      subscribeToNewsletter: marketingConsent,
+      marketingConsentLabel,
+      requireAuthenticatedUser,
+      language: languageCode,
+      backendLanguage: languageBackendCode,
+      customerNote: orderNotes,
+      shippingAddress: shippingDetails,
+      cryptoAssetCode: paymentMethod === "crypto" ? cryptoCoin.toUpperCase() : undefined,
+      blikCode: paymentMethod === "blik" ? blikCode : undefined,
+      stripePaymentMethodId,
+      stripePaymentType,
+    });
+
+    let accountLoginError: string | undefined;
+    if (shouldCreateAccount && result.order) {
+      try {
+        const auth = await login(normalizedUsername, accountPassword);
+        const customerId = await claimCheckoutOrder(result.order, billingEmail, auth.authToken);
+        result = { ...result, order: { ...result.order, customer_id: customerId } };
+      } catch (error) {
+        accountLoginError = error instanceof Error ? error.message : "Automatic account setup failed.";
+      }
+    }
+
+    if (result.ok && paymentMethod === "stripe") {
+      result = await completeStripePayment(result.order);
+    } else if (result.ok && paymentMethod === "blik") {
+      result = await completeBlikPayment(result.order, billingEmail);
+    }
     setOrderSubmitting(false);
 
     if (result.ok) {
+      const confirmation = createOrderConfirmation({
+        mode: shouldHideShipping ? "digital" : "physical",
+        order: result.order,
+        billingEmail: billingEmail.trim(),
+        currency: checkoutCart?.totals.currency_code || currencyCode,
+        accountLoginError,
+        items,
+        formatAmount: formatBaseAmount,
+        subtotal: authoritativeSubtotal,
+        discount: discountValue,
+        shipping: shippingValue,
+        tax: taxValue,
+        total: totalValue,
+        coupons: appliedCoupons,
+        shippingMethod: shouldHideShipping ? undefined : selectedShipping?.label,
+      });
       completeAbandonedCartCapture();
+      saveOrderConfirmation(confirmation);
+      orderCompletedRef.current = true;
+      clearCart();
       navigate(shouldHideShipping ? orderSuccessDigitalPath : orderSuccessPath, {
-        state: { order: result.order },
+        state: { order: result.order, confirmation },
       });
     } else {
-      setOrderError(result.error);
+      setOrderError(
+        result.order
+          ? `Order #${result.order.order_number || result.order.order_id} was created, but payment failed: ${result.error} You can retry payment without losing your cart.`
+          : result.error,
+      );
     }
   }
 
-  const displayShippingMethods = mapShippingOptionsToDisplayMethods(backendShippingMethods, FALLBACK_SHIPPING_METHODS);
+  const displayShippingMethods = mapShippingOptionsToDisplayMethods(
+    backendShippingMethods,
+    isBackendConfigured
+      ? checkoutCart && !shippingLoading && !shippingError
+        ? [DEFAULT_FREE_SHIPPING_METHOD]
+        : []
+      : FALLBACK_SHIPPING_METHODS,
+    checkoutTotals?.currency_minor_unit ?? 0,
+  );
   useEffect(() => {
     const backendSelected = displayShippingMethods.find((method) => method.selected);
     if (backendSelected && shippingMethod !== backendSelected.id) {
@@ -545,31 +804,42 @@ export function CheckoutMockupPage() {
     }
   }, [displayShippingMethods, shippingMethod]);
   const selectedShipping = displayShippingMethods.find((method) => method.id === shippingMethod) ?? displayShippingMethods[0];
+  const authoritativeSubtotal = checkoutTotals?.total_items !== undefined
+    ? storeApiAmount(checkoutTotals.total_items, checkoutTotals)
+    : subtotalAmount;
+  const authoritativeSubtotalLabel = checkoutTotals ? formatBaseAmount(authoritativeSubtotal) : subtotalLabel;
   const resolvedFreeShipping = resolveFreeShippingThreshold(
     freeShippingZones,
-    billingAddress.countryCode,
+    shipToDifferentAddress ? deliveryAddress.countryCode : billingAddress.countryCode,
     defaultCountryCode,
     FREE_SHIPPING_THRESHOLD,
   );
   const freeShippingThreshold = resolvedFreeShipping.threshold;
   const freeShippingApplies =
     !shouldHideShipping &&
-    (items.length === 0 || selectedShipping.price === 0 || (freeShippingThreshold !== null && subtotalAmount >= freeShippingThreshold));
-  const shippingValue = shouldHideShipping ? 0 : freeShippingApplies ? 0 : selectedShipping.price;
-  const remainingForFreeShipping = freeShippingThreshold !== null ? freeShippingThreshold - subtotalAmount : null;
-  
-  // Use backend tax value (as a string, needs parsing) or fall back to mockup calculation
-  const taxValueStr = taxTotal || "0";
-  const taxValue = parseFloat(taxValueStr) || (subtotalAmount - 0) * 0.1; // Fallback to 10% mock
-  
-  // Backend handles coupons and discount totals — we track applied coupons for UI
-  // In a real implementation, the discount would come from the backend cart totals
-  const discountValue = appliedCoupons.length > 0 ? Math.min(subtotalAmount * 0.1, 25) : 0;
-  const totalValue = subtotalAmount - discountValue + shippingValue + taxValue;
+    (
+      items.length === 0 ||
+      selectedShipping?.price === 0 ||
+      (!isBackendConfigured && freeShippingThreshold !== null && authoritativeSubtotal >= freeShippingThreshold)
+    );
+  const fallbackShippingValue = shouldHideShipping ? 0 : freeShippingApplies ? 0 : selectedShipping?.price ?? 0;
+  const remainingForFreeShipping = freeShippingThreshold !== null ? freeShippingThreshold - authoritativeSubtotal : null;
+  const shippingValue = checkoutTotals
+    ? storeApiAmount(checkoutTotals.total_shipping, checkoutTotals)
+    : fallbackShippingValue;
+  const taxValue = checkoutTotals
+    ? storeApiAmount(checkoutTotals.total_tax, checkoutTotals)
+    : authoritativeSubtotal * 0.1;
+  const discountValue = checkoutTotals
+    ? storeApiAmount(checkoutTotals.total_discount, checkoutTotals)
+    : 0;
+  const totalValue = checkoutTotals
+    ? storeApiAmount(checkoutTotals.total_price, checkoutTotals)
+    : authoritativeSubtotal - discountValue + shippingValue + taxValue;
 
   const summaryRows = [
-    { label: "Subtotal", value: subtotalLabel },
-    ...(appliedCoupons.length > 0 ? [{ label: "Discount", value: `-${formatBaseAmount(discountValue)}` }] : []),
+    { label: "Subtotal", value: authoritativeSubtotalLabel },
+    ...(discountValue > 0 ? [{ label: "Discount", value: `-${formatBaseAmount(discountValue)}` }] : []),
     {
       label: "Shipping",
       value: shouldHideShipping ? "Digital delivery" : shippingValue === 0 ? "Free" : formatBaseAmount(shippingValue),
@@ -578,11 +848,15 @@ export function CheckoutMockupPage() {
   ];
 
   const couponSection = (
-    <CheckoutSection title="Have a coupon?" collapsible defaultOpen={couponVisible} onToggle={setCouponVisible}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
+    <CheckoutSection title={CHECKOUT_COUPON_COPY.title} collapsible defaultOpen={couponVisible} onToggle={setCouponVisible}>
+      <div
+        data-checkout-coupon-row
+        className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+      >
+        <div data-checkout-coupon-input className="min-w-0 w-full max-w-full box-border">
           <InputMock
-            label="Coupon code"
+            label={CHECKOUT_COUPON_COPY.label}
+            placeholder={CHECKOUT_COUPON_COPY.label}
             value={couponCode}
             onChange={(value) => {
               setCouponCode(value);
@@ -591,12 +865,13 @@ export function CheckoutMockupPage() {
           />
         </div>
         <button
+          data-checkout-coupon-submit
           type="button"
           onClick={handleApplyCoupon}
           disabled={couponLoading || !couponCode.trim()}
-          className="mt-6 shrink-0 rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:border-brand-400 hover:text-brand-600 disabled:opacity-50 disabled:cursor-not-allowed dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+          className="min-h-11 min-w-0 w-full max-w-full box-border whitespace-normal rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold leading-snug text-zinc-700 transition hover:border-brand-400 hover:text-brand-600 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
         >
-          {couponLoading ? "Applying..." : "Apply code"}
+          {couponLoading ? "Applying..." : CHECKOUT_COUPON_COPY.apply}
         </button>
       </div>
       {couponError ? (
@@ -636,19 +911,46 @@ export function CheckoutMockupPage() {
           description="Cards and other Stripe-supported online payment methods."
           checked={paymentMethod === "stripe"}
           onSelect={() => setPaymentMethod("stripe")}
+          disabled={isCryptoOnlyCurrency}
+          disabledReason="Not available while paying in BTC/ETH — use the crypto wallet method instead."
         />
-        {paymentMethod === "stripe" ? <StripeCardElement amount={totalValue * selectedRate} currency={currencyCode.toLowerCase()} /> : null}
+        {paymentMethod === "stripe" && !isCryptoOnlyCurrency ? (
+          <StripeCardElement
+            amount={totalValue * selectedRate}
+            currency={currencyCode.toLowerCase()}
+            onControllerChange={registerStripePaymentController}
+          />
+        ) : null}
 
         {isBlikAvailable ? (
           <>
             <PaymentOption
-              icon={<img src="/icons/payment/blik.svg" alt="" width={20} height={20} className="h-5 w-5 object-contain" />}
+              icon={
+                <img
+                  data-checkout-blik-icon
+                  src="/icons/payment/blik.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width={95}
+                  height={40}
+                  className="block w-auto max-w-full object-contain"
+                  style={{
+                    blockSize: `${BLIK_RENDERED_HEIGHT_PX}px`,
+                    inlineSize: "auto",
+                    maxInlineSize: "100%",
+                    aspectRatio: "95 / 40",
+                    objectFit: "contain",
+                  }}
+                />
+              }
               label="BLIK"
               description="Pay instantly in PLN with a 6-digit BLIK code via Stripe."
               checked={paymentMethod === "blik"}
               onSelect={() => setPaymentMethod("blik")}
+              disabled={isCryptoOnlyCurrency}
+              disabledReason="Not available while paying in BTC/ETH — use the crypto wallet method instead."
             />
-            {paymentMethod === "blik" ? (
+            {paymentMethod === "blik" && !isCryptoOnlyCurrency ? (
               <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                 <InputMock
                   label="BLIK code"
@@ -711,18 +1013,20 @@ export function CheckoutMockupPage() {
             <PaymentOption
               icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
               label="Direct bank transfer"
-              description="Pay from your bank using WooCommerce's BACS instructions after placing the order."
+              description="Pay from your bank using the store's transfer instructions after placing the order."
               checked={paymentMethod === "bacs"}
               onSelect={() => setPaymentMethod("bacs")}
+              disabled={isCryptoOnlyCurrency}
+              disabledReason="Not available while paying in BTC/ETH — use the crypto wallet method instead."
             />
-            {paymentMethod === "bacs" ? (
+            {paymentMethod === "bacs" && !isCryptoOnlyCurrency ? (
               <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                 <p className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
                   Payment instructions
                 </p>
                 <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">
-                  The live WooCommerce backend accepts BACS orders. After placing the order, customers continue to the
-                  native order-received screen and confirmation email for the bank transfer details configured in WooCommerce.
+                  The live store backend accepts bank-transfer orders. After placing the order, customers continue to the
+                  order confirmation screen and email for the configured transfer details.
                 </p>
               </div>
             ) : null}
@@ -735,8 +1039,14 @@ export function CheckoutMockupPage() {
           description="Pay in cash when your order arrives."
           checked={paymentMethod === "cod"}
           onSelect={() => setPaymentMethod("cod")}
-          disabled={shouldHideShipping || !isCodAvailable}
-          disabledReason={shouldHideShipping ? "Not available for digital orders" : "Not available at this time"}
+          disabled={shouldHideShipping || !isCodAvailable || isCryptoOnlyCurrency}
+          disabledReason={
+            isCryptoOnlyCurrency
+              ? "Not available while paying in BTC/ETH — use the crypto wallet method instead."
+              : shouldHideShipping
+                ? "Not available for digital orders"
+                : "Not available at this time"
+          }
         />
 
         {isCheckAvailable ? (
@@ -746,12 +1056,16 @@ export function CheckoutMockupPage() {
             description="Mail a cheque — your order ships once it clears."
             checked={paymentMethod === "cheque"}
             onSelect={() => setPaymentMethod("cheque")}
-            disabled={shouldHideShipping}
-            disabledReason="Not available for digital orders"
+            disabled={shouldHideShipping || isCryptoOnlyCurrency}
+            disabledReason={
+              isCryptoOnlyCurrency
+                ? "Not available while paying in BTC/ETH — use the crypto wallet method instead."
+                : "Not available for digital orders"
+            }
           />
         ) : null}
         
-        {paymentMethod === "cheque" ? (
+        {paymentMethod === "cheque" && !isCryptoOnlyCurrency ? (
           <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
             <p className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
               Payment instructions
@@ -796,7 +1110,7 @@ export function CheckoutMockupPage() {
             {couponPosition === "top" ? couponSection : null}
 
             <CheckoutSection title="Billing details">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid min-w-0 gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <InputMock
                 label="First name"
                 required
@@ -815,7 +1129,15 @@ export function CheckoutMockupPage() {
                 autoComplete="family-name"
                 error={billingErrors.lastName}
               />
-              {!hideOptionalBillingFields ? <InputMock label="Company name" helperText="Optional" name="billingCompany" autoComplete="organization" /> : null}
+              {!hideOptionalBillingFields ? (
+                <InputMock
+                  label="Company name"
+                  value={billingAddress.company}
+                  onChange={(value) => updateBillingAddress("company", value)}
+                  name="billingCompany"
+                  autoComplete="organization"
+                />
+              ) : null}
               <CountrySelect
                 label="Country / region"
                 required
@@ -866,6 +1188,7 @@ export function CheckoutMockupPage() {
                     onChange={(value) => updateBillingAddress("state", value)}
                     name="billingState"
                     autoComplete="address-level1"
+                    error={billingErrors.state}
                   />
                   <InputMock
                     label="Postcode / ZIP"
@@ -930,7 +1253,7 @@ export function CheckoutMockupPage() {
 
           {couponPosition === "inline" ? couponSection : null}
 
-          {allowGuestCheckout ? (
+          {!isLoggedIn && allowGuestCheckout ? (
             <CheckoutSection title="Account">
               <label className="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 <input
@@ -943,8 +1266,31 @@ export function CheckoutMockupPage() {
               </label>
               {createAccount ? (
                 <div className="grid gap-4 md:grid-cols-2">
-                  <InputMock label="Username" required name="accountUsername" autoComplete="username" />
-                  <InputMock label="Password" type="password" required name="accountPassword" autoComplete="new-password" />
+                  <InputMock
+                    label="Username"
+                    required
+                    value={accountUsername}
+                    onChange={(value) => {
+                      setAccountUsername(value);
+                      setBillingErrors((previous) => ({ ...previous, accountUsername: undefined }));
+                    }}
+                    name="accountUsername"
+                    autoComplete="username"
+                    error={billingErrors.accountUsername}
+                  />
+                  <InputMock
+                    label="Password"
+                    type="password"
+                    required
+                    value={accountPassword}
+                    onChange={(value) => {
+                      setAccountPassword(value);
+                      setBillingErrors((previous) => ({ ...previous, accountPassword: undefined }));
+                    }}
+                    name="accountPassword"
+                    autoComplete="new-password"
+                    error={billingErrors.accountPassword}
+                  />
                 </div>
               ) : null}
               <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
@@ -954,14 +1300,38 @@ export function CheckoutMockupPage() {
                   onChange={(event) => setMarketingConsent(event.target.checked)}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
                 />
-                <span>{checkoutPresentation?.marketingLabel || "Keep me posted about new drops, offers, and restocks by email."}</span>
+                <span>{marketingConsentLabel}</span>
               </label>
             </CheckoutSection>
-          ) : (
+          ) : !isLoggedIn ? (
             <CheckoutSection title="Account">
-              <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">
-                An account will be created with your email address during checkout.
-              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <InputMock
+                  label="Username"
+                  required
+                  value={accountUsername}
+                  onChange={(value) => {
+                    setAccountUsername(value);
+                    setBillingErrors((previous) => ({ ...previous, accountUsername: undefined }));
+                  }}
+                  name="accountUsername"
+                  autoComplete="username"
+                  error={billingErrors.accountUsername}
+                />
+                <InputMock
+                  label="Password"
+                  type="password"
+                  required
+                  value={accountPassword}
+                  onChange={(value) => {
+                    setAccountPassword(value);
+                    setBillingErrors((previous) => ({ ...previous, accountPassword: undefined }));
+                  }}
+                  name="accountPassword"
+                  autoComplete="new-password"
+                  error={billingErrors.accountPassword}
+                />
+              </div>
               <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
                 <input
                   type="checkbox"
@@ -969,10 +1339,41 @@ export function CheckoutMockupPage() {
                   onChange={(event) => setMarketingConsent(event.target.checked)}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
                 />
-                <span>{checkoutPresentation?.marketingLabel || "Keep me posted about new drops, offers, and restocks by email."}</span>
+                <span>{marketingConsentLabel}</span>
+              </label>
+            </CheckoutSection>
+          ) : (
+            <CheckoutSection title="Updates">
+              <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={marketingConsent}
+                  onChange={(event) => setMarketingConsent(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
+                />
+                <span>{marketingConsentLabel}</span>
               </label>
             </CheckoutSection>
           )}
+
+          <CheckoutSection title="Cart recovery">
+            {abandonedCartConsentRequired ? (
+              <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={abandonedCartConsentAccepted}
+                  onChange={(event) => setAbandonedCartConsentAccepted(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
+                />
+                <span>{abandonedCartConsentLabel}</span>
+              </label>
+            ) : (
+              <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">{abandonedCartConsentLabel}</p>
+            )}
+            <p className="m-0 text-xs text-zinc-400 dark:text-zinc-500">
+              Your checkout details are used only to recover this cart and complete your order.
+            </p>
+          </CheckoutSection>
 
           {!shouldHideShipping ? (
             <CheckoutSection title="Delivery">
@@ -988,17 +1389,91 @@ export function CheckoutMockupPage() {
               {shipToDifferentAddress ? (
                 <div className="grid gap-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <InputMock label="First name" required />
-                    <InputMock label="Last name" required />
+                    <InputMock
+                      label="First name"
+                      required
+                      value={deliveryAddress.firstName}
+                      onChange={(value) => updateDeliveryAddress("firstName", value)}
+                      name="shippingFirstName"
+                      autoComplete="shipping given-name"
+                      error={deliveryErrors.firstName}
+                    />
+                    <InputMock
+                      label="Last name"
+                      required
+                      value={deliveryAddress.lastName}
+                      onChange={(value) => updateDeliveryAddress("lastName", value)}
+                      name="shippingLastName"
+                      autoComplete="shipping family-name"
+                      error={deliveryErrors.lastName}
+                    />
                   </div>
-                  {!hideOptionalShippingFields ? <InputMock label="Company name" helperText="Optional" /> : null}
-                  <CountrySelect label="Country / region" required options={checkoutCountries} name="shippingCountry" autoComplete="shipping country" />
-                  <InputMock label="Street address" required name="shippingAddressLine1" autoComplete="shipping address-line1" />
-                  {!hideOptionalShippingFields ? <InputMock label="Apartment, suite, unit etc." helperText="Optional" name="shippingAddressLine2" autoComplete="shipping address-line2" /> : null}
+                  {!hideOptionalShippingFields ? (
+                    <InputMock
+                      label="Company name"
+                      value={deliveryAddress.company}
+                      onChange={(value) => updateDeliveryAddress("company", value)}
+                      name="shippingCompany"
+                      autoComplete="shipping organization"
+                    />
+                  ) : null}
+                  <CountrySelect
+                    label="Country / region"
+                    required
+                    value={deliveryAddress.countryCode}
+                    onChange={(value) => updateDeliveryAddress("countryCode", value)}
+                    options={checkoutCountries}
+                    name="shippingCountry"
+                    autoComplete="shipping country"
+                    error={deliveryErrors.countryCode}
+                  />
+                  <InputMock
+                    label="Street address"
+                    required
+                    value={deliveryAddress.address1}
+                    onChange={(value) => updateDeliveryAddress("address1", value)}
+                    name="shippingAddressLine1"
+                    autoComplete="shipping address-line1"
+                    error={deliveryErrors.address1}
+                  />
+                  {!hideOptionalShippingFields ? (
+                    <InputMock
+                      label="Apartment, suite, unit etc."
+                      helperText="Optional"
+                      value={deliveryAddress.address2}
+                      onChange={(value) => updateDeliveryAddress("address2", value)}
+                      name="shippingAddressLine2"
+                      autoComplete="shipping address-line2"
+                    />
+                  ) : null}
                   <div className="grid gap-4 md:grid-cols-3">
-                    <InputMock label="Town / city" required name="shippingCity" autoComplete="shipping address-level2" />
-                    <InputMock label="State / county" required name="shippingState" autoComplete="shipping address-level1" />
-                    <InputMock label="Postcode / ZIP" required name="shippingPostcode" autoComplete="shipping postal-code" />
+                    <InputMock
+                      label="Town / city"
+                      required
+                      value={deliveryAddress.city}
+                      onChange={(value) => updateDeliveryAddress("city", value)}
+                      name="shippingCity"
+                      autoComplete="shipping address-level2"
+                      error={deliveryErrors.city}
+                    />
+                    <InputMock
+                      label="State / county"
+                      required
+                      value={deliveryAddress.state}
+                      onChange={(value) => updateDeliveryAddress("state", value)}
+                      name="shippingState"
+                      autoComplete="shipping address-level1"
+                      error={deliveryErrors.state}
+                    />
+                    <InputMock
+                      label="Postcode / ZIP"
+                      required
+                      value={deliveryAddress.postcode}
+                      onChange={(value) => updateDeliveryAddress("postcode", value)}
+                      name="shippingPostcode"
+                      autoComplete="shipping postal-code"
+                      error={deliveryErrors.postcode}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -1013,9 +1488,14 @@ export function CheckoutMockupPage() {
                     {shippingError}
                   </p>
                 ) : null}
+                {!shippingLoading && !shippingError && displayShippingMethods.length === 0 ? (
+                  <p className="m-0 text-xs text-amber-600 dark:text-amber-400">
+                    No shipping methods are available for this address.
+                  </p>
+                ) : null}
                 {displayShippingMethods.map((method) => {
-                const isFreeForMethod = freeShippingApplies || method.price === 0;
-                return (
+                  const isFreeForMethod = method.price === 0 || (!isBackendConfigured && freeShippingApplies);
+                  return (
                     <label
                       key={method.id}
                       className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 text-sm font-medium text-zinc-700 transition hover:border-brand-300 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50 dark:border-zinc-700 dark:text-zinc-200 dark:has-[:checked]:bg-brand-950/40"
@@ -1025,7 +1505,7 @@ export function CheckoutMockupPage() {
                           type="radio"
                           name="shippingMethod"
                           checked={shippingMethod === method.id}
-                          onChange={() => setShippingMethod(method.id)}
+                          onChange={() => void handleShippingMethodChange(method)}
                           disabled={method.disabled}
                           className="accent-brand-600"
                         />
@@ -1059,7 +1539,16 @@ export function CheckoutMockupPage() {
 
           {showOrderNotes ? (
             <CheckoutSection title="Order notes">
-              <InputMock label="Notes about your order" helperText="Optional — e.g. delivery instructions" multiline rows={3} name="orderNotes" autoComplete="off" />
+              <InputMock
+                label="Notes about your order"
+                helperText="Optional — e.g. delivery instructions"
+                multiline
+                rows={3}
+                value={orderNotes}
+                onChange={setOrderNotes}
+                name="orderNotes"
+                autoComplete="off"
+              />
             </CheckoutSection>
           ) : null}
 
@@ -1087,7 +1576,11 @@ export function CheckoutMockupPage() {
             total={formatBaseAmount(totalValue)}
             ctaHref={shouldHideShipping ? orderSuccessDigitalPath : orderSuccessPath}
             ctaLabel={checkoutPresentation?.submitLabel || "Place order"}
-            ctaDisabled={(showTermsCheckbox && !agreedToTerms) || (showPrivacyCheckbox && !agreedToPrivacy)}
+            ctaDisabled={
+              (showTermsCheckbox && !agreedToTerms) ||
+              (showPrivacyCheckbox && !agreedToPrivacy) ||
+              (abandonedCartConsentRequired && !abandonedCartConsentAccepted)
+            }
             onCtaClick={handlePlaceOrder}
             ctaBusy={orderSubmitting}
             position={summaryPosition}
@@ -1248,7 +1741,7 @@ function CountrySelect({
   error?: string;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+    <label className="grid min-w-0 gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
       <span>
         {label}
         {required ? <span className="ml-0.5 text-rose-500">*</span> : null}
@@ -1260,7 +1753,7 @@ function CountrySelect({
         autoComplete={autoComplete}
         required={required}
         aria-invalid={Boolean(error)}
-        className={`rounded-xl border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 ${
+        className={`block min-w-0 w-full max-w-full box-border rounded-[var(--theme-radius)] border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 ${
           error
             ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100 dark:border-rose-500/60 dark:focus:ring-rose-950"
             : "border-zinc-200 focus:border-brand-400 focus:ring-brand-100 dark:border-zinc-700 dark:focus:border-brand-500 dark:focus:ring-brand-950"
@@ -1312,7 +1805,7 @@ function PaymentOption({
         disabled={disabled}
         className="mt-1 accent-brand-600"
       />
-      <span className="mt-0.5 text-zinc-500 dark:text-zinc-400">{icon}</span>
+      <span className="mt-0.5 shrink-0 text-zinc-500 dark:text-zinc-400">{icon}</span>
       <span className="grid gap-0.5">
         <span>{label}</span>
         <span className="text-xs font-normal text-zinc-400 dark:text-zinc-500">{disabled ? disabledReason : description}</span>
@@ -1321,16 +1814,96 @@ function PaymentOption({
   );
 }
 
-/** Real `@stripe/react-stripe-js` Payment Element — no hardcoded card/expiry/CVC
- * inputs. Uses Stripe's "deferred" Elements mode (`mode: "payment"` + `amount` +
- * `currency`, no `clientSecret` needed up front) so the actual card UI can render
- * without a backend having created a PaymentIntent yet — only *confirming* the
- * payment would require one, and this mockup has no backend to do that. If no
- * publishable key is configured, falls back to a setup notice instead of a broken
- * or blank form. */
-function StripeCardElement({ amount, currency }: { amount: number; currency: string }) {
+function StripePaymentElement({
+  onControllerChange,
+}: {
+  onControllerChange: (controller: StripePaymentController | null) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const selectedPaymentType = useRef("card");
+
+  useEffect(() => {
+    if (!stripe || !elements) {
+      onControllerChange(null);
+      return;
+    }
+
+    onControllerChange({
+      createPaymentMethod: async (billing) => {
+        const submission = await elements.submit();
+        if (submission.error) {
+          throw new Error(submission.error.message || "Complete the Stripe payment form.");
+        }
+
+        const paymentMethod = await stripe.createPaymentMethod({
+          elements,
+          params: { billing_details: toStripeBillingDetails(billing) },
+        });
+        if (paymentMethod.error) {
+          throw new Error(paymentMethod.error.message || "Stripe could not prepare the payment.");
+        }
+        return {
+          paymentMethodId: paymentMethod.paymentMethod.id,
+          selectedPaymentType: selectedPaymentType.current,
+        };
+      },
+    });
+
+    return () => onControllerChange(null);
+  }, [elements, onControllerChange, stripe]);
+
+  return (
+    <PaymentElement
+      onChange={(event) => {
+        selectedPaymentType.current = event.value.type;
+      }}
+    />
+  );
+}
+
+/** Deferred Stripe Payment Element wired to WooCommerce's UPE payment-data contract.
+ * The WordPress Stripe plugin owns the secret key and creates the PaymentIntent only
+ * after the browser has created a safe `pm_...` identifier through Stripe.js. */
+function StripeCardElement({
+  amount,
+  currency,
+  onControllerChange,
+}: {
+  amount: number;
+  currency: string;
+  onControllerChange: (controller: StripePaymentController | null) => void;
+}) {
   const publishableKey = getStripePublishableKey();
   const stripePromise = useMemo(() => getStripe(), [publishableKey]);
+  const elementOptions = useMemo(
+    () => ({
+      mode: "payment" as const,
+      paymentMethodCreation: "manual" as const,
+      amount: Math.max(Math.round(amount * 100), currency === "pln" ? 200 : 50),
+      currency,
+      paymentMethodTypes: ["card"],
+      appearance: { theme: "stripe" as const },
+    }),
+    [amount, currency],
+  );
+
+  // BTC/ETH aren't ISO-4217 currencies — Stripe's Elements API rejects them outright.
+  // Fall back gracefully instead of ever attempting to initialize with one.
+  if (currency.toLowerCase() === "btc" || currency.toLowerCase() === "eth") {
+    return (
+      <div className="grid gap-2 rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+        <p className="m-0 flex items-center gap-1.5 font-medium text-zinc-600 dark:text-zinc-300">
+          <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Stripe doesn't support {currency.toUpperCase()}
+        </p>
+        <p className="m-0">
+          Switch to the crypto wallet payment method, or change the storefront currency to a supported
+          fiat currency to pay by card.
+        </p>
+      </div>
+    );
+  }
 
   if (!isStripeConfigured() || !stripePromise) {
     return (
@@ -1340,9 +1913,9 @@ function StripeCardElement({ amount, currency }: { amount: number; currency: str
           Stripe isn't connected yet
         </p>
         <p className="m-0">
-          Configure the Stripe publishable key in WooCommerce or set{" "}
+          Configure the Stripe publishable key in the store settings or set{" "}
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">VITE_STRIPE_PUBLISHABLE_KEY</code>{" "}
-          to render the real Stripe card form here once a backend can create payment intents.
+          to render the secure card form.
         </p>
       </div>
     );
@@ -1350,16 +1923,8 @@ function StripeCardElement({ amount, currency }: { amount: number; currency: str
 
   return (
     <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <Elements
-        stripe={stripePromise}
-        options={{
-          mode: "payment",
-          amount: Math.max(Math.round(amount * 100), 50),
-          currency,
-          appearance: { theme: "stripe" },
-        }}
-      >
-        <PaymentElement />
+      <Elements stripe={stripePromise} options={elementOptions}>
+        <StripePaymentElement onControllerChange={onControllerChange} />
       </Elements>
       <p className="m-0 flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
         <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />

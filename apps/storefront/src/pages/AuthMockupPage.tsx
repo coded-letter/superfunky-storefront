@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { ViewSwitch } from "@funky/ui";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { saveCheckoutEmail, saveNewsletterEmail } from "../lib/abandonedCart";
-import { useStorefrontPath } from "../lib/storefrontPaths";
+import { useResolvedStorefrontPath, useStorefrontPath } from "../lib/storefrontPaths";
 import { validateForgotPasswordForm, validateLoginForm, validateNewPassword, validateRegisterForm, type FieldErrors } from "../lib/validation";
 import { InputMock, primaryActionButtonClass } from "./shared";
 import {
@@ -12,12 +13,14 @@ import {
   registerCustomer,
   resetUserPassword,
   sendPasswordResetEmail,
+  useIsUserLoggedIn,
   useLoginClients,
   type LoginClient,
   type LoginProvider,
 } from "../lib/auth";
 
 export type AuthMode = "login" | "register" | "forgot-password";
+export type AuthShortcodeMode = AuthMode | "combined";
 
 /** Three alternate shells for the login/register/forgot-password forms — the form
  * content itself (`AuthFormColumn`) is identical across all three, only the
@@ -45,13 +48,19 @@ const BREADCRUMB_LABELS: Record<AuthMode, string> = {
 
 const DESCRIPTIONS: Record<AuthMode, string> = {
   login: "Sign in to track orders, manage your wishlist, and check out faster.",
-  register: "Join FunkyCommerce for personalized recommendations and faster checkout.",
+  register: "Join Superfunky for personalized recommendations and faster checkout.",
   "forgot-password": "We'll email you a secure link to get back into your account.",
 };
 
-export function AuthMockupPage({ mode }: { mode: AuthMode }) {
+const AUTH_MODE_OPTIONS = [
+  { value: "login" as const, label: "Login" },
+  { value: "register" as const, label: "Register" },
+  { value: "forgot-password" as const, label: "Forgot password" },
+];
+
+export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const embedded = useEmbeddedApplicationShortcode();
-  const accountPath = useStorefrontPath("account", "/account");
+  const { path: accountPath, isLoading: isLoadingAccountPath } = useResolvedStorefrontPath("account", "/account");
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
@@ -59,33 +68,51 @@ export function AuthMockupPage({ mode }: { mode: AuthMode }) {
   const config = useApplicationShortcode(["funkycommerce_auth"], { layout: "split", mode });
   const configuredLayout = ["split", "centered", "image-bg"].includes(config.layout) ? config.layout as AuthLayout : "split";
   const layout = configuredLayout;
+  const combined = mode === "combined";
+  const configuredDefaultMode = AUTH_MODE_OPTIONS.some((option) => option.value === config["default-mode"])
+    ? config["default-mode"] as AuthMode
+    : "login";
+  const [activeMode, setActiveMode] = useConfiguredState<AuthMode>(combined ? configuredDefaultMode : mode);
+  const isLoggedIn = useIsUserLoggedIn();
+
+  if (isLoggedIn) {
+    if (isLoadingAccountPath) return null;
+    return <Navigate to={accountPath} replace />;
+  }
 
   const formColumn = (
     <div className="grid content-start gap-6">
       <div className="grid gap-1">
-        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{TITLES[mode]}</h1>
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{DESCRIPTIONS[mode]}</p>
+        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{TITLES[activeMode]}</h1>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{DESCRIPTIONS[activeMode]}</p>
       </div>
 
-      {embedded ? null : (
-        <div className="flex flex-wrap gap-1.5 rounded-full bg-zinc-100 p-1 dark:bg-zinc-800/60">
-          <AuthTab href={authLoginPath} label="Login" isActive={mode === "login"} />
-          <AuthTab href={authRegisterPath} label="Register" isActive={mode === "register"} />
-          <AuthTab href={authForgotPath} label="Forgot" isActive={mode === "forgot-password"} />
+      {combined ? (
+        <ViewSwitch
+          label="Authentication view"
+          options={AUTH_MODE_OPTIONS}
+          value={activeMode}
+          onChange={setActiveMode}
+        />
+      ) : embedded ? null : (
+        <div className="flex flex-wrap gap-1.5 rounded-control bg-zinc-100 p-1 dark:bg-zinc-800/60">
+          <AuthTab href={authLoginPath} label="Login" isActive={activeMode === "login"} />
+          <AuthTab href={authRegisterPath} label="Register" isActive={activeMode === "register"} />
+          <AuthTab href={authForgotPath} label="Forgot" isActive={activeMode === "forgot-password"} />
         </div>
       )}
 
-      {mode === "login" && searchParams.get("password-reset") === "success" ? (
+      {activeMode === "login" && searchParams.get("password-reset") === "success" ? (
         <p role="status" className="m-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
           Your password was updated. Sign in with the new password.
         </p>
       ) : null}
 
-      {mode === "login" || mode === "register" ? <AuthProviders /> : null}
+      {activeMode === "login" || activeMode === "register" ? <AuthProviders /> : null}
 
-      {mode === "login" ? <LoginFormMock accountPath={accountPath} authForgotPath={authForgotPath} /> : null}
-      {mode === "register" ? <RegisterFormMock accountPath={accountPath} authLoginPath={authLoginPath} /> : null}
-      {mode === "forgot-password" ? <ForgotPasswordFormMock authLoginPath={authLoginPath} /> : null}
+      {activeMode === "login" ? <LoginFormMock accountPath={accountPath} authForgotPath={authForgotPath} /> : null}
+      {activeMode === "register" ? <RegisterFormMock accountPath={accountPath} authLoginPath={authLoginPath} /> : null}
+      {activeMode === "forgot-password" ? <ForgotPasswordFormMock authLoginPath={authLoginPath} /> : null}
     </div>
   );
 
@@ -139,12 +166,12 @@ function AuthSplitLayout({ children }: { children: ReactNode }) {
         <div className="relative hidden flex-col items-end justify-between text-right text-white lg:flex">
           <div className="relative grid justify-items-end gap-3">
             <span className="inline-grid h-11 w-11 place-items-center rounded-2xl bg-brand-gradient shadow-glow">✦</span>
-            <h2 className="m-0 font-display text-2xl font-bold">FunkyCommerce</h2>
+            <h2 className="m-0 font-display text-2xl font-bold">Superfunky</h2>
             <p className="m-0 max-w-xs text-sm text-white/70">
-              A modern storefront experience connected to your WordPress account.
+              A modern storefront experience connected to your site account.
             </p>
           </div>
-          <p className="relative m-0 text-xs text-white/50">© 2026 FunkyCommerce</p>
+          <p className="relative m-0 text-xs text-white/50">© 2026 Superfunky</p>
         </div>
       </div>
     </div>
@@ -572,7 +599,7 @@ export function OAuthCallbackPage() {
             <Link to={authLoginPath} className="text-sm font-semibold text-brand-600 dark:text-brand-400">Return to sign in</Link>
           </>
         ) : (
-          <p role="status" className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Exchanging the authorization response with WordPress…</p>
+          <p role="status" className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Exchanging the authorization response with the site…</p>
         )}
       </div>
     </div>
@@ -584,7 +611,7 @@ function AuthTab({ href, label, isActive }: { href: string; label: string; isAct
     <Link
       to={href}
       className={[
-        "flex-1 rounded-full px-3 py-1.5 text-center text-xs font-semibold no-underline transition",
+        "flex-1 rounded-control px-3 py-1.5 text-center text-xs font-semibold no-underline transition",
         isActive
           ? "bg-white text-zinc-900 shadow-soft dark:bg-zinc-900 dark:text-zinc-100"
           : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200",

@@ -1,21 +1,44 @@
 import { parseLocalizedPrice, resolveVariationSwatchColor, type ProductCardData } from "@funky/ui";
 import type { ProductReview, ProductVariationCombo, ProductVariationOption } from "../pages/shared";
-import { graphqlRequest } from "./graphqlClient";
+import {
+  graphqlRequest,
+  hasOnlyMissingGraphqlFields,
+  STOREFRONT_BACKEND_PROFILE,
+} from "@funky/sdk";
+import {
+  createCompatibleProductDetailQuery,
+  createCoreProductDetailQuery,
+  isMissingProductOptionalFieldSchemaError,
+  requestCatalogWithFallback,
+  requestCommerceWithFallback,
+  requestOptionalCommerceRoot,
+} from "./commerceGraphqlCompatibility";
 import { mapSeo, type CmsPageSeo, type CmsPageTranslation, type RawCmsSeo } from "./pages";
+import { resolveCommerceProductType, type CommerceProductType } from "@funky/commerce";
+import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility";
+import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings";
+import { normalizeProductPriceBehavior, type ProductPriceBehavior } from "./productPriceMode";
+
+export type { ProductPriceBehavior, ResolvedProductPriceMode } from "./productPriceMode";
+export { resolveProductPriceMode } from "./productPriceMode";
 
 export const COMMERCE_SOURCE_LANGUAGE = "pl";
 
-export type CommerceProductType = "simple" | "variable" | "external" | "grouped";
+export type { CommerceProductType } from "@funky/commerce";
 export type CommerceTaxonomy = "category" | "tag" | "brand";
 export type CommerceTaxonomyIdentifierType = "URI" | "SLUG";
 
 export type CmsProductCard = ProductCardData & {
   slug: string;
   uri: string;
+  categorySlugs?: string[];
+  tagSlugs?: string[];
+  brandSlugs?: string[];
   commerceProductType: CommerceProductType;
   stockStatus: string | null;
   stockQuantity: number | null;
   inStock: boolean | null;
+  engagementRating: PublicEngagementRatingSummary;
 };
 
 export type CmsProductTerm = {
@@ -73,6 +96,10 @@ export type CmsProductDetail = {
   reviews: ProductReview[];
   seo: CmsPageSeo;
   externalButtonText: string | null;
+  /** Per-product override of the store-wide "no price" behaviour ("inherit" defers to
+   *  the store setting). Use {@link resolveProductPriceMode} to reconcile this with the
+   *  product's actual price and the store-wide default. */
+  priceBehavior: ProductPriceBehavior;
 };
 
 export type CmsCommerceReview = ProductReview & {
@@ -149,8 +176,7 @@ export type RawProductCard = {
   uri: string | null;
   name: string | null;
   shortDescription: string | null;
-  averageRating: number | null;
-  reviewCount: number | null;
+  engagementRating: PublicEngagementRatingSummary;
   featured: boolean | null;
   onSale: boolean | null;
   image: RawImage | null;
@@ -178,10 +204,13 @@ type RawAttribute = {
 
 type RawProductDetail = RawProductCard & {
   description: string | null;
+  headlessDescription?: string | null;
+  headlessShortDescription?: string | null;
   sku: string | null;
-  currencyPrices: string | null;
-  language: { code: string | null } | null;
-  translations: ({ databaseId: number; uri: string | null; language: { code: string | null } | null } | null)[] | null;
+  currencyPrices?: string | null;
+  priceBehavior?: string | null;
+  language?: { code: string | null } | null;
+  translations?: ({ databaseId: number; uri: string | null; language: { code: string | null } | null } | null)[] | null;
   attributes?: { nodes: RawAttribute[] } | null;
   related: { nodes: RawProductCard[] } | null;
   upsell: { nodes: RawProductCard[] } | null;
@@ -193,11 +222,13 @@ type RawProductDetail = RawProductCard & {
       content: string | null;
       date: string | null;
       parentId: string | null;
+      parentDatabaseId: number | null;
       rating: number | null;
       author: { node: { name: string | null } } | null;
     }[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
   } | null;
-  seo: RawCmsSeo | null;
+  seo?: RawCmsSeo | null;
   buttonText?: string | null;
 };
 
@@ -221,6 +252,13 @@ type CatalogResult = {
         } | null;
       } | null;
     }[];
+  } | null;
+};
+
+type ProductBrandDirectoryResult = {
+  productBrands: {
+    nodes: RawTerm[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
   } | null;
 };
 
@@ -297,8 +335,13 @@ export const PRODUCT_CARD_FIELDS = /* GraphQL */ `
   uri
   name
   shortDescription(format: RENDERED)
-  averageRating
-  reviewCount
+  engagementRating {
+    average
+    count
+    guestCount
+    authoredCount
+    histogram
+  }
   featured
   onSale
   image {
@@ -359,8 +402,13 @@ const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
   uri
   name
   shortDescription(format: RENDERED)
-  averageRating
-  reviewCount
+  engagementRating {
+    average
+    count
+    guestCount
+    authoredCount
+    histogram
+  }
   featured
   onSale
   image {
@@ -370,6 +418,15 @@ const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
     title
   }
   productCategories {
+    nodes {
+      id
+      databaseId
+      name
+      slug
+      uri
+    }
+  }
+  productTags {
     nodes {
       id
       databaseId
@@ -466,6 +523,7 @@ const SEO_FIELDS = /* GraphQL */ `
   opengraphImage { sourceUrl }
   opengraphModifiedTime
   opengraphPublishedTime
+  opengraphPublisher
   opengraphSiteName
   opengraphTitle
   opengraphType
@@ -488,6 +546,7 @@ const TAXONOMY_SEO_FIELDS = /* GraphQL */ `
   opengraphImage { sourceUrl }
   opengraphModifiedTime
   opengraphPublishedTime
+  opengraphPublisher
   opengraphSiteName
   opengraphTitle
   opengraphType
@@ -549,29 +608,131 @@ const CATALOG_QUERY = /* GraphQL */ `
   ${PRODUCT_LIST_CARD_FRAGMENT}
 `;
 
+const COMPATIBLE_CATALOG_OPERATIONS = [
+  {
+    field: "products",
+    query: /* GraphQL */ `
+      query StorefrontCommerceCatalogCompatibleProducts {
+        products(first: 24) {
+          nodes { ...StorefrontProductListCard }
+          pageInfo { hasNextPage }
+        }
+      }
+      ${PRODUCT_LIST_CARD_FRAGMENT}
+    `,
+  },
+  {
+    field: "productCategories",
+    query: /* GraphQL */ `
+      query StorefrontCommerceCatalogCompatibleCategories {
+        productCategories(first: 50, where: { hideEmpty: true }) {
+          nodes {
+            ${TERM_FIELDS}
+            image { id sourceUrl altText title }
+          }
+        }
+      }
+    `,
+  },
+  {
+    field: "productTags",
+    query: /* GraphQL */ `
+      query StorefrontCommerceCatalogCompatibleTags {
+        productTags(first: 50, where: { hideEmpty: true }) {
+          nodes { ${TERM_FIELDS} }
+        }
+      }
+    `,
+  },
+  {
+    field: "productBrands",
+    query: /* GraphQL */ `
+      query StorefrontCommerceCatalogCompatibleBrands {
+        productBrands(first: 50, where: { hideEmpty: true }) {
+          nodes {
+            ${TERM_FIELDS}
+            image { id sourceUrl altText title }
+          }
+        }
+      }
+    `,
+  },
+  {
+    field: "reviews",
+    query: /* GraphQL */ `
+      query StorefrontCommerceCatalogCompatibleReviews {
+        reviews: comments(
+          first: 20
+          where: {
+            contentType: [PRODUCT]
+            parent: 0
+            statusIn: [APPROVE]
+            orderby: COMMENT_DATE
+            order: DESC
+          }
+        ) {
+          nodes {
+            id
+            databaseId
+            content(format: RENDERED)
+            date
+            rating
+            author { node { name } }
+            commentedOn {
+              node {
+                ... on Product {
+                  title: name
+                  uri
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+  },
+] as const;
+
+const PRODUCT_BRAND_DIRECTORY_QUERY = /* GraphQL */ `
+  query StorefrontProductBrandDirectory($after: String) {
+    productBrands(first: 100, after: $after, where: { hideEmpty: true }) {
+      nodes {
+        ${TERM_FIELDS}
+        image { id sourceUrl altText title }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
 const PRODUCT_DETAIL_QUERY = /* GraphQL */ `
   query StorefrontProductDetail($slug: ID!) {
     product(id: $slug, idType: SLUG) {
       ...StorefrontProductCard
       description(format: RENDERED)
+      headlessDescription
+      headlessShortDescription
       sku
       currencyPrices
+      priceBehavior
       language { code }
       translations {
         databaseId
         uri
         language { code }
       }
-      reviews(first: 30) {
+      reviews(first: 100) {
         nodes {
           id
           databaseId
           content(format: RENDERED)
           date
           parentId
+          parentDatabaseId
           rating
           author { node { name } }
         }
+        pageInfo { hasNextPage endCursor }
       }
       related(first: 12) { nodes { ...StorefrontProductCard } }
       upsell(first: 12) { nodes { ...StorefrontProductCard } }
@@ -602,6 +763,32 @@ const PRODUCT_DETAIL_QUERY = /* GraphQL */ `
     }
   }
   ${PRODUCT_CARD_FRAGMENT}
+`;
+
+const COMPATIBLE_PRODUCT_DETAIL_QUERY = createCompatibleProductDetailQuery(
+  PRODUCT_DETAIL_QUERY,
+  SEO_FIELDS,
+);
+const CORE_PRODUCT_DETAIL_QUERY = createCoreProductDetailQuery(PRODUCT_DETAIL_QUERY);
+
+const PRODUCT_REVIEWS_QUERY = /* GraphQL */ `
+  query StorefrontProductReviews($id: ID!, $after: String) {
+    product(id: $id, idType: DATABASE_ID) {
+      reviews(first: 100, after: $after) {
+        nodes {
+          id
+          databaseId
+          content(format: RENDERED)
+          date
+          parentId
+          parentDatabaseId
+          rating
+          author { node { name } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
 `;
 
 const TAXONOMY_ARCHIVE_CONFIG: Record<CommerceTaxonomy, { field: string; idType: string; plural: string; hasImage: boolean }> = {
@@ -636,19 +823,50 @@ function archiveQuery(taxonomy: CommerceTaxonomy): string {
   `;
 }
 
+function compatibleArchiveQuery(taxonomy: CommerceTaxonomy): string {
+  const { field, idType, plural, hasImage } = TAXONOMY_ARCHIVE_CONFIG[taxonomy];
+  const image = hasImage ? "image { id sourceUrl altText title }" : "";
+
+  return /* GraphQL */ `
+    query StorefrontProductArchiveCompatible($id: ID!, $idType: ${idType}!) {
+      archive: ${field}(id: $id, idType: $idType) {
+        ${TERM_FIELDS}
+        ${image}
+        products(first: 24) {
+          nodes { ...StorefrontProductListCard }
+          pageInfo { hasNextPage }
+        }
+      }
+      siblings: ${plural}(first: 50, where: { hideEmpty: true }) {
+        nodes {
+          ${TERM_FIELDS}
+          ${image}
+        }
+      }
+    }
+    ${PRODUCT_LIST_CARD_FRAGMENT}
+  `;
+}
+
 export async function getCommerceCatalog(languageCode: string, backendLanguageCode: string): Promise<CmsCommerceCatalog> {
   const requestedLanguageCode = languageCode.trim().toLowerCase();
   const languageCodeUsed = requestedLanguageCode;
-  const { data, errors } = await graphqlRequest<CatalogResult>(CATALOG_QUERY, {
-    language: backendLanguageCode,
-  });
-  throwQueryErrors(errors, data);
-  if (!data) throw new Error("The commerce catalog query returned no data");
+  const {
+    data,
+    usesCompatibilityFallback: usesSourceLanguageFallback,
+  } = await requestCatalogWithFallback<CatalogResult>(
+    graphqlRequest,
+    CATALOG_QUERY,
+    { language: backendLanguageCode },
+    COMPATIBLE_CATALOG_OPERATIONS,
+    isMissingProductOptionalFieldSchemaError,
+    shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+  );
 
   return {
     requestedLanguageCode,
-    languageCode: languageCodeUsed,
-    usesSourceLanguageFallback: false,
+    languageCode: usesSourceLanguageFallback ? COMMERCE_SOURCE_LANGUAGE : languageCodeUsed,
+    usesSourceLanguageFallback,
     products: data.products?.nodes.map(mapProductCard) || [],
     categories: mapCatalogTerms(data.products?.nodes, data.productCategories?.nodes),
     // The live ProductTags connection is currently empty. Preserve that real empty state.
@@ -677,16 +895,47 @@ export async function getCommerceCatalog(languageCode: string, backendLanguageCo
   };
 }
 
+export async function getProductBrandDirectory(): Promise<CmsProductTerm[]> {
+  const brands: RawTerm[] = [];
+  let after: string | null = null;
+
+  do {
+    const pageData: ProductBrandDirectoryResult | null = await requestOptionalCommerceRoot<ProductBrandDirectoryResult>(
+      graphqlRequest,
+      PRODUCT_BRAND_DIRECTORY_QUERY,
+      { after },
+    );
+    if (!pageData) return [];
+    if (!pageData?.productBrands) throw new Error("The product brand directory query returned no data");
+
+    brands.push(...pageData.productBrands.nodes);
+    if (!pageData.productBrands.pageInfo.hasNextPage) break;
+    if (!pageData.productBrands.pageInfo.endCursor) {
+      throw new Error("The product brand directory query returned an incomplete pagination cursor");
+    }
+    after = pageData.productBrands.pageInfo.endCursor;
+  } while (after);
+
+  return mapTerms(brands).sort((left, right) => left.name.localeCompare(right.name));
+}
+
 /** Accepts either a WooCommerce product slug or a `/product/<slug>/` URI. */
 export async function getProductByUriOrSlug(identifier: string): Promise<CmsProductDetail | null> {
   const slug = productSlugFromIdentifier(identifier);
   if (!slug) return null;
-  const { data, errors } = await graphqlRequest<ProductResult>(PRODUCT_DETAIL_QUERY, { slug });
-  throwQueryErrors(errors, data);
-  if (!data) throw new Error("The product detail query returned no data");
+  const data = await requestCommerceWithFallback<ProductResult>(
+    graphqlRequest,
+    shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+      ? CORE_PRODUCT_DETAIL_QUERY
+      : PRODUCT_DETAIL_QUERY,
+    COMPATIBLE_PRODUCT_DETAIL_QUERY,
+    { slug },
+    isMissingProductOptionalFieldSchemaError,
+  );
+  if (!data) return null;
   if (!data.product) return null;
 
-  const product = data.product;
+  const product = await loadRemainingProductReviews(data.product);
   const variations = product.variations?.nodes || [];
   const attributes = mapAttributes(product.attributes?.nodes);
   const card = mapProductCard(product);
@@ -717,8 +966,8 @@ export async function getProductByUriOrSlug(identifier: string): Promise<CmsProd
           : [],
       ) || [],
     card,
-    shortDescriptionHtml: product.shortDescription || "",
-    descriptionHtml: product.description || "",
+    shortDescriptionHtml: product.headlessShortDescription || product.shortDescription || "",
+    descriptionHtml: product.headlessDescription || product.description || "",
     sku: product.sku || "",
     currencyPrices: parseCurrencyPrices(product.currencyPrices),
     gallery: dedupeBy(gallery, ({ id }) => id),
@@ -739,11 +988,47 @@ export async function getProductByUriOrSlug(identifier: string): Promise<CmsProd
         date: review.date || "",
         content: htmlToText(review.content || ""),
         parentId: review.parentId,
+        parentDatabaseId: review.parentDatabaseId,
         rating: normalizeRating(review.rating),
       })) || [],
     seo: mapSeo(product.seo),
     externalButtonText: product.buttonText?.trim() || null,
+    priceBehavior: normalizeProductPriceBehavior(product.priceBehavior),
   });
+}
+
+async function loadRemainingProductReviews(product: RawProductDetail): Promise<RawProductDetail> {
+  if (!product.reviews) return product;
+
+  const reviews = [...product.reviews.nodes];
+  let pageInfo = product.reviews.pageInfo;
+
+  while (pageInfo.hasNextPage) {
+    if (!pageInfo.endCursor) {
+      throw new Error("The product review query returned an incomplete pagination cursor");
+    }
+    const { data, errors } = await graphqlRequest<{
+      product: Pick<RawProductDetail, "reviews"> | null;
+    }>(PRODUCT_REVIEWS_QUERY, {
+      id: String(product.databaseId),
+      after: pageInfo.endCursor,
+    });
+    throwQueryErrors(errors, data);
+    if (!data?.product?.reviews) {
+      throw new Error("The product review pagination query returned no product");
+    }
+
+    reviews.push(...data.product.reviews.nodes);
+    pageInfo = data.product.reviews.pageInfo;
+  }
+
+  return {
+    ...product,
+    reviews: {
+      nodes: reviews,
+      pageInfo,
+    },
+  };
 }
 
 function parseCurrencyPrices(raw: string | null | undefined): Record<string, number> {
@@ -771,6 +1056,7 @@ export function normalizeProductDetail(product: CmsProductDetail): CmsProductDet
     ...product,
     translations: product.translations || [],
     currencyPrices: product.currencyPrices || {},
+    priceBehavior: normalizeProductPriceBehavior(product.priceBehavior),
     gallery: product.gallery || [],
     attributes: product.attributes || [],
     variationOptions: product.variationOptions || [],
@@ -796,12 +1082,15 @@ export async function getProductArchive(
   identifier: string,
   idType: CommerceTaxonomyIdentifierType = "URI",
 ): Promise<CmsProductArchive | null> {
-  const { data, errors } = await graphqlRequest<ArchiveResult>(archiveQuery(taxonomy), {
-    id: identifier,
-    idType,
-  });
-  throwQueryErrors(errors, data);
-  if (!data) throw new Error(`The product ${taxonomy} archive query returned no data`);
+  const data = await requestCommerceWithFallback<ArchiveResult>(
+    graphqlRequest,
+    archiveQuery(taxonomy),
+    compatibleArchiveQuery(taxonomy),
+    { id: identifier, idType },
+    (errors) => hasOnlyMissingGraphqlFields(errors, ["seo"]),
+    shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+  );
+  if (!data) return null;
   if (!data.archive) return null;
 
   const archive = data.archive;
@@ -844,7 +1133,7 @@ export function getProductBrandArchive(
 }
 
 export function mapProductCard(product: RawProductCard): CmsProductCard {
-  const commerceProductType = mapProductType(product.__typename);
+  const commerceProductType = resolveCommerceProductType(product.__typename);
   const variations = product.variations?.nodes || [];
   const variableStock = deriveVariationStock(variations);
   const stockStatus = commerceProductType === "variable" ? variableStock.stockStatus : product.stockStatus || null;
@@ -856,6 +1145,7 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
   const imageUrls = product.galleryImages?.nodes.flatMap((image) => image.sourceUrl ? [image.sourceUrl] : []) || [];
   const category = product.productCategories?.nodes.find((term) => term.name);
   const brand = product.productBrands?.nodes.find((term) => term.name);
+  const engagementRating = mapPublicEngagementRating(product.engagementRating);
 
   return {
     id: product.id,
@@ -863,6 +1153,9 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
     href: product.uri || (product.slug ? `/product/${product.slug}/` : undefined),
     slug: product.slug || "",
     uri: product.uri || (product.slug ? `/product/${product.slug}/` : ""),
+    categorySlugs: product.productCategories?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
+    tagSlugs: product.productTags?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
+    brandSlugs: product.productBrands?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
     name: product.name?.trim() || "Untitled product",
     subtitle: htmlToText(product.shortDescription || "") || undefined,
     imageUrl: product.image?.sourceUrl || undefined,
@@ -876,14 +1169,12 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
     compareAtPriceLabel: product.salePrice && regularPrice && regularPrice !== price ? regularPrice : undefined,
     compareAtPriceAmount: product.salePrice && regularPriceAmount !== priceAmount ? regularPriceAmount : undefined,
     priceRangeLabel: commerceProductType === "variable" ? price || undefined : undefined,
-    rating: product.averageRating ?? undefined,
-    reviewCount: product.reviewCount ?? undefined,
+    rating: engagementRating.average ?? undefined,
+    reviewCount: engagementRating.count,
+    engagementRating,
     badge: product.onSale ? "Sale" : undefined,
     isNew: false,
-    productType:
-      commerceProductType === "grouped"
-        ? undefined
-        : commerceProductType,
+    productType: commerceProductType,
     externalUrl: commerceProductType === "external" ? product.externalUrl || undefined : undefined,
     variationOptions:
       commerceProductType === "variable"
@@ -932,13 +1223,6 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
         ? true
         : stockStatus === "IN_STOCK" || (stockQuantity !== null && stockQuantity > 0),
   };
-}
-
-function mapProductType(typeName: string): CommerceProductType {
-  if (typeName === "VariableProduct") return "variable";
-  if (typeName === "ExternalProduct") return "external";
-  if (typeName === "GroupProduct") return "grouped";
-  return "simple";
 }
 
 function deriveVariationStock(variations: RawVariation[]): {

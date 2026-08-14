@@ -31,21 +31,22 @@ import { useBlogData } from "../state/blogData";
 import { useCommerceData } from "../state/commerceData";
 import { useCommunityData } from "../state/communityData";
 import type { CmsBlogTerm } from "../lib/blog";
+import { buildShortcode } from "../lib/shortcodeSyntax";
 
 type CategoryTileItem = { id: string; title: string; count: string; image: string; slug: string };
 
 const HERO_SLIDES = [
   {
     id: "hero-1",
-    title: "New season, new silhouettes",
-    subtitle: "SS26 drop — apparel, footwear, and accessories built for people who move differently.",
+    title: "New season — new silhouettes",
+    subtitle: "SS26 drop — apparel · footwear · accessories built for people who move differently.",
     label: "New season · SS26",
     image: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
   },
   {
     id: "hero-2",
     title: "Stories from the studio",
-    subtitle: "Behind-the-scenes journal entries, style guides, and care notes from the team.",
+    subtitle: "Behind-the-scenes journal entries · style guides · care notes from the team.",
     label: "The journal",
     image: "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1600&q=80",
   },
@@ -157,17 +158,10 @@ function TestimonialCard({ quote, author }: { quote: string; author: string }) {
   );
 }
 
-function buildShortcode(name: string, attrs: Record<string, string | number | boolean | string[]>) {
-  const entries = Object.entries(attrs).filter(([, value]) => value !== undefined && value !== "");
-  return `[${name}${entries.length ? " " : ""}${entries
-    .map(([key, value]) => `${key}="${Array.isArray(value) ? `[${value.join(", ")}]` : String(value)}"`)
-    .join(" ")}]`;
-}
-
 function ShortcodeSnippet({
   name,
   attrs,
-  caption = "Paste this shortcode into a WordPress block",
+  caption = "Paste this shortcode into a site block",
 }: {
   name: string;
   attrs: Record<string, string | number | boolean | string[]>;
@@ -243,10 +237,26 @@ type CheckoutCouponPosition = "inline" | "top";
 type CheckoutPaymentPosition = "left" | "right";
 type CheckoutSummaryPosition = "sticky" | "static";
 type ReadingListLayout = "cards" | "editorial-2col";
-type AccountTab = "dashboard" | "orders" | "addresses" | "community";
+type AccountTab = "dashboard" | "orders" | "downloads" | "addresses" | "community";
 type AuthMode = "login" | "register" | "forgot-password";
+type AuthShortcodeMode = AuthMode | "combined";
 type AuthLayout = "split" | "centered" | "image-bg";
 type OrderSuccessMode = "physical" | "digital";
+const PAGE_RECIPES = [
+  { name: "Home", path: "/", content: "[hero] [grid type=\"product\"]" },
+  { name: "Shop", path: "/shop", content: "[product_archive]" },
+  { name: "Blog", path: "/blog", content: "[post_archive]" },
+  { name: "Cart", path: "/cart", content: "[cart]" },
+  { name: "Checkout", path: "/checkout", content: "[checkout]" },
+  { name: "Account", path: "/account", content: "[account]" },
+  { name: "Wishlist", path: "/wishlist", content: "[wishlist]" },
+  { name: "Reading list", path: "/reading-list", content: "[reading_list]" },
+  { name: "Authentication", path: "/auth", content: "[auth mode=\"combined\"]" },
+  { name: "Order success", path: "/order-success", content: "[order-success mode=\"physical\"]" },
+  { name: "Digital order success", path: "/order-success/digital", content: "[order-success mode=\"digital\"]" },
+  { name: "Community", path: "/community", content: "[community-hero] [community-feed]" },
+  { name: "Unsubscribe", path: "/unsubscribe", content: "[unsubscribe-form]" },
+] as const;
 const COLUMN_COUNT_CLASS: Record<ColumnCount, string> = {
   2: "grid-cols-2",
   3: "grid-cols-2 sm:grid-cols-3",
@@ -288,7 +298,7 @@ export function ShortcodeLibraryMockupPage() {
   const [wishlistCardVariant, setWishlistCardVariant] = useState<ProductCardVariant>("default");
   const [readingListLayout, setReadingListLayout] = useState<ReadingListLayout>("cards");
   const [accountTab, setAccountTab] = useState<AccountTab>("dashboard");
-  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authMode, setAuthMode] = useState<AuthShortcodeMode>("combined");
   const [authLayout, setAuthLayout] = useState<AuthLayout>("split");
   const [orderSuccessMode, setOrderSuccessMode] = useState<OrderSuccessMode>("physical");
   const { data: blog, isLoading: isBlogLoading, error: blogError } = useBlogData();
@@ -331,7 +341,7 @@ export function ShortcodeLibraryMockupPage() {
         <p className="m-0 max-w-2xl text-zinc-500 dark:text-zinc-400">
           Every reusable slider, carousel, grid, and column block the theme supports — organized by type, with the
           shortcode configuration and paste-ready block text shown directly above each example. These pages are
-          intentionally blank-canvas shells: WordPress owns the surrounding layout, while Layout Studio stays focused on
+          intentionally blank-canvas shells: the CMS owns the surrounding layout, while Layout Studio stays focused on
           visual tuning. Attribute names (
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">slides</code>,{" "}
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">layout</code>,{" "}
@@ -340,7 +350,9 @@ export function ShortcodeLibraryMockupPage() {
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">pill</code>,{" "}
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">h1</code>,{" "}
           <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">p</code>) mirror what a future
-          live WordPress shortcode resolver accepts as real backend input.
+          live site shortcode resolver accepts as real backend input. Collection shortcodes also accept{" "}
+          <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">offset</code> (0–1000000),
+          applied after filtering and ordering but before limits or pagination.
         </p>
       </section>
 
@@ -360,33 +372,59 @@ export function ShortcodeLibraryMockupPage() {
       </nav>
 
       <LibrarySection
+        id="page-recipes"
+        icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="CMS Page migration"
+        title="Complete route Page recipes"
+        description="Create each destination as an ordinary published Page. Application UI mounts only where the listed shortcode is present; existing compatibility aliases remain accepted for migrated content."
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {PAGE_RECIPES.map((recipe) => (
+            <article key={recipe.path} className="grid gap-2 rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+              <div className="flex items-center justify-between gap-3">
+                <strong className="text-sm text-zinc-900 dark:text-zinc-100">{recipe.name}</strong>
+                <code className="text-xs text-zinc-500 dark:text-zinc-400">{recipe.path}</code>
+              </div>
+              <code className="break-words rounded-xl bg-white px-3 py-2 font-mono text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                {recipe.content}
+              </code>
+            </article>
+          ))}
+        </div>
+      </LibrarySection>
+
+      <LibrarySection
         id="home-backend-shortcodes"
         icon={<Sparkles className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Home · Backend execution contracts"
         title="Paste-ready Home shortcodes"
-        description="These are the validated WordPress shortcodes executed by the shared React resolver. Repeat a shortcode as many times as needed; editor order is preserved exactly on the storefront."
+        description="These are the validated site shortcodes executed by the shared storefront resolver. Repeat a shortcode as many times as needed; editor order is preserved exactly."
       >
         <div className="grid gap-8">
           <ShortcodeContract
             name="hero"
-            example={{ variant: "fullbleed", kicker: "New season", title: "Gear built for people who move differently", description: "Curated apparel, footwear, and accessories.", image: "https://example.com/hero.jpg", primary_cta_label: "Shop the collection", primary_cta_href: "/shop", secondary_cta_label: "Read the journal", secondary_cta_href: "/blog", fullwidth: true, height: "75vh" }}
+            example={{ variant: "fullbleed", heading_level: "h1", kicker: "New season", title: "Gear built for people who move differently", description: "Curated apparel, footwear, and accessories.", image: "https://example.com/hero.jpg", primary_cta_label: "Shop the collection", primary_cta_href: "/shop", secondary_cta_label: "Read the journal", secondary_cta_href: "/blog", fullwidth: true, height: "75vh" }}
             values={[
               ["variant", ["glow", "fullbleed", "split", "minimal", "strip"]],
+              ["heading_level", ["h1", "h2", "h3", "h4", "h5", "h6"]],
               ["kicker / title / description / image", ["text or URL"]],
               ["primary_cta_label / primary_cta_href", ["text", "internal path or URL"]],
-              ["secondary_cta_label / secondary_cta_href", ["text", "internal path or URL"]],
+              ["primary_cta_target / primary_cta_rel", ["_self", "_blank", "noopener", "noreferrer"]],
+              ["secondary CTA fields", ["same label, href, target, and rel options"]],
+              ["cta1 / cta2 shorthand", ["label|href|target|rel"]],
               ["fullwidth", ["true", "false"]],
               ["height", ["CSS length, e.g. 75vh or 640px"]],
             ]}
           />
           <ShortcodeContract
             name="categories"
-            example={{ type: "product", layout: "cards", columns: 3, limit: 3, include: "", orderby: "name", order: "asc", title: "" }}
+            example={{ type: "product", layout: "cards", columns: 3, limit: 3, offset: 0, include: "", orderby: "name", order: "asc", title: "" }}
             values={[
               ["type", ["product", "post"]],
               ["layout", ["cards", "compact", "minimal", "editorial", "graphical", "pills"]],
               ["columns", ["2", "3", "4"]],
               ["limit", ["1–24"]],
+              ["offset", ["0–1000000"]],
               ["include", ["comma-separated IDs or slugs"]],
               ["orderby", ["name", "count", "include"]],
               ["order", ["asc", "desc"]],
@@ -395,13 +433,14 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="slider"
-            example={{ type: "product", layout: "2/3", card_variant: "default", slides: 3, limit: 6, navigation: "both", autoplay: 5000, loop: true, category: "", tag: "", author: "", date_from: "", date_to: "", min_rating: 0, orderby: "date", order: "desc", title: "This season's picks", subtitle: "" }}
+            example={{ type: "product", layout: "2/3", card_variant: "default", slides: 3, limit: 6, offset: 0, navigation: "both", autoplay: 5000, loop: true, category: "", tag: "", author: "", date_from: "", date_to: "", min_rating: 0, orderby: "date", order: "desc", title: "This season's picks", subtitle: "", section_heading_level: "h2", heading_level: "h2", first_heading_level: "" }}
             values={[
-              ["type", ["campaign", "product", "post"]],
+              ["type", ["campaign", "cinematic", "product", "post"]],
               ["layout", ["3/3", "2/3", "1/3"]],
               ["card_variant (product)", ["default", "minimal", "editorial", "gallery", "simple", "variation", "expandable"]],
               ["card_variant (post)", ["default", "compact", "editorial", "minimal"]],
               ["slides / limit", ["1–12", "1–48"]],
+              ["offset", ["0–1000000"]],
               ["navigation", ["dots", "arrows", "both", "none"]],
               ["autoplay / loop", ["0–60000 milliseconds", "true", "false"]],
               ["include / category / tag / author", ["comma-separated IDs/slugs", "single slug"]],
@@ -409,18 +448,24 @@ export function ShortcodeLibraryMockupPage() {
               ["min_rating (product)", ["0–5"]],
               ["orderby / order", ["date", "title", "rating", "include", "asc", "desc"]],
               ["title / subtitle", ["text"]],
+              ["section_heading_level", ["h1", "h2", "h3", "h4", "h5", "h6"]],
+              ["heading_level / first_heading_level", ["h1", "h2", "h3", "h4", "h5", "h6", "first override may be blank"]],
               ["campaign: kicker / description / image", ["text or URL"]],
-              ["campaign: titles / descriptions / images / kickers", ["pipe-separated slide values"]],
+              ["campaign/cinematic: h1 / p / pill / bgimgs", ["pipe- or comma-separated slide values; pipe preserves commas in copy"]],
+              ["campaign/cinematic: titles / descriptions / images / kickers", ["pipe- or comma-separated slide values"]],
+              ["campaign/cinematic: cta1 / cta2", ["label|href|target|rel"]],
+              ["campaign/cinematic: primary_cta_* / secondary_cta_*", ["optional text/link/target/rel shared by all slides"]],
               ["campaign: fullwidth / height", ["true", "false", "CSS length"]],
             ]}
           />
           <ShortcodeContract
             name="reviews"
-            example={{ layout: "grid-4", limit: 12, product: "", min_rating: 0, max_rating: 5, date_from: "", date_to: "", title: "Product reviews" }}
+            example={{ layout: "grid-4", limit: 12, offset: 0, product: "", min_rating: 0, max_rating: 5, date_from: "", date_to: "", title: "Product reviews" }}
             values={[
               ["layout", ["grid-4", "grid-3", "grid-5", "masonry", "compact"]],
               ["variant", ["cards", "full", "compact"]],
               ["limit", ["1–48"]],
+              ["offset", ["0–1000000"]],
               ["product", ["product slug or blank for all"]],
               ["min_rating / max_rating", ["0–5"]],
               ["date_from / date_to", ["YYYY-MM-DD"]],
@@ -429,11 +474,12 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="comments"
-            example={{ layout: "cards", limit: 12, post: "", min_rating: 0, max_rating: 5, date_from: "", date_to: "", title: "Recent comments" }}
+            example={{ layout: "cards", limit: 12, offset: 0, post: "", min_rating: 0, max_rating: 5, date_from: "", date_to: "", title: "Recent comments" }}
             values={[
               ["layout", ["cards", "compact"]],
               ["variant", ["cards", "full", "compact"]],
               ["limit", ["1–48"]],
+              ["offset", ["0–1000000"]],
               ["post", ["post slug or blank for all"]],
               ["min_rating / max_rating", ["0–5 where comment ratings exist"]],
               ["date_from / date_to", ["YYYY-MM-DD"]],
@@ -442,11 +488,12 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="community-feed"
-            example={{ layout: "grid-4", load_mode: "manual", page_size: 8, show_filters: true, tags: "", author: "", date_from: "", date_to: "", min_rating: 0, min_likes: 0, title: "From the community feed" }}
+            example={{ layout: "grid-4", load_mode: "manual", page_size: 8, offset: 0, show_filters: true, tags: "", author: "", date_from: "", date_to: "", min_rating: 0, min_likes: 0, title: "From the community feed" }}
             values={[
               ["layout", ["masonry", "grid-3", "grid-4", "list", "compact"]],
               ["load_mode", ["manual", "infinite"]],
               ["page_size", ["1–48"]],
+              ["offset", ["0–1000000"]],
               ["show_filters", ["true", "false"]],
               ["tags / author", ["comma-separated tag slugs", "author handle"]],
               ["date_from / date_to", ["YYYY-MM-DD"]],
@@ -457,10 +504,11 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="testimonials"
-            example={{ layout: "grid-3", limit: 3, min_rating: 4, date_from: "", date_to: "", title: "What customers say" }}
+            example={{ layout: "grid-3", limit: 3, offset: 0, min_rating: 4, date_from: "", date_to: "", title: "What customers say" }}
             values={[
               ["layout", ["grid-3", "carousel", "compact"]],
               ["limit", ["1–12"]],
+              ["offset", ["0–1000000"]],
               ["min_rating", ["0–5"]],
               ["date_from / date_to", ["YYYY-MM-DD"]],
               ["title", ["text"]],
@@ -478,22 +526,24 @@ export function ShortcodeLibraryMockupPage() {
       </LibrarySection>
 
       <LibrarySection
-        id="special-page-backend-shortcodes"
+        id="archive-page-shortcodes"
         icon={<LayoutGrid className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Shop · Blog · Community backend execution"
-        title="Remaining special-page shortcodes"
+        title="Archive and directory shortcodes"
         description="Validated live-data contracts used to compose the Shop, Blog, and Community Pages from the block editor. Date, rating, and community-only likes filters use the same semantics as the Home contracts."
       >
         <div className="grid gap-8">
           <ShortcodeContract
             name="grid"
-            example={{ type: "product", layout: "standard", columns: 4, card_variant: "default", page_size: 12, paginated: true, include: "", category: "", tag: "", author: "", date_from: "", date_to: "", min_rating: 0, orderby: "date", order: "desc", title: "All products", subtitle: "" }}
+            example={{ type: "product", layout: "standard", columns: 4, card_variant: "default", page_size: 12, offset: 0, paginated: true, show_filters: true, include: "", category: "", tag: "", author: "", date_from: "", date_to: "", min_rating: 0, orderby: "date", order: "desc", title: "All products", subtitle: "" }}
             values={[
               ["type", ["product", "post", "community-article"]],
               ["layout", ["standard", "compact", "editorial", "masonry"]],
               ["columns / page_size", ["1–6", "1–48"]],
+              ["offset", ["0–1000000"]],
               ["card_variant", ["all seven product variants", "all four post variants"]],
               ["paginated", ["true", "false"]],
+              ["show_filters", ["true", "false"]],
               ["include / category / tag / author", ["IDs or slugs"]],
               ["date_from / date_to", ["YYYY-MM-DD for posts"]],
               ["min_rating", ["0–5 for products"]],
@@ -503,54 +553,75 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="carousel"
-            example={{ type: "product", card_variant: "editorial", columns: 4, limit: 12, autoplay: 3200, loop: true, min_rating: 0, title: "Product carousel" }}
+            example={{ type: "product", card_variant: "editorial", columns: 4, limit: 12, offset: 0, autoplay: 3200, loop: true, min_rating: 0, title: "Product carousel", section_heading_level: "h3" }}
             values={[
               ["type", ["product", "post"]],
               ["columns / limit", ["1–6", "1–48"]],
+              ["offset", ["0–1000000"]],
               ["card_variant", ["product or post variants"]],
               ["include / category / tag / author", ["IDs or slugs"]],
               ["date_from / date_to", ["YYYY-MM-DD for posts"]],
               ["min_rating", ["0–5 for products"]],
               ["autoplay / loop", ["0–60000 milliseconds", "true", "false"]],
               ["title / subtitle", ["text"]],
+              ["section_heading_level", ["h1", "h2", "h3", "h4", "h5", "h6"]],
             ]}
           />
-          <ShortcodeContract name="tags" example={{ layout: "pills", limit: 24, include: "", orderby: "name", order: "asc", title: "Tags" }} values={[
+          <ShortcodeContract
+            name="sticky-posts"
+            example={{ layout: "grid", card_variant: "default", columns: 3, limit: 6, offset: 0, autoplay: 4000, loop: true, title: "Pinned posts", subtitle: "" }}
+            values={[
+              ["layout", ["grid", "carousel", "compact-list"]],
+              ["card_variant", ["default", "compact", "editorial", "minimal"]],
+              ["columns / limit", ["1–4", "1–24"]],
+              ["offset", ["0–1000000"]],
+              ["autoplay / loop", ["0–60000 milliseconds (carousel only)", "true", "false"]],
+              ["title / subtitle", ["text"]],
+              ["aliases", ["[sticky_posts] is a neutral drop-in alias for [sticky-posts]"]],
+            ]}
+          />
+          <ShortcodeContract name="tags" example={{ layout: "pills", limit: 24, offset: 0, include: "", orderby: "name", order: "asc", title: "Tags" }} values={[
             ["layout", ["pills", "cards", "compact"]],
             ["limit", ["1–100"]],
+            ["offset", ["0–1000000"]],
             ["include", ["comma-separated IDs or slugs"]],
             ["orderby / order", ["name", "count", "include", "asc", "desc"]],
             ["title", ["text"]],
           ]} />
-          <ShortcodeContract name="authors" example={{ layout: "cards", limit: 12, include: "", show_bio: true, min_posts: 0, orderby: "name", order: "asc", title: "Authors" }} values={[
+          <ShortcodeContract name="authors" example={{ layout: "cards", limit: 12, offset: 0, include: "", show_bio: true, min_posts: 0, orderby: "name", order: "asc", title: "Authors" }} values={[
             ["layout", ["cards", "compact"]],
             ["limit", ["1–100"]],
+            ["offset", ["0–1000000"]],
             ["include", ["comma-separated IDs or slugs"]],
             ["show_bio", ["true", "false"]],
             ["min_posts", ["0–1000000"]],
             ["orderby / order", ["name", "post-count", "include", "asc", "desc"]],
           ]} />
-          <ShortcodeContract name="community-hero" example={{ layout: "gradient", kicker: "Community", title: "See how the community styles it", description: "Real posts from public members.", image: "", show_upload: true }} values={[
+          <ShortcodeContract name="community-hero" example={{ layout: "gradient", heading_level: "h1", kicker: "Community", title: "See how the community styles it", description: "Real posts from public members.", image: "", show_upload: true }} values={[
             ["layout", ["gradient", "split", "image-bg"]],
+            ["heading_level", ["h1", "h2", "h3", "h4", "h5", "h6"]],
             ["kicker / title / description / image", ["text or URL"]],
             ["show_upload", ["true", "false"]],
           ]} />
-          <ShortcodeContract name="community-marketplace" example={{ layout: "grid", card_variant: "default", columns: 4, limit: 12, min_rating: 0, title: "Shop the community" }} values={[
+          <ShortcodeContract name="community-marketplace" example={{ layout: "grid", card_variant: "default", columns: 4, limit: 12, offset: 0, min_rating: 0, title: "Shop the community" }} values={[
             ["layout", ["grid", "compact", "carousel"]],
             ["card_variant", ["default", "minimal", "editorial", "gallery", "simple", "variation", "expandable"]],
             ["columns / limit", ["1–6", "1–48"]],
+            ["offset", ["0–1000000"]],
             ["min_rating", ["0–5"]],
           ]} />
-          <ShortcodeContract name="community-tag-picks" example={{ layout: "grid-3", tags: "", tag_limit: 3, post_limit: 3, min_likes: 0, date_from: "", date_to: "", title: "Hand-picked by tag" }} values={[
+          <ShortcodeContract name="community-tag-picks" example={{ layout: "grid-3", tags: "", tag_limit: 3, post_limit: 3, offset: 0, min_likes: 0, date_from: "", date_to: "", title: "Hand-picked by tag" }} values={[
             ["layout", ["grid-3", "grid-4", "compact"]],
             ["tags", ["comma-separated tag slugs"]],
             ["tag_limit / post_limit", ["1–12"]],
+            ["offset", ["0–1000000"]],
             ["min_likes", ["0–1000000 (community only)"]],
             ["date_from / date_to", ["YYYY-MM-DD"]],
           ]} />
-          <ShortcodeContract name="community-members" example={{ layout: "grid", columns: 6, limit: 12, include: "", role: "all", show_bio: false, title: "Members to follow" }} values={[
+          <ShortcodeContract name="community-members" example={{ layout: "grid", columns: 6, limit: 12, offset: 0, include: "", role: "all", show_bio: false, title: "Members to follow" }} values={[
             ["layout", ["grid", "compact", "list"]],
             ["columns / limit", ["1–6", "1–100"]],
+            ["offset", ["0–1000000"]],
             ["include", ["comma-separated member handles"]],
             ["role", ["all", "member", "creator", "collaborator"]],
             ["show_bio", ["true", "false"]],
@@ -729,8 +800,8 @@ export function ShortcodeLibraryMockupPage() {
             renderItem={(item, _index, meta) => (
               <article
                 key={item.id}
-                className={`group relative flex items-end overflow-hidden text-left shadow-soft ${
-                  meta.hasCustomHeight ? "h-full" : "h-full min-h-[20rem] rounded-2xl sm:min-h-[24rem]"
+                className={`group relative flex items-center overflow-hidden rounded-none text-left shadow-soft ${
+                  meta.hasCustomHeight ? "h-full" : "h-full min-h-[20rem] sm:min-h-[24rem]"
                 }`}
               >
                 <ResponsiveImage
@@ -872,7 +943,7 @@ export function ShortcodeLibraryMockupPage() {
           </div>
           <AcceptedValues name="layout" values={["minimal", "editorial", "graphical"]} />
           <AcceptedValues name="columns" values={["2", "3", "4"]} />
-          {isCommerceLoading ? <ContentLoadingState compact label="Loading WooCommerce categories" /> : commerceError ? (
+          {isCommerceLoading ? <ContentLoadingState compact label="Loading product categories" /> : commerceError ? (
             <BlogShortcodeStatus message={commerceError.message} isError />
           ) : categoryLayout === "minimal" ? (
             <div className={`grid gap-3 ${COLUMN_COUNT_CLASS[gridColumns]}`}>
@@ -895,7 +966,7 @@ export function ShortcodeLibraryMockupPage() {
 
         <div className="grid gap-3">
           <ShortcodeLabel name="grid" attrs={{ type: "product", columns: 3, items: liveProducts.slice(0, 6).map((product) => product.id) }} />
-          {isCommerceLoading ? <ContentLoadingState compact label="Loading WooCommerce products" /> : commerceError ? (
+          {isCommerceLoading ? <ContentLoadingState compact label="Loading store products" /> : commerceError ? (
             <BlogShortcodeStatus message={commerceError.message} isError />
           ) : <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
             {liveProducts.slice(0, 6).map((product) => (
@@ -909,12 +980,12 @@ export function ShortcodeLibraryMockupPage() {
         <div className="grid gap-3">
           <ShortcodeLabel name="grid" attrs={{ type: "post", columns: 3, items: livePosts.length }} />
           {isBlogLoading ? (
-            <ContentLoadingState compact label="Loading WordPress posts" />
+            <ContentLoadingState compact label="Loading journal posts" />
           ) : blogError ? (
             <BlogShortcodeStatus message={blogError.message} isError />
           ) : livePosts.length ? (
             <PaginablePostGrid
-              title="WordPress post grid"
+              title="Journal post grid"
               subtitle="The shared blog shortcode feed, rendered in three columns."
               posts={livePosts}
               pageSize={6}
@@ -972,10 +1043,10 @@ export function ShortcodeLibraryMockupPage() {
           </div>
           <AcceptedValues name="layout" values={["pills", "compact"]} />
           <div className={archiveCollectionLayout === "compact" ? "grid gap-4 lg:grid-cols-3" : "grid gap-5"}>
-            <TaxonomyColumn title="WordPress categories" terms={(blog?.categories || []).slice(0, 10)} />
-            <TaxonomyColumn title="WordPress tags" terms={(blog?.tags || []).slice(0, 10)} tags />
+            <TaxonomyColumn title="Journal categories" terms={(blog?.categories || []).slice(0, 10)} />
+            <TaxonomyColumn title="Journal tags" terms={(blog?.tags || []).slice(0, 10)} tags />
             <div className="grid content-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/60">
-              <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">WordPress authors</h3>
+              <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Journal authors</h3>
               {(blog?.authors || []).slice(0, 8).map((author) => (
                 <Link key={author.id} to={author.uri || `/author/${author.slug}`} className="flex items-center justify-between gap-3 text-sm font-semibold text-zinc-700 no-underline dark:text-zinc-300">
                   <span>{author.name}</span><span className="text-xs font-normal text-zinc-400">{author.postCount} posts</span>
@@ -1014,7 +1085,7 @@ export function ShortcodeLibraryMockupPage() {
           <AcceptedValues name="variant" values={["default", "minimal", "editorial", "gallery", "simple", "variation", "expandable"]} />
           {featuredProduct ? (
             <div className="grid max-w-sm"><ProductCard product={featuredProduct} variant={productCardVariant} /></div>
-          ) : <BlogShortcodeStatus message="No WooCommerce product is available." />}
+          ) : <BlogShortcodeStatus message="No store product is available." />}
         </div>
       </LibrarySection>
 
@@ -1041,7 +1112,7 @@ export function ShortcodeLibraryMockupPage() {
             <ShortcodeLabel name="post-card" attrs={{ post: featuredPost?.slug ?? "unavailable", variant: postCardVariant }} />
           </div>
           <div className="grid max-w-sm gap-5">
-            {featuredPost ? <PostCard post={featuredPost} variant={postCardVariant} /> : <BlogShortcodeStatus message="No WordPress post available." />}
+            {featuredPost ? <PostCard post={featuredPost} variant={postCardVariant} /> : <BlogShortcodeStatus message="No journal post available." />}
           </div>
           <AcceptedValues name="variant" values={["default", "compact", "editorial", "minimal"]} />
         </div>
@@ -1052,7 +1123,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<Star className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Shop · Reviews"
         title="Reviews"
-        description="Product reviews are standard WordPress comments with an extra rating meta field — `[reviews]` renders the same thread component as `[comments]`, just with a rating histogram and average passed in. `full` is the threaded discussion with a submission form; `compact` is a read-only teaser (summary + first few reviews, no form) for embedding in a sidebar or dashboard widget."
+        description="Product reviews use the shared comment system with an extra rating field — `[reviews]` renders the same thread component as `[comments]`, plus its rating histogram and average. `full` includes the discussion form; `compact` is a read-only teaser."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1068,11 +1139,12 @@ export function ShortcodeLibraryMockupPage() {
             <ShortcodeLabel name="reviews" attrs={{ product: featuredProduct?.slug ?? "latest", variant: reviewsVariant }} />
           </div>
           <AcceptedValues name="variant" values={["full", "compact"]} />
-          {isCommerceLoading ? <ContentLoadingState compact label="Loading WooCommerce reviews" /> : commerceError ? (
+          {isCommerceLoading ? <ContentLoadingState compact label="Loading product reviews" /> : commerceError ? (
             <BlogShortcodeStatus message={commerceError.message} isError />
           ) : featuredProduct && featuredReviews.length ? (
             <CommentsSection
               anchorId="shortcode-reviews"
+              contentKey={`shortcode-library-reviews:${featuredProduct.slug}`}
               heading="Reviews"
               initialReviews={featuredReviews}
               averageRating={averageRating}
@@ -1080,7 +1152,7 @@ export function ShortcodeLibraryMockupPage() {
               formTitle="Leave a review"
               variant={reviewsVariant}
             />
-          ) : <BlogShortcodeStatus message="No approved WooCommerce reviews are available." />}
+          ) : <BlogShortcodeStatus message="No approved product reviews are available." />}
         </div>
       </LibrarySection>
 
@@ -1108,6 +1180,7 @@ export function ShortcodeLibraryMockupPage() {
           {featuredPost ? (
             <CommentsSection
               anchorId="shortcode-comments"
+              contentKey={`shortcode-library-comments:${featuredPost.slug}`}
               heading="Comments"
               initialReviews={blog?.comments || []}
               formTitle="Join the discussion"
@@ -1384,7 +1457,7 @@ export function ShortcodeLibraryMockupPage() {
               {communityArticles.slice(0, 6).map((post) => <PostCard key={post.id} post={post} variant={postCardVariant} />)}
             </div>
           ) : (
-            <BlogShortcodeStatus message="No matching creator articles are published. This view derives live WordPress posts whose authors match collaborator profiles and never substitutes local fixtures." />
+            <BlogShortcodeStatus message="No matching creator articles are published. This view derives live journal posts whose authors match collaborator profiles and never substitutes local fixtures." />
           )}
         </div>
       </LibrarySection>
@@ -1394,7 +1467,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<MonitorSmartphone className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer backend execution"
         title="Dedicated customer-page shortcodes"
-        description="These are the validated live component contracts used on Cart, Checkout, Wishlist, Reading List, Account, Auth, Order Success, and Unsubscribe Pages. The dedicated storefront routes are now intentionally empty shortcode shells: author the page layout in WordPress, place the matching component shortcode where you want the live module to mount, and wrap it with any Gutenberg blocks before or after it."
+        description="These are the validated live component contracts used on Cart, Checkout, Wishlist, Reading List, Account, Auth, Order Success, and Unsubscribe Pages. Author the page in the CMS, place the matching component shortcode where the live module should mount, and surround it with any editor blocks."
       >
         <div className="grid gap-8">
           <ShortcodeContract
@@ -1449,9 +1522,10 @@ export function ShortcodeLibraryMockupPage() {
           />
           <ShortcodeContract
             name="funkycommerce_auth"
-            example={{ mode: "login", layout: "split" }}
+            example={{ mode: "combined", default_mode: "login", layout: "split" }}
             values={[
-              ["mode", ["login", "register", "forgot-password"]],
+              ["mode", ["combined", "login", "register", "forgot-password"]],
+              ["default_mode", ["login", "register", "forgot-password (combined mode only)"]],
               ["layout", ["split", "centered", "image-bg"]],
             ]}
           />
@@ -1479,7 +1553,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<ShoppingCart className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Cart"
         title="Cart"
-        description="Place `[funkycommerce_cart]` inside the WordPress Cart page wherever the live cart module should appear. The module preserves the classic line-item view and the editorial product-tile view, including optional sticky summary behavior in the classic layout."
+        description="Place `[funkycommerce_cart]` inside the Cart page wherever the live cart module should appear. The module preserves the classic line-item view and the editorial product-tile view, including optional sticky summary behavior."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1500,7 +1574,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<CreditCard className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Checkout"
         title="Checkout"
-        description="Place `[funkycommerce_checkout]` in the WordPress Checkout page to mount the live checkout exactly where your Gutenberg layout needs it. Checkout exposes every positional and visibility control from the original component, including physical/digital store mode and whether the live Woo checkout remains open to guests."
+        description="Place `[funkycommerce_checkout]` in the Checkout page to mount the live checkout exactly where the editor layout needs it. Checkout exposes every positional and visibility control, including physical/digital mode and guest checkout."
       >
         <div className="grid gap-4">
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1568,7 +1642,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<Heart className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Wishlist"
         title="Wishlist"
-        description="Place `[funkycommerce_wishlist]` inside the WordPress Wishlist page and surround it with any editorial blocks you need. The live wishlist accepts every authoritative ProductCard variant used by the original saved-products page."
+        description="Place `[funkycommerce_wishlist]` inside the Wishlist page and surround it with any editorial blocks you need. The live wishlist accepts every supported product-card variant."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1593,7 +1667,7 @@ export function ShortcodeLibraryMockupPage() {
         icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Reading list"
         title="Reading list"
-        description="Place `[funkycommerce_reading_list]` inside the WordPress Reading List page to mount the saved-article module in your chosen editorial layout. It mirrors the original card grid and dense two-column newspaper view."
+        description="Place `[funkycommerce_reading_list]` inside the Reading List page to mount the saved-article module in your chosen editorial layout."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1612,19 +1686,20 @@ export function ShortcodeLibraryMockupPage() {
         icon={<UserRound className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Account"
         title="Account"
-        description="Place `[funkycommerce_account]` inside the WordPress Account page and let Gutenberg control the surrounding layout. The live account module can open directly on any of the four existing hash-addressable panels."
+        description="Place `[funkycommerce_account]` on any CMS page and let the editor control the surrounding layout. The live account module preserves that page URL while opening its hash-addressable panels."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <ViewSwitch label="Panel" value={accountTab} onChange={setAccountTab} options={[
               { value: "dashboard", label: "Dashboard" }, { value: "orders", label: "Orders" },
+              { value: "downloads", label: "Downloads" },
               { value: "addresses", label: "Addresses" }, { value: "community", label: "Community" },
             ]} />
-            <ShortcodeLabel name="funkycommerce_account" attrs={{ default_tab: accountTab, tabs: "dashboard,orders,addresses,community" }} />
+            <ShortcodeLabel name="funkycommerce_account" attrs={{ default_tab: accountTab, tabs: "dashboard,orders,downloads,addresses,community" }} />
           </div>
-          <ShortcodeSnippet name="funkycommerce_account" attrs={{ default_tab: accountTab, tabs: "dashboard,orders,addresses,community" }} />
-          <AcceptedValues name="default_tab" values={["dashboard", "orders", "addresses", "community"]} />
-          <AcceptedValues name="tabs" values={["comma-separated dashboard, orders, addresses, community"]} />
+          <ShortcodeSnippet name="funkycommerce_account" attrs={{ default_tab: accountTab, tabs: "dashboard,orders,downloads,addresses,community" }} />
+          <AcceptedValues name="default_tab" values={["dashboard", "orders", "downloads", "addresses", "community"]} />
+          <AcceptedValues name="tabs" values={["comma-separated dashboard, orders, downloads, addresses, community"]} />
           <AccountShortcodePreview tab={accountTab} />
           <FullPageLink href={`/account#${accountTab}`} label={`Open the shortcode-driven ${accountTab} account panel`} />
         </div>
@@ -1635,23 +1710,24 @@ export function ShortcodeLibraryMockupPage() {
         icon={<LogIn className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Customer · Authentication"
         title="Authentication"
-        description="Place `[funkycommerce_auth]` inside the WordPress Auth page, or reuse it on landing pages wherever login, registration, or recovery should appear. Auth combines three form modes with all three shells from the original authentication page."
+        description="Place `[funkycommerce_auth mode=&quot;combined&quot;]` inside the Auth page to let visitors switch between login, registration, and password recovery in place. Fixed modes remain available."
       >
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <ViewSwitch label="Mode" value={authMode} onChange={setAuthMode} options={[
-              { value: "login", label: "Login" }, { value: "register", label: "Register" }, { value: "forgot-password", label: "Forgot password" },
+              { value: "combined", label: "Combined" }, { value: "login", label: "Login" }, { value: "register", label: "Register" }, { value: "forgot-password", label: "Forgot password" },
             ]} />
             <ViewSwitch label="Layout" value={authLayout} onChange={setAuthLayout} options={[
               { value: "split", label: "Split screen" }, { value: "centered", label: "Centered card" }, { value: "image-bg", label: "Image background" },
             ]} />
-            <ShortcodeLabel name="funkycommerce_auth" attrs={{ mode: authMode, layout: authLayout }} />
+            <ShortcodeLabel name="funkycommerce_auth" attrs={authMode === "combined" ? { mode: authMode, default_mode: "login", layout: authLayout } : { mode: authMode, layout: authLayout }} />
           </div>
-          <ShortcodeSnippet name="funkycommerce_auth" attrs={{ mode: authMode, layout: authLayout }} />
-          <AcceptedValues name="mode" values={["login", "register", "forgot-password"]} />
+          <ShortcodeSnippet name="funkycommerce_auth" attrs={authMode === "combined" ? { mode: authMode, default_mode: "login", layout: authLayout } : { mode: authMode, layout: authLayout }} />
+          <AcceptedValues name="mode" values={["combined", "login", "register", "forgot-password"]} />
+          <AcceptedValues name="default_mode" values={["login", "register", "forgot-password (combined mode only)"]} />
           <AcceptedValues name="layout" values={["split", "centered", "image-bg"]} />
           <AuthShortcodePreview mode={authMode} layout={authLayout} />
-          <FullPageLink href={authMode === "login" ? "/auth" : authMode === "register" ? "/auth/register" : "/auth/forgot-password"} label={`Open the shortcode-driven ${authMode} page`} />
+          <FullPageLink href={authMode === "register" ? "/auth/register" : authMode === "forgot-password" ? "/auth/forgot-password" : "/auth"} label={`Open the shortcode-driven ${authMode} page`} />
         </div>
       </LibrarySection>
 
@@ -1724,7 +1800,7 @@ function CartShortcodePreview({
   summaryPosition: CheckoutSummaryPosition;
   products: ProductCardData[];
 }) {
-  if (!products.length) return <BlogShortcodeStatus message="No live WooCommerce products are available for the cart preview." />;
+  if (!products.length) return <BlogShortcodeStatus message="No live store products are available for the cart preview." />;
   if (layout === "editorial") {
     return (
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -1808,7 +1884,7 @@ function CheckoutShortcodePreview({
 }
 
 function ReadingListShortcodePreview({ layout, posts }: { layout: ReadingListLayout; posts: PostCardData[] }) {
-  if (!posts.length) return <BlogShortcodeStatus message="No live WordPress posts are available for the reading-list preview." />;
+  if (!posts.length) return <BlogShortcodeStatus message="No live journal posts are available for the reading-list preview." />;
   if (layout === "cards") return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{posts.map((post) => <PostCard key={`reading-${post.id}`} post={post} variant="default" />)}</div>;
   return (
     <div className="grid gap-x-10 gap-y-5 sm:grid-cols-2">
@@ -1827,31 +1903,46 @@ function AccountShortcodePreview({ tab }: { tab: AccountTab }) {
   const content: Record<AccountTab, { title: string; items: string[] }> = {
     dashboard: { title: "Profile dashboard", items: ["Verified account", "Profile details", "Push notifications"] },
     orders: { title: "Order history", items: ["Order FC-10482 · Delivered", "Order FC-10417 · Shipped", "Invoice downloads"] },
+    downloads: { title: "Digital downloads", items: ["Product and file names", "Signed download link", "Expiry and remaining uses"] },
     addresses: { title: "Saved addresses", items: ["Billing address", "Shipping address", "Add address"] },
     community: { title: "Creator community", items: ["Published posts", "Marketplace listings", "Creator articles"] },
   };
   return (
     <div className="grid gap-4 rounded-3xl border border-zinc-200 p-5 dark:border-zinc-800 lg:grid-cols-[200px_minmax(0,1fr)]">
-      <div className="grid content-start gap-1">{(["dashboard", "orders", "addresses", "community"] as AccountTab[]).map((item) => <span key={item} className={`rounded-xl px-3 py-2 text-sm font-semibold capitalize ${item === tab ? "bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300" : "text-zinc-500"}`}>{item}</span>)}</div>
+      <div className="grid content-start gap-1">{(["dashboard", "orders", "downloads", "addresses", "community"] as AccountTab[]).map((item) => <span key={item} className={`rounded-xl px-3 py-2 text-sm font-semibold capitalize ${item === tab ? "bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300" : "text-zinc-500"}`}>{item}</span>)}</div>
       <div className="grid content-start gap-3 rounded-2xl bg-zinc-50 p-5 dark:bg-zinc-900"><strong className="font-display text-xl text-zinc-900 dark:text-zinc-100">{content[tab].title}</strong>{content[tab].items.map((item) => <span key={item} className="rounded-xl border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">{item}</span>)}</div>
     </div>
   );
 }
 
-function AuthShortcodePreview({ mode, layout }: { mode: AuthMode; layout: AuthLayout }) {
-  const title = mode === "login" ? "Welcome back" : mode === "register" ? "Create your account" : "Forgotten password";
+function AuthShortcodePreview({ mode, layout }: { mode: AuthShortcodeMode; layout: AuthLayout }) {
+  const [combinedMode, setCombinedMode] = useState<AuthMode>("login");
+  const activeMode = mode === "combined" ? combinedMode : mode;
+  const title = activeMode === "login" ? "Welcome back" : activeMode === "register" ? "Create your account" : "Forgotten password";
   const form = (
     <div className="grid w-full max-w-sm gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-900 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+      {mode === "combined" ? (
+        <ViewSwitch
+          label="Authentication view"
+          value={combinedMode}
+          onChange={setCombinedMode}
+          options={[
+            { value: "login", label: "Login" },
+            { value: "register", label: "Register" },
+            { value: "forgot-password", label: "Forgot password" },
+          ]}
+        />
+      ) : null}
       <strong className="font-display text-xl">{title}</strong>
       <span className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-500 dark:bg-zinc-800">Email address</span>
-      {mode !== "forgot-password" ? <span className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-500 dark:bg-zinc-800">Password</span> : null}
-      {mode === "register" ? <span className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-500 dark:bg-zinc-800">Confirm password</span> : null}
-      <span className="rounded-full bg-brand-gradient px-4 py-2 text-center text-sm font-semibold text-white">{mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Send reset link"}</span>
+      {activeMode !== "forgot-password" ? <span className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-500 dark:bg-zinc-800">Password</span> : null}
+      {activeMode === "register" ? <span className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-500 dark:bg-zinc-800">Confirm password</span> : null}
+      <span className="rounded-full bg-brand-gradient px-4 py-2 text-center text-sm font-semibold text-white">{activeMode === "login" ? "Sign in" : activeMode === "register" ? "Create account" : "Send reset link"}</span>
     </div>
   );
   if (layout === "centered") return <div className="grid min-h-80 place-items-center rounded-3xl bg-zinc-50 p-6 dark:bg-zinc-950">{form}</div>;
   if (layout === "image-bg") return <div className="grid min-h-80 place-items-center rounded-3xl bg-[linear-gradient(rgba(9,9,11,.55),rgba(9,9,11,.75)),url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1400&q=80')] bg-cover bg-center p-6">{form}</div>;
-  return <div className="grid min-h-80 overflow-hidden rounded-3xl bg-zinc-50 dark:bg-zinc-950 lg:grid-cols-2"><div className="grid place-items-center p-6">{form}</div><div className="hidden content-center justify-items-center gap-2 bg-zinc-900 p-8 text-white lg:grid"><Sparkles className="h-8 w-8" /><strong className="font-display text-2xl">FunkyCommerce</strong></div></div>;
+  return <div className="grid min-h-80 overflow-hidden rounded-3xl bg-zinc-50 dark:bg-zinc-950 lg:grid-cols-2"><div className="grid place-items-center p-6">{form}</div><div className="hidden content-center justify-items-center gap-2 bg-zinc-900 p-8 text-white lg:grid"><Sparkles className="h-8 w-8" /><strong className="font-display text-2xl">Superfunky</strong></div></div>;
 }
 
 function OrderSuccessShortcodePreview({ mode }: { mode: OrderSuccessMode }) {
@@ -1929,7 +2020,7 @@ function AcceptedValues({ name, values }: { name: string; values: string[] }) {
 }
 
 function ColumnLayoutPreview({ layout, posts }: { layout: ColumnLayout; posts: PostCardData[] }) {
-  if (!posts.length) return <BlogShortcodeStatus message="No WordPress posts are available." />;
+  if (!posts.length) return <BlogShortcodeStatus message="No journal posts are available." />;
   if (layout === "1/3+2/3" || layout === "2/3+1/3") {
     const firstWide = layout === "2/3+1/3";
     return (

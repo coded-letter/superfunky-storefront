@@ -1,48 +1,77 @@
-import { graphqlRequest } from "./graphqlClient";
-import type { SpecialPageKey } from "./pages";
+import {
+  graphqlRequest,
+  STOREFRONT_BACKEND_PROFILE,
+  type GraphqlResponse,
+  type StorefrontBackendProfile,
+} from "@funky/sdk";
+import type { GraphqlFieldFallbackRequester } from "./graphqlFieldFallback.ts";
+import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility.ts";
 
 export type ContentNodeType = "Category" | "CommunityPost" | "Page" | "Post" | "Product" | "ProductBrand" | "ProductCategory" | "ProductTag" | "Tag";
 
 export type ContentNodeInfo = {
   type: ContentNodeType;
-  /** Set when the resolved Page is a registered special storefront page (shop, cart, etc.).
-   * Used by ContentNodeRoute to render the correct template for translated special-page URLs
-   * (e.g. /sklep/ → shop, /koszyk/ → cart) without a URL redirect. */
-  specialPageKey?: SpecialPageKey;
 };
 
 type ContentNodeTypeResult = {
-  nodeByUri: { __typename: string; funkycommerceSpecialPageKey?: string | null } | null;
+  nodeByUri: { __typename: string } | null;
+};
+
+type ContentNodePostResult = {
+  post: { id: string } | null;
+};
+
+type ContentNodePageResult = {
+  page: { id: string } | null;
 };
 
 const CONTENT_NODE_TYPE_QUERY = /* GraphQL */ `
   query StorefrontContentNodeType($uri: String!) {
     nodeByUri(uri: $uri) {
       __typename
-      ... on Page {
-        funkycommerceSpecialPageKey
-      }
     }
   }
 `;
 
-const SPECIAL_PAGE_KEYS = new Set<SpecialPageKey>([
-  "home", "shop", "blog", "cart", "checkout", "account",
-]);
-
-function isSpecialPageKey(value: unknown): value is SpecialPageKey {
-  return typeof value === "string" && SPECIAL_PAGE_KEYS.has(value as SpecialPageKey);
-}
-
-export async function getContentNodeInfo(uri: string): Promise<ContentNodeInfo | null> {
-  const { data, errors } = await graphqlRequest<ContentNodeTypeResult>(CONTENT_NODE_TYPE_QUERY, { uri });
-
-  if (errors?.length) {
-    // Gracefully handle schema errors for funkycommerceSpecialPageKey on older backends
-    const fatalErrors = errors.filter((e) => !e.message.includes("funkycommerceSpecialPageKey"));
-    if (fatalErrors.length) throw new Error(fatalErrors.map(({ message }) => message).join("; "));
+const CONTENT_NODE_POST_QUERY = /* GraphQL */ `
+  query StorefrontContentNodePost($uri: ID!) {
+    post(id: $uri, idType: URI) {
+      id
+    }
   }
+`;
+
+const CONTENT_NODE_PAGE_QUERY = /* GraphQL */ `
+  query StorefrontContentNodePage($uri: ID!) {
+    page(id: $uri, idType: URI) {
+      id
+    }
+  }
+`;
+
+export async function getContentNodeInfo(
+  uri: string,
+  request: GraphqlFieldFallbackRequester = graphqlRequest,
+  profile: StorefrontBackendProfile = STOREFRONT_BACKEND_PROFILE,
+): Promise<ContentNodeInfo | null> {
+  if (shouldPreferCoreGraphqlQueries(profile) && isRootLevelUri(uri)) {
+    const postInfo = await getPostNodeInfo(uri, request);
+    if (postInfo) return postInfo;
+    const pageInfo = await getPageNodeInfo(uri, request);
+    if (pageInfo) return pageInfo;
+  }
+
+  const { data, errors } = await request<ContentNodeTypeResult>(CONTENT_NODE_TYPE_QUERY, { uri });
+
+  // A resolved node (e.g. a category/taxonomy archive with zero assigned posts or
+  // products) is still valid content — only bail out on GraphQL errors when there's
+  // no usable data to classify, so unrelated resolver warnings don't turn an empty
+  // archive into a "Content unavailable" error page.
   if (!data) {
+    if (hasMalformedNodeByUriError(errors)) {
+      return getPostNodeInfo(uri, request);
+    }
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
     throw new Error("The content-node query returned no data");
   }
 
@@ -62,8 +91,39 @@ export async function getContentNodeInfo(uri: string): Promise<ContentNodeInfo |
 
   if (!type) return null;
 
-  const specialPageKey = isSpecialPageKey(node?.funkycommerceSpecialPageKey) ? node!.funkycommerceSpecialPageKey : undefined;
-  return { type, specialPageKey };
+  return { type };
+}
+
+function isRootLevelUri(uri: string): boolean {
+  return uri.split("/").filter(Boolean).length === 1;
+}
+
+async function getPostNodeInfo(
+  uri: string,
+  request: GraphqlFieldFallbackRequester,
+): Promise<ContentNodeInfo | null> {
+  const { data, errors } = await request<ContentNodePostResult>(CONTENT_NODE_POST_QUERY, { uri });
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  if (!data) throw new Error("The content-node post fallback returned no data");
+  return data.post ? { type: "Post" } : null;
+}
+
+async function getPageNodeInfo(
+  uri: string,
+  request: GraphqlFieldFallbackRequester,
+): Promise<ContentNodeInfo | null> {
+  const { data, errors } = await request<ContentNodePageResult>(CONTENT_NODE_PAGE_QUERY, { uri });
+  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+  if (!data) throw new Error("The content-node page fallback returned no data");
+  return data.page ? { type: "Page" } : null;
+}
+
+function hasMalformedNodeByUriError(
+  errors: GraphqlResponse<unknown>["errors"],
+): boolean {
+  return Boolean(errors?.length) && errors?.every(({ extensions }) =>
+    extensions?.debugMessage?.includes("Cannot access offset of type string on string"),
+  ) === true;
 }
 
 /** @deprecated Use getContentNodeInfo instead */

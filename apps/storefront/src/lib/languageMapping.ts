@@ -18,8 +18,3 @@ export function mapBackendLanguages(languages: BackendLanguageRecord[]): Storefr
     return [{ code, label: language.name, backendCode }];
   });
 }
-
-export function languageHomePath(languageCode: string): string {
-  const normalized = languageCode.trim().toLowerCase();
-  return normalized ? `/${normalized}` : "/";
-}
