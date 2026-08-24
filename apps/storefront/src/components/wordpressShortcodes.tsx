@@ -781,15 +781,19 @@ function CommunityTagPicksShortcode({ attributes }: ShortcodeProps) {
 function CommunityMembersShortcode({ attributes }: ShortcodeProps) {
   const { data, isLoading, error } = useCommunityData();
   const include = csv(attributes.include);
-  const memberTypes = csv(attributes.members).map((type) => type === "administrator" ? "admin" : type);
-  const permission = attributes.permission && attributes.permission !== "all"
-    ? attributes.permission
-    : attributes.role;
+  const normalizeRole = (type: string) => {
+    const normalized = type.trim().toLowerCase().replace(/\s+/g, "-");
+    return normalized === "administrator" ? "admin" : normalized;
+  };
+  const roles = csv(attributes.role).map(normalizeRole).filter((type) => type !== "all");
+  const memberAliasRoles = csv(attributes.members).map(normalizeRole).filter((type) => type !== "all");
+  const permissionRoles = csv(attributes.permission).map(normalizeRole).filter((type) => type !== "all");
+  const requestedRoles = roles.length ? roles : memberAliasRoles.length ? memberAliasRoles : permissionRoles;
   const members = withCollectionOffset(
     (data?.members || []).filter((member) =>
       member.isPublic &&
-      (permission === "all" || !permission || member.role === permission) &&
-      (!memberTypes.length || memberTypes.some((type) => member.memberTypes.some((memberType) => memberType === type))) &&
+      member.memberTypes.length > 0 &&
+      (!requestedRoles.length || requestedRoles.some((type) => member.memberTypes.includes(type))) &&
       (!include.length || include.includes(member.handle)),
     ),
     attributes.offset,

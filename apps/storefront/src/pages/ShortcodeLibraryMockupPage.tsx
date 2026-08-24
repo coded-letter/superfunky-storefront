@@ -626,14 +626,13 @@ export function ShortcodeLibraryMockupPage() {
             ["min_likes", ["0–1000000 (community only)"]],
             ["date_from / date_to", ["YYYY-MM-DD"]],
           ]} />
-          <ShortcodeContract name="community-members" example={{ layout: "grid", columns: 6, limit: 12, offset: 0, include: "", members: ["customer", "admin", "member"], permission: "all", show_bio: false, title: "Members to follow" }} values={[
+          <ShortcodeContract name="community-members" example={{ layout: "grid", columns: 6, limit: 12, offset: 0, include: "", role: "member,creator", show_bio: false, title: "Members to follow" }} values={[
             ["layout", ["grid", "compact", "list"]],
             ["columns / limit", ["1–6", "1–100"]],
             ["offset", ["0–1000000"]],
             ["include", ["comma-separated member handles"]],
-            ["members (appendable)", ["member", "customer", "subscriber", "admin", "creator", "collaborator"]],
-            ["permission", ["all", "member", "creator", "collaborator"]],
-            ["role (legacy alias)", ["all", "member", "creator", "collaborator"]],
+            ["role (comma-separated whitelist)", ["all", "admin / administrator", "member", "creator", "collaborator", "customer", "subscriber", "editor", "author", "contributor", "shop manager", "SEO editor", "SEO manager", "any registered role slug or label"]],
+            ["members / permission (legacy aliases)", ["same values as role"]],
             ["show_bio", ["true", "false"]],
           ]} />
         </div>

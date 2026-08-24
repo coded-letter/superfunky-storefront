@@ -25,7 +25,7 @@ export type CommunityMember = {
   bio: string;
   avatarUrl?: string;
   role: "member" | "creator" | "collaborator";
-  memberTypes: Array<"member" | "customer" | "subscriber" | "admin" | "creator" | "collaborator">;
+  memberTypes: string[];
   isPublic: boolean;
   followerCount: number;
   followingCount: number;
@@ -2379,9 +2379,8 @@ function mapMember(user: RawUser): CommunityMember {
       ? "creator"
       : "member";
   const memberTypes = (user.communityMemberTypes || [role])
-    .filter((type): type is CommunityMember["memberTypes"][number] =>
-      ["member", "customer", "subscriber", "admin", "creator", "collaborator"].includes(type),
-    );
+    .map((type) => type.trim().toLowerCase())
+    .filter((type) => /^[a-z0-9_-]+$/.test(type));
   return {
     databaseId: user.databaseId,
     handle: communityHandleFromUser(user),
