@@ -3,10 +3,14 @@ import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { useT } from "../locale";
 import { useCart } from "../state";
 import { ResponsiveImage } from "../media";
+import type { ProductCardData } from "../catalog/ProductCard";
+import { CartEmptyRecommendations } from "./CartEmptyRecommendations";
 
 export type CartDropdownProps = {
   isOpen: boolean;
   onClose: () => void;
+  featuredProducts?: ProductCardData[];
+  showPromotedProduct?: boolean;
 };
 
 /**
@@ -17,7 +21,12 @@ export type CartDropdownProps = {
  * `relative`-positioned wrapper around the cart button) so it's naturally anchored
  * without needing a portal or ref-measuring.
  */
-export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
+export function CartDropdown({
+  isOpen,
+  onClose,
+  featuredProducts = [],
+  showPromotedProduct = true,
+}: CartDropdownProps) {
   const t = useT();
   const { items, itemCount, subtotalLabel, removeItem, updateQuantity } = useCart();
 
@@ -46,7 +55,19 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
         </div>
 
         {items.length === 0 ? (
-          <p className="m-0 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{t("cart.empty.heading")}</p>
+          <div className="grid gap-4 py-2">
+            <div className="text-center">
+              <p className="m-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {t("cart.empty.heading")}
+              </p>
+              <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {t("cart.empty.body")}
+              </p>
+            </div>
+            {showPromotedProduct ? (
+              <CartEmptyRecommendations products={featuredProducts} onNavigate={onClose} />
+            ) : null}
+          </div>
         ) : (
           <ul className="m-0 grid max-h-72 list-none gap-2.5 overflow-y-auto p-0">
             {items.map((item) => (

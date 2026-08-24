@@ -24,6 +24,7 @@ test("a fully out-of-stock variable product uses the Learn more CTA and product 
   const ctaMarkup = card.slice(card.indexOf("{!isSimple ? ("), card.indexOf("{quickViewEnabled && isQuickViewOpen"));
   assert.match(
     ctaMarkup,
-    /showLearnMore \|\| product\.productType === "external" \|\| product\.productType === "grouped" \? \(\s*<Link\s+to=\{product\.href \?\? `\/shop\/\$\{encodeURIComponent\(product\.id\)\}`\}/,
+    /showLearnMore \|\| product\.productType === "external" \|\| product\.productType === "grouped" \? \(\s*<Link\s+to=\{product\.href \|\| "\/shop"\}/,
   );
+  assert.doesNotMatch(card, /encodeURIComponent\(product\.id\)/);
 });

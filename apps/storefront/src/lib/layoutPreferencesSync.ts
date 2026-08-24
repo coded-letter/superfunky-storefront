@@ -30,6 +30,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setShowHeaderPublishButton(layout.showHeaderPublishButton);
   prefs.setCartTriggerVariant(layout.cartTriggerVariant);
   prefs.setShowCartDrawerPromotedProduct(layout.showCartDrawerPromotedProduct);
+  prefs.setShowAllCartPromotedProducts(layout.showAllCartPromotedProducts);
   prefs.setShowFooter(layout.showFooter);
   prefs.setFooterColumnsLayout(layout.footerColumnsLayout);
   prefs.setFooterNewsletterLayout(layout.footerNewsletterLayout);

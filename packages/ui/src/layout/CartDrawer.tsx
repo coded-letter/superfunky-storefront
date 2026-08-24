@@ -5,11 +5,12 @@ import type { ProductCardData } from "../catalog/ProductCard";
 import { useT } from "../locale";
 import { useCart, useSoundUX } from "../state";
 import { ResponsiveImage } from "../media";
+import { CartEmptyRecommendations } from "./CartEmptyRecommendations";
 
 export type CartDrawerProps = {
   /** Shown as a "you might like" suggestion when the cart is empty — has no legacy
    * reference, so this pulls from whatever the app considers a good default pick. */
-  featuredProduct?: ProductCardData;
+  featuredProducts?: ProductCardData[];
   /** Whole empty-cart "you might like" promoted-product block on/off — independent of
    * whether a `featuredProduct` was actually passed in. `true` (default). */
   showPromotedProduct?: boolean;
@@ -20,9 +21,9 @@ export type CartDrawerProps = {
  * a full-page redirect. Right-side panel on desktop, full-width bottom-anchored sheet
  * on mobile so it stays reachable with a thumb.
  */
-export function CartDrawer({ featuredProduct, showPromotedProduct = true }: CartDrawerProps) {
+export function CartDrawer({ featuredProducts = [], showPromotedProduct = true }: CartDrawerProps) {
   const t = useT();
-  const { items, itemCount, subtotalLabel, isDrawerOpen, closeDrawer, addItem, removeItem, updateQuantity } = useCart();
+  const { items, itemCount, subtotalLabel, isDrawerOpen, closeDrawer, removeItem, updateQuantity } = useCart();
   const { playAction } = useSoundUX();
   const [isVisible, setIsVisible] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
@@ -108,7 +109,11 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {items.length === 0 ? (
-            <EmptyCartState featuredProduct={featuredProduct} showPromotedProduct={showPromotedProduct} onNavigate={handleClose} onAddToCart={addItem} />
+            <EmptyCartState
+              featuredProducts={featuredProducts}
+              showPromotedProduct={showPromotedProduct}
+              onNavigate={handleClose}
+            />
           ) : (
             <ul className="m-0 grid list-none gap-4 p-0">
               {items.map((item) => (
@@ -198,18 +203,15 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
 }
 
 function EmptyCartState({
-  featuredProduct,
+  featuredProducts,
   showPromotedProduct = true,
   onNavigate,
-  onAddToCart,
 }: {
-  featuredProduct?: ProductCardData;
+  featuredProducts: ProductCardData[];
   showPromotedProduct?: boolean;
   onNavigate: () => void;
-  onAddToCart: (item: { id: string; name: string; imageUrl?: string; priceLabel: string }, quantity?: number) => void;
 }) {
   const t = useT();
-  const [justAdded, setJustAdded] = useState(false);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 py-6 text-center">
@@ -221,45 +223,8 @@ function EmptyCartState({
         <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("cart.empty.body")}</p>
       </div>
 
-      {showPromotedProduct && featuredProduct ? (
-        <div className="w-full rounded-2xl border border-zinc-100 bg-zinc-50/60 p-4 text-left dark:border-zinc-800/80 dark:bg-zinc-900/40">
-          <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
-            {t("cart.you_might_like")}
-          </p>
-          <Link
-            to={`/shop/${featuredProduct.id}`}
-            onClick={onNavigate}
-            className="flex items-center gap-3 no-underline"
-          >
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800">
-              {featuredProduct.imageUrl ? (
-                <ResponsiveImage src={featuredProduct.imageUrl} alt="" sizes="4rem" className="h-full w-full object-cover" />
-              ) : null}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{featuredProduct.name}</p>
-              <p className="m-0 mt-0.5 text-sm font-bold text-brand-600 dark:text-brand-400">
-                {featuredProduct.priceRangeLabel ?? featuredProduct.priceLabel}
-              </p>
-            </div>
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              onAddToCart({
-                id: featuredProduct.id,
-                name: featuredProduct.name,
-                imageUrl: featuredProduct.imageUrl,
-                priceLabel: featuredProduct.priceRangeLabel ?? featuredProduct.priceLabel,
-              });
-              setJustAdded(true);
-              window.setTimeout(() => setJustAdded(false), 2000);
-            }}
-            className="mt-3 w-full rounded-full bg-brand-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
-          >
-            {justAdded ? t("cart.added") : t("cart.add")}
-          </button>
-        </div>
+      {showPromotedProduct ? (
+        <CartEmptyRecommendations products={featuredProducts} onNavigate={onNavigate} />
       ) : null}
 
       <Link

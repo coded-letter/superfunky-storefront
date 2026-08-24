@@ -369,7 +369,9 @@ export function LayoutStudioMockupPage() {
     cartTriggerVariant,
     setCartTriggerVariant,
     showCartDrawerPromotedProduct,
+    showAllCartPromotedProducts,
     setShowCartDrawerPromotedProduct,
+    setShowAllCartPromotedProducts,
     showFooter,
     setShowFooter,
     footerColumnsLayout,
@@ -516,6 +518,7 @@ export function LayoutStudioMockupPage() {
       showHeaderPublishButton,
       cartTriggerVariant,
       showCartDrawerPromotedProduct,
+      showAllCartPromotedProducts,
       showFooter,
       footerColumnsLayout,
       footerNewsletterLayout,
@@ -918,6 +921,11 @@ export function LayoutStudioMockupPage() {
       >
         <ViewSwitch label="Cart opens as" value={cartTriggerVariant} onChange={setCartTriggerVariant} options={CART_TRIGGER_OPTIONS} />
         <BoolSwitch label="Promoted product when empty" value={showCartDrawerPromotedProduct} onChange={setShowCartDrawerPromotedProduct} />
+        <BoolSwitch
+          label="All featured products when empty"
+          value={showAllCartPromotedProducts}
+          onChange={setShowAllCartPromotedProducts}
+        />
         <LiveChromeNotice text="Add something to the cart, then click the cart icon in the header to try it." />
       </LayoutStudioSection>
 

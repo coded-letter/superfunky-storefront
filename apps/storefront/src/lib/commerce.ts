@@ -276,8 +276,11 @@ type CatalogTagsResult = {
   productTags: { nodes: RawTerm[] } | null;
 };
 
-type FeaturedProductResult = {
-  products: { nodes: RawProductCard[] } | null;
+type FeaturedProductsResult = {
+  products: {
+    nodes: RawProductCard[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  } | null;
 };
 
 type ProductBrandDirectoryResult = {
@@ -312,6 +315,8 @@ const PRODUCT_CONCRETE_FIELDS = /* GraphQL */ `
     price
     regularPrice
     salePrice
+    stockStatus
+    stockQuantity
     variations(first: 50) {
       nodes {
         id
@@ -419,23 +424,28 @@ const PRODUCT_CARD_FRAGMENT = /* GraphQL */ `
     ${PRODUCT_CARD_FIELDS}
   }
 `;
+const PRODUCT_CARD_FRAGMENT_WITHOUT_BRANDS = createProductQueryWithoutBrands(PRODUCT_CARD_FRAGMENT);
 
 export const FEATURED_PRODUCT_QUERY = /* GraphQL */ `
-  query StorefrontFeaturedProduct($language: LanguageCodeFilterEnum!) {
-    products(first: 1, where: { featured: true, language: $language }) {
+  query StorefrontFeaturedProducts($language: LanguageCodeFilterEnum!, $first: Int!, $after: String) {
+    products(first: $first, after: $after, where: { featured: true, language: $language }) {
       nodes { ...StorefrontProductCard }
+      pageInfo { hasNextPage endCursor }
     }
   }
   ${PRODUCT_CARD_FRAGMENT}
 `;
 
-export const COMPATIBLE_FEATURED_PRODUCT_QUERY = /* GraphQL */ `
-  query StorefrontFeaturedProductCompatible {
-    products(first: 1, where: { featured: true }) {
+export const COMPATIBLE_FEATURED_PRODUCT_QUERY = createProductQueryWithoutBrands(FEATURED_PRODUCT_QUERY);
+
+export const CORE_FEATURED_PRODUCT_QUERY = /* GraphQL */ `
+  query StorefrontFeaturedProductsCore($first: Int!, $after: String) {
+    products(first: $first, after: $after, where: { featured: true }) {
       nodes { ...StorefrontProductCard }
+      pageInfo { hasNextPage endCursor }
     }
   }
-  ${PRODUCT_CARD_FRAGMENT}
+  ${PRODUCT_CARD_FRAGMENT_WITHOUT_BRANDS}
 `;
 
 export const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
@@ -1056,16 +1066,41 @@ export async function getCommerceCatalog(languageCode: string, backendLanguageCo
   };
 }
 
-export async function getFeaturedProduct(backendLanguageCode: string): Promise<CmsProductCard | null> {
-  const data = await requestCommerceWithFallback<FeaturedProductResult>(
-    graphqlRequest,
-    FEATURED_PRODUCT_QUERY,
-    COMPATIBLE_FEATURED_PRODUCT_QUERY,
-    { language: backendLanguageCode },
-    isMissingProductOptionalFieldSchemaError,
-    shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
-  );
-  return data?.products?.nodes[0] ? mapProductCard(data.products.nodes[0]) : null;
+export async function getFeaturedProducts(
+  backendLanguageCode: string,
+  includeAll = false,
+): Promise<CmsProductCard[]> {
+  const products: RawProductCard[] = [];
+  let after: string | null = null;
+
+  do {
+    const preferCoreQueries = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
+    const data = await requestCommerceWithFallbackChain<FeaturedProductsResult>(
+      graphqlRequest,
+      preferCoreQueries
+        ? [CORE_FEATURED_PRODUCT_QUERY]
+        : [
+            FEATURED_PRODUCT_QUERY,
+            COMPATIBLE_FEATURED_PRODUCT_QUERY,
+            CORE_FEATURED_PRODUCT_QUERY,
+          ],
+      { language: backendLanguageCode, first: includeAll ? 100 : 1, after },
+      isMissingProductOptionalFieldSchemaError,
+    );
+    if (!data?.products) {
+      if (!products.length) return [];
+      throw new Error("The featured products query returned no data");
+    }
+
+    products.push(...data.products.nodes);
+    if (!includeAll || !data.products.pageInfo.hasNextPage) break;
+    if (!data.products.pageInfo.endCursor) {
+      throw new Error("The featured products query returned an incomplete pagination cursor");
+    }
+    after = data.products.pageInfo.endCursor;
+  } while (true);
+
+  return products.map(mapProductCard);
 }
 
 export async function getProductBrandDirectory(
@@ -1408,7 +1443,12 @@ export function getProductBrandArchive(
 export function mapProductCard(product: RawProductCard): CmsProductCard {
   const commerceProductType = resolveCommerceProductType(product.__typename);
   const variations = product.variations?.nodes || [];
-  const variableStock = deriveVariationStock(variations);
+  const variableStock = variations.length
+    ? deriveVariationStock(variations)
+    : {
+        stockStatus: product.stockStatus || null,
+        stockQuantity: product.stockQuantity ?? null,
+      };
   const stockStatus = commerceProductType === "variable" ? variableStock.stockStatus : product.stockStatus || null;
   const stockQuantity = commerceProductType === "variable" ? variableStock.stockQuantity : product.stockQuantity ?? null;
   const price = decodePrice(product.salePrice || product.price || product.regularPrice || "");

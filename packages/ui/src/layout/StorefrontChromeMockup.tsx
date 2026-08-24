@@ -14,8 +14,8 @@ import { ToastContainer } from "./ToastContainer";
 
 export type StorefrontChromeMockupProps = {
   children?: ReactNode;
-  /** Suggested product shown in the cart drawer's empty state. */
-  featuredProduct?: ProductCardData;
+  /** Suggested products shown in either cart presentation's empty state. */
+  featuredProducts?: ProductCardData[];
   primaryNavigation?: HeaderNavItem[];
   mobileNavigation?: HeaderNavItem[];
   footerColumns?: FooterColumn[];
@@ -113,7 +113,7 @@ function ScrollToTop() {
 
 function StorefrontChromeShell({
   children,
-  featuredProduct,
+  featuredProducts = [],
   primaryNavigation,
   mobileNavigation,
   footerColumns,
@@ -147,6 +147,7 @@ function StorefrontChromeShell({
     showHeaderCartIcon,
     cartTriggerVariant,
     showCartDrawerPromotedProduct,
+    showAllCartPromotedProducts,
     showFooter,
     footerColumnsLayout,
     footerNewsletterLayout,
@@ -178,6 +179,9 @@ function StorefrontChromeShell({
         }]
       : [],
   );
+  const cartFeaturedProducts = showAllCartPromotedProducts
+    ? featuredProducts
+    : featuredProducts.slice(0, 1);
   const spotifyPlaylistUrl = storefrontConfig?.footer?.spotifyPlaylistUrl?.trim() ?? "";
 
   useEffect(() => {
@@ -238,6 +242,8 @@ function StorefrontChromeShell({
         showWishlistLink={showHeaderWishlistLink && storefrontConfig?.features.wishlist !== false}
         showCartIcon={showHeaderCartIcon && storefrontConfig?.features.cart !== false}
         cartTriggerVariant={cartTriggerVariant}
+        cartFeaturedProducts={cartFeaturedProducts}
+        showCartPromotedProduct={showCartDrawerPromotedProduct}
         search={search}
         actionSlot={headerActionSlot}
       />
@@ -299,7 +305,10 @@ function StorefrontChromeShell({
         onSubscribe={(email) => onNewsletterSubscribe?.(email, "newsletter-popup") ?? Promise.resolve()}
       />
       {cartTriggerVariant === "drawer" && storefrontConfig?.features.cart !== false ? (
-        <CartDrawer featuredProduct={featuredProduct} showPromotedProduct={showCartDrawerPromotedProduct} />
+        <CartDrawer
+          featuredProducts={cartFeaturedProducts}
+          showPromotedProduct={showCartDrawerPromotedProduct}
+        />
       ) : null}
       {assistantOverlaySlot}
       <ToastContainer />
