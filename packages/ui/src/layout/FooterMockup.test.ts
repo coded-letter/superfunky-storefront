@@ -22,7 +22,7 @@ test("filters footer social links by backend platform keys while still honoring 
 
 test("footer crypto marks share an intrinsic transparent presentation", () => {
   assert.match(footerSource, /cryptoCode \? "bg-transparent text-white"/);
-  assert.match(footerSource, /<CurrencyMark code=\{cryptoCode\} size=\{20\}/);
+  assert.match(footerSource, /<CurrencyMark code=\{cryptoCode\} size=\{10\}/);
   assert.match(footerSource, /role=\{cryptoCode \? "img" : undefined\}/);
   assert.match(footerSource, /cryptoCode \? "bg-transparent text-white" : "rounded-lg p-1\.5 shadow-soft"/);
 });

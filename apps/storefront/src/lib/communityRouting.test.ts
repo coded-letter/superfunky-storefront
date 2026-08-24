@@ -20,5 +20,6 @@ test("community page shortcodes render eagerly instead of waiting for scroll", (
 test("multilingual profile and author feeds filter nodes by selected language", () => {
   assert.match(profileSource, /configuredLanguageCodes\.length > 1/);
   assert.match(profileSource, /post\.languageCode\.toLowerCase\(\) === languageCode/);
-  assert.match(authorsSource, /post\.language\.code\.toLowerCase\(\) === languageCode\.toLowerCase\(\)/);
+  assert.match(authorsSource, /matchesAuthorPostLanguage\(post, normalizedRequestedLanguageCode, configuredLanguageCodes\)/);
+  assert.match(authorsSource, /if \(postLanguage\) return postLanguage === requestedLanguage;/);
 });

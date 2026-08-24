@@ -29,15 +29,17 @@ function defaultFacePreloads(css, fontAssets) {
   const available = new Map(fontAssets.map((asset) => [asset.href, asset]));
   const preloads = [];
   const families = new Set();
+  const hrefs = new Set();
   for (const match of css.matchAll(FONT_FACE_PATTERN)) {
     const block = match[1];
     const family = declaration(block, "font-family").replace(/^["']|["']$/g, "").toLowerCase();
     const style = declaration(block, "font-style").toLowerCase() || "normal";
     const weight = declaration(block, "font-weight").toLowerCase() || "400";
     const href = block.match(/url\(\s*(["']?)(\/assets\/fonts\/[^"'()]+)\1\s*\)/i)?.[2];
-    if (!href || !available.has(href) || families.has(family)) continue;
+    if (!href || !available.has(href) || families.has(family) || hrefs.has(href)) continue;
     if (style !== "normal" || !["400", "normal"].includes(weight)) continue;
     families.add(family);
+    hrefs.add(href);
     preloads.push(available.get(href));
   }
   return preloads

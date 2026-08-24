@@ -72,8 +72,7 @@ test("mountCmsScripts executes editor code, preserves attributes, and does not r
 });
 
 test("service worker caches a clone before returning the network response", () => {
-  assert.match(serviceWorkerSource, /const cacheCopy = response\.clone\(\)/);
-  assert.match(serviceWorkerSource, /await cache\.put\(request, cacheCopy\)/);
+  assert.match(serviceWorkerSource, /await cache\.put\(request, response\.clone\(\)\)/);
   assert.equal(serviceWorkerSource.match(/event\.respondWith\(/g)?.length, 2);
   assert.match(serviceWorkerSource, /const safeNetwork = network\.catch\(\(\) => null\)/);
   assert.match(serviceWorkerSource, /event\.waitUntil\(safeNetwork\.then/);

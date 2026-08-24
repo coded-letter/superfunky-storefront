@@ -11,11 +11,15 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })));
 });
 
-test("downloads remote WordPress fonts and preloads only default family faces", async () => {
+test("downloads remote WordPress fonts and preloads two distinct regular faces", async () => {
   const outputDirectory = await mkdtemp(join(tmpdir(), "storefront-fonts-"));
   temporaryDirectories.push(outputDirectory);
   const requested = [];
-  const woff2 = Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, 7)]);
+  const fontBytes = new Map([
+    ["https://cms.test/display.woff2", Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, 7)])],
+    ["https://cms.test/body.woff2", Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, 8)])],
+    ["https://cms.test/body-italic.woff2", Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, 9)])],
+  ]);
   const result = await localizeStaticFontAssets(`
     @font-face{font-family:"Display";font-style:normal;font-weight:400;src:url("https://cms.test/display.woff2") format("woff2")}
     @font-face{font-family:"Body";font-style:normal;font-weight:400;src:url("https://cms.test/body.woff2") format("woff2")}
@@ -24,18 +28,37 @@ test("downloads remote WordPress fonts and preloads only default family faces", 
     outputDirectory,
     fetchImpl: async (url) => {
       requested.push(url);
-      return new Response(woff2, { headers: { "content-type": "font/woff2" } });
+      return new Response(fontBytes.get(url), { headers: { "content-type": "font/woff2" } });
     },
   });
 
   assert.equal(requested.length, 3);
   assert.doesNotMatch(result.css, /https:\/\/cms\.test/);
   assert.equal(result.fontAssets.length, 3);
-  assert.equal(result.preloadAssets.length, 1);
-  for (const { href } of result.fontAssets) {
+  assert.equal(result.preloadAssets.length, 2);
+  assert.deepEqual(
+    result.preloadAssets.map(({ href }) => href).sort(),
+    result.fontAssets.slice(0, 2).map(({ href }) => href).sort(),
+  );
+  for (const [index, { href }] of result.fontAssets.entries()) {
     const stored = await readFile(join(outputDirectory, href));
-    assert.deepEqual(stored, woff2);
+    assert.deepEqual(stored, fontBytes.get(requested[index]));
   }
+});
+
+test("deduplicates preloads when different font faces share one localized binary", async () => {
+  const outputDirectory = await mkdtemp(join(tmpdir(), "storefront-fonts-"));
+  temporaryDirectories.push(outputDirectory);
+  const woff2 = Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, 7)]);
+  const result = await localizeStaticFontAssets(`
+    @font-face{font-family:"Display";font-style:normal;font-weight:400;src:url("https://cms.test/display.woff2") format("woff2")}
+    @font-face{font-family:"Body";font-style:normal;font-weight:400;src:url("https://cms.test/body.woff2") format("woff2")}
+  `, {
+    outputDirectory,
+    fetchImpl: async () => new Response(woff2, { headers: { "content-type": "font/woff2" } }),
+  });
+
+  assert.equal(result.preloadAssets.length, 1);
 });
 
 test("rejects non-font responses instead of publishing untrusted bytes", async () => {

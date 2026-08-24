@@ -1,6 +1,6 @@
 // FunkyCommerce service worker for installable/offline behavior and notifications sent
-// by the protected WordPress backend. Baseline registration lives in
-// `public/register-service-worker.js`; push synchronization lives in `src/lib/push.ts`.
+// by the protected WordPress backend. Registration and push synchronization live in
+// `src/lib/push.ts` and start only after the React application activates.
 
 const VERSION = "__FUNKYCOMMERCE_BUILD_VERSION__";
 const APP_SHELL_CACHE = `funkycommerce-shell-${VERSION}`;

@@ -164,11 +164,12 @@ test("the frontend saved-list adapters match the shared PersistedIdCollectionRem
 test("wishlist and reading-list mockup pages surface syncError and the authenticated cap", () => {
   const wishlistPage = readFileSync(new URL("../pages/WishlistMockupPage.tsx", import.meta.url), "utf8");
   const readingListPage = readFileSync(new URL("../pages/ReadingListMockupPage.tsx", import.meta.url), "utf8");
-  for (const page of [wishlistPage, readingListPage]) {
+  for (const [namespace, page] of [["wishlist", wishlistPage], ["reading_list", readingListPage]]) {
     assert.match(page, /syncError/);
     assert.match(page, /capError/);
     assert.match(page, /useSavedListCap/);
-    assert.match(page, /synced to your account/);
+    assert.match(page, new RegExp(`t\\("${namespace}\\.sync_synced"\\)`));
+    assert.match(page, new RegExp(`t\\("${namespace}\\.sync_local"\\)`));
   }
 });
 

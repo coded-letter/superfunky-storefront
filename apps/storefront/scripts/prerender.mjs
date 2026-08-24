@@ -1410,8 +1410,8 @@ async function renderRoute(route) {
   const routeSnapshot = completeCmsSnapshot || generatedRouteSnapshot;
   // Extract the actual LCP image from the rendered snapshot — the image that already has
   // fetchpriority="high" set by optimizeStaticCmsHtml / selectStaticPriorityImageIndex.
-  // We prefer data-prerender-src (the CDN-transformed src) then fall back to src so the
-  // preload link always matches the rendered <img> exactly.
+  // The priority image keeps its optimized src, so the preload link can match the
+  // rendered <img> exactly.
   const lcpImgMatch = routeSnapshot.match(/<img\b([^>]*\bfetchpriority=(["'])high\2[^>]*)>/i);
   const lcpImgAttrs = lcpImgMatch?.[1] ?? "";
   const heroImageRaw =

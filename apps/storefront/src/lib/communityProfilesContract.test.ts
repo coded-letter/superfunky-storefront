@@ -27,7 +27,8 @@ test("public profiles resolve fresh header media before the full profile payload
   assert.match(client, /export async function getCommunityProfileMember/);
   assert.match(client, /query StorefrontCommunityProfileMember\(\$handle: String!\)/);
   assert.match(profilePage, /getCommunityProfileMember\(handle\)/);
-  assert.match(profilePage, /!authoritativeMember && isProfileLoading/);
+  assert.match(profilePage, /const liveMember = authoritativeMember \|\|/);
+  assert.match(profilePage, /if \(!user && \(isLoading \|\| isRevalidating \|\| isProfileLoading\)\)/);
 });
 
 test("normalized social graph owns accepted and pending transitions", () => {
@@ -59,7 +60,9 @@ test("access-aware profile contracts keep locked summaries but gate content", ()
   assert.match(client, /getCommunityProfileConnection/);
   assert.match(client, /"pendingFollowRequests"/);
   assert.match(profilePage, /Request access to see/);
-  assert.match(profilePage, /Posts from followed profiles/);
+  assert.match(profilePage, /t\("community\.feed\.following_title"\)/);
+  assert.match(profilePage, /const canViewFeed = user\.canAccess \|\| isOwnProfile/);
+  assert.match(profilePage, /\{!canViewFeed \? \(/);
   assert.match(accountPage, /Pending requests/);
   assert.match(accountPage, /loadMoreFollowerDashboard/);
 });
@@ -71,7 +74,7 @@ test("profile products are filtered and capped in database queries", () => {
   assert.match(backend, /'key'\s*=>\s*'_seller_user_id'[\s\S]*?'compare'\s*=>\s*'IN'/);
   assert.match(
     backend,
-    /'CommunityMemberProfile',\s*'products'[\s\S]*?funkycommerce_get_seller_product_ids\( array\( \$user->ID \), 100 \)/,
+    /'CommunityMemberProfile',\s*'products'[\s\S]*?funkycommerce_get_seller_product_ids\( array\( \$user->ID \), 100, \$language \)/,
   );
   assert.doesNotMatch(
     backend,
