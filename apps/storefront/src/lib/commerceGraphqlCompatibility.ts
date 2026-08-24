@@ -160,6 +160,7 @@ export function isMissingProductRootSchemaError(errors: { message: string }[] | 
 export function isMissingProductOptionalFieldSchemaError(errors: { message: string }[] | undefined): boolean {
   return Boolean(errors?.length) && Boolean(errors?.every(({ message }) => (
     isDanglingProductLanguageTypeError(message)
+    || /unknown type "languagecodefilterenum"/i.test(message)
     || /cannot query field "productbrands" on type "(?:product|simpleproduct|variableproduct|externalproduct|groupproduct)"/i.test(message)
     || hasOnlyMissingGraphqlFields([{ message }], PRODUCT_OPTIONAL_FIELD_COMPATIBILITY_FIELDS)
   )));

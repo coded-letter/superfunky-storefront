@@ -263,7 +263,7 @@ export function ProductCard({
         setIsQuickViewOpen(true);
       } else {
         playAction("navigation");
-        navigate(product.href ?? `/shop/${encodeURIComponent(product.id)}`);
+        navigate(product.href || "/shop");
       }
       return;
     }
@@ -582,7 +582,7 @@ export function ProductCard({
             </a>
           ) : showLearnMore || product.productType === "external" || product.productType === "grouped" ? (
             <Link
-              to={product.href ?? `/shop/${encodeURIComponent(product.id)}`}
+              to={product.href || "/shop"}
               onClick={() => playAction("navigation")}
               className="flex flex-1 items-center justify-center rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
             >

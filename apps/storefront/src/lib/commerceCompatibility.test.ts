@@ -17,6 +17,8 @@ import {
   type CommerceGraphqlRequester,
 } from "./commerceGraphqlCompatibility.ts";
 import {
+  COMPATIBLE_FEATURED_PRODUCT_QUERY,
+  CORE_FEATURED_PRODUCT_QUERY,
   FEATURED_PRODUCT_QUERY,
   PRODUCT_LIST_CARD_FIELDS,
   mapProductCard,
@@ -61,9 +63,54 @@ test("featured WooCommerce products are preserved for the empty-cart promotion",
   };
 
   assert.equal(mapProductCard(product).featured, true);
-  assert.match(FEATURED_PRODUCT_QUERY, /products\(first: 1, where: \{ featured: true, language: \$language \}\)/);
-  assert.match(appSource, /getFeaturedProduct\(languageBackendCode\)/);
-  assert.match(appSource, /featuredProduct=\{isBackendConfigured \? featuredProduct \?\? undefined : MOCK_PRODUCTS\[0\]\}/);
+  assert.match(
+    FEATURED_PRODUCT_QUERY,
+    /products\(first: \$first, after: \$after, where: \{ featured: true, language: \$language \}\)/,
+  );
+  assert.match(FEATURED_PRODUCT_QUERY, /pageInfo \{ hasNextPage endCursor \}/);
+  assert.match(COMPATIBLE_FEATURED_PRODUCT_QUERY, /language: \$language/);
+  assert.doesNotMatch(COMPATIBLE_FEATURED_PRODUCT_QUERY, /\bproductBrands\b/);
+  assert.doesNotMatch(CORE_FEATURED_PRODUCT_QUERY, /language: \$language/);
+  assert.match(FEATURED_PRODUCT_QUERY, /variations\(first: 50\)/);
+  assert.match(appSource, /getFeaturedProducts\(languageBackendCode, showAllCartPromotedProducts\)/);
+  assert.match(appSource, /featuredProducts=\{isBackendConfigured \? featuredProducts \?\? \[] : MOCK_PRODUCTS\.slice\(0, 4\)\}/);
+});
+
+test("variable product cards preserve parent stock when the backend exposes no variations", () => {
+  const product: RawProductCard = {
+    __typename: "VariableProduct",
+    id: "out-of-stock-variable",
+    databaseId: 4971,
+    slug: "out-of-stock-variable",
+    uri: "/product/out-of-stock-variable/",
+    name: "Out-of-stock variable",
+    shortDescription: null,
+    engagementRating: {
+      average: null,
+      count: 0,
+      guestCount: 0,
+      authoredCount: 0,
+      histogram: [0, 0, 0, 0, 0],
+    },
+    featured: true,
+    onSale: false,
+    image: null,
+    galleryImages: null,
+    productCategories: null,
+    productTags: null,
+    productBrands: null,
+    price: null,
+    regularPrice: null,
+    salePrice: null,
+    stockStatus: "OUT_OF_STOCK",
+    stockQuantity: null,
+    variations: { nodes: [] },
+  };
+
+  const card = mapProductCard(product);
+  assert.equal(card.inStock, false);
+  assert.equal(card.stockStatus, "OUT_OF_STOCK");
+  assert.equal(card.variations?.length, 0);
 });
 
 test("product detail fallback removes optional fields without losing core commerce data", () => {

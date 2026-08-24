@@ -40,7 +40,7 @@ import { searchStorefront } from "./lib/search";
 import { submitNewsletterSubmission } from "./lib/submissions";
 import { isBackendConfigured, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { useIncrementalData } from "@funky/sdk/react";
-import { getFeaturedProduct } from "./lib/commerce";
+import { getFeaturedProducts } from "./lib/commerce";
 import { mountCmsScripts } from "./lib/pageScripts";
 import { getExistingSubscription, getPushPreferences, subscribeToPush, unsubscribeFromPush } from "./lib/push";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -90,10 +90,14 @@ function ConnectedStorefrontChrome() {
   const t = useT();
   const { showToast } = useToast();
   const { viewer, refresh: refreshCommunity } = useCommunityData();
-  const { showCartDrawerPromotedProduct, showHeaderPublishButton } = useLayoutPreferences();
-  const { data: featuredProduct } = useIncrementalData(
-    `cart-featured-product:v1:${languageCode}`,
-    () => getFeaturedProduct(languageBackendCode),
+  const {
+    showCartDrawerPromotedProduct,
+    showAllCartPromotedProducts,
+    showHeaderPublishButton,
+  } = useLayoutPreferences();
+  const { data: featuredProducts } = useIncrementalData(
+    `cart-featured-products:v2:${languageCode}:${showAllCartPromotedProducts ? "all" : "single"}`,
+    () => getFeaturedProducts(languageBackendCode, showAllCartPromotedProducts),
     isBackendConfigured && showCartDrawerPromotedProduct,
   );
   const [isCommunityPublishOpen, setIsCommunityPublishOpen] = useState(false);
@@ -208,7 +212,7 @@ function ConnectedStorefrontChrome() {
   return (
     <>
       <StorefrontChromeMockup
-        featuredProduct={isBackendConfigured ? featuredProduct ?? undefined : MOCK_PRODUCTS[0]}
+        featuredProducts={isBackendConfigured ? featuredProducts ?? [] : MOCK_PRODUCTS.slice(0, 4)}
         primaryNavigation={hideCheckoutNavigation ? [] : headerNavigation}
         mobileNavigation={hideCheckoutNavigation ? [] : mobileNavigation}
         footerColumns={hideCheckoutNavigation ? [] : footerColumns}

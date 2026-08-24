@@ -70,6 +70,9 @@ export type LayoutPreferencesState = {
   /** Whole cart-drawer "you might like" promoted-product suggestion, shown while the
    * drawer is empty, on/off. `true` (default). */
   showCartDrawerPromotedProduct: boolean;
+  /** When enabled, empty-cart recommendations include every featured product instead
+   * of only the first one. `false` by default for backwards-compatible payload size. */
+  showAllCartPromotedProducts: boolean;
   /** Whole footer on/off. `true` (default). */
   showFooter: boolean;
   footerColumnsLayout: FooterColumnsLayout;
@@ -188,6 +191,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   showHeaderPublishButton: true,
   cartTriggerVariant: "drawer",
   showCartDrawerPromotedProduct: true,
+  showAllCartPromotedProducts: false,
   showFooter: true,
   footerColumnsLayout: "grid-4",
   footerNewsletterLayout: "banner",
@@ -267,6 +271,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setShowHeaderPublishButton: (value: boolean) => void;
   setCartTriggerVariant: (value: CartTriggerVariant) => void;
   setShowCartDrawerPromotedProduct: (value: boolean) => void;
+  setShowAllCartPromotedProducts: (value: boolean) => void;
   setShowFooter: (value: boolean) => void;
   setFooterColumnsLayout: (value: FooterColumnsLayout) => void;
   setFooterNewsletterLayout: (value: FooterNewsletterLayout) => void;
@@ -370,6 +375,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [cartTriggerVariant, setCartTriggerVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.cartTriggerVariant);
   const [showCartDrawerPromotedProduct, setShowCartDrawerPromotedProduct] = useState(
     DEFAULT_LAYOUT_PREFERENCES.showCartDrawerPromotedProduct,
+  );
+  const [showAllCartPromotedProducts, setShowAllCartPromotedProducts] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.showAllCartPromotedProducts,
   );
   const [showFooter, setShowFooter] = useState(DEFAULT_LAYOUT_PREFERENCES.showFooter);
   const [footerColumnsLayout, setFooterColumnsLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.footerColumnsLayout);
@@ -510,6 +518,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       showHeaderPublishButton,
       cartTriggerVariant,
       showCartDrawerPromotedProduct,
+      showAllCartPromotedProducts,
       showFooter,
       footerColumnsLayout,
       footerNewsletterLayout,
@@ -584,6 +593,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setShowHeaderPublishButton,
       setCartTriggerVariant,
       setShowCartDrawerPromotedProduct,
+      setShowAllCartPromotedProducts,
       setShowFooter,
       setFooterColumnsLayout,
       setFooterNewsletterLayout,
@@ -665,6 +675,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       showHeaderPublishButton,
       cartTriggerVariant,
       showCartDrawerPromotedProduct,
+      showAllCartPromotedProducts,
       showFooter,
       footerColumnsLayout,
       footerNewsletterLayout,

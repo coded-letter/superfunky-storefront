@@ -37,6 +37,7 @@ import { useLayoutPreferences, useReadingList, useCart, useTheme, useWishlist } 
 import { CartDropdown } from "./CartDropdown";
 import { SearchAutocomplete, type SearchAutocompleteProps } from "./SearchAutocomplete";
 import { ResponsiveImage } from "../media";
+import type { ProductCardData } from "../catalog/ProductCard";
 import { getMegaMenuConfiguration, isMenuInitiallyExpanded } from "./menuClasses";
 import { MenuDescription } from "./MenuDescription";
 import { SafeHtmlContent } from "./SafeHtmlContent";
@@ -136,6 +137,8 @@ export type HeaderMockupProps = {
   announcementScrollEffect?: boolean;
   /** Which cart-trigger presentation the cart icon opens — see `CartTriggerVariant`. */
   cartTriggerVariant?: CartTriggerVariant;
+  cartFeaturedProducts?: ProductCardData[];
+  showCartPromotedProduct?: boolean;
   actionSlot?: ReactNode;
 };
 
@@ -253,6 +256,8 @@ export function HeaderMockup({
   sticky = true,
   announcementScrollEffect = true,
   cartTriggerVariant = "drawer",
+  cartFeaturedProducts = [],
+  showCartPromotedProduct = true,
   actionSlot,
 }: HeaderMockupProps) {
   const t = useT();
@@ -537,7 +542,12 @@ export function HeaderMockup({
                   {cartBadgeCount > 0 ? <BadgeCount count={cartBadgeCount} /> : null}
                 </button>
                 {cartTriggerVariant === "dropdown" ? (
-                  <CartDropdown isOpen={isCartDropdownOpen} onClose={() => setIsCartDropdownOpen(false)} />
+                  <CartDropdown
+                    isOpen={isCartDropdownOpen}
+                    onClose={() => setIsCartDropdownOpen(false)}
+                    featuredProducts={cartFeaturedProducts}
+                    showPromotedProduct={showCartPromotedProduct}
+                  />
                 ) : null}
               </div>
             ) : null}

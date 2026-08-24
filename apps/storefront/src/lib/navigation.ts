@@ -128,6 +128,7 @@ export type StorefrontLayoutConfiguration = {
   headerLogoVariant: HeaderLogoVariant;
   cartTriggerVariant: CartTriggerVariant;
   showCartDrawerPromotedProduct: boolean;
+  showAllCartPromotedProducts: boolean;
   showFooter: boolean;
   footerColumnsLayout: FooterColumnsLayout;
   footerNewsletterLayout: FooterNewsletterLayout;
@@ -367,6 +368,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   headerLogoVariant: "text-image",
   cartTriggerVariant: "drawer",
   showCartDrawerPromotedProduct: true,
+  showAllCartPromotedProducts: false,
   showFooter: true,
   footerColumnsLayout: "grid-4",
   footerNewsletterLayout: "banner",
@@ -664,6 +666,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         headerLogoVariant
         cartTriggerVariant
         showCartDrawerPromotedProduct
+        showAllCartPromotedProducts
         showFooter
         footerColumnsLayout
         footerNewsletterLayout
@@ -1503,6 +1506,7 @@ export function normalizeStorefrontLayoutConfiguration(
     headerLogoVariant: pickEnum(source.headerLogoVariant, ["text", "image", "text-image"] as const, defaults.headerLogoVariant),
     cartTriggerVariant: pickEnum(source.cartTriggerVariant, ["drawer", "dropdown"] as const, defaults.cartTriggerVariant),
     showCartDrawerPromotedProduct: pickBoolean(source.showCartDrawerPromotedProduct, defaults.showCartDrawerPromotedProduct),
+    showAllCartPromotedProducts: pickBoolean(source.showAllCartPromotedProducts, defaults.showAllCartPromotedProducts),
     showFooter: pickBoolean(source.showFooter, defaults.showFooter),
     footerColumnsLayout: pickEnum(
       source.footerColumnsLayout,
