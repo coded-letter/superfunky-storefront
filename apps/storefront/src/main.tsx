@@ -16,6 +16,9 @@ const FONT_SETTLE_TIMEOUT_MS = 600;
 const RELOAD_FONT_SETTLE_TIMEOUT_MS = 3_000;
 const SCROLL_RELOAD_STATE_KEY = "storefront:scroll-reload-state";
 const prerenderRoot = hasPrerenderedContent ? initialRoot : null;
+const prerenderActivationMode = prerenderRoot
+  ?.querySelector<HTMLElement>("[data-prerender-activation]")
+  ?.dataset.prerenderActivation;
 const isFlagshipStorefront = (() => {
   try {
     const configuredSiteUrl = import.meta.env.VITE_SITE_URL?.trim() || location.origin;
@@ -486,6 +489,14 @@ const removeActivationListeners = () => {
   removePreparationListeners();
   prerenderRoot?.removeEventListener("click", activateLanguageSwitcher);
   initialRoot.removeEventListener("click", activateStaticControl, true);
+};
+const scheduleIdleActivation = () => {
+  if (activationRequested) return;
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(requestReactActivation, { timeout: 500 });
+  } else {
+    window.setTimeout(requestReactActivation, 250);
+  }
 };
 const activateLanguageSwitcher = (event: MouseEvent) => {
   const target = event.target as Element | null;
@@ -1007,20 +1018,28 @@ if (!prerenderRoot) {
     scheduleManagedStorefrontActivation();
   }
 } else {
-  try {
-    window.addEventListener("load", () => {
-      if (localStorage.getItem(RETURNING_PREPARATION_KEY) === "1") {
-        const prepare = () => void prepareApplication().catch((error) => {
-          console.error("Storefront repeat-visit preparation failed.", error);
-        });
-        if ("requestIdleCallback" in window) {
-          window.requestIdleCallback(prepare, { timeout: 2_000 });
-        } else {
-          window.setTimeout(prepare, 1_000);
+  if (prerenderActivationMode === "idle") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleIdleActivation, { once: true });
+    } else {
+      scheduleIdleActivation();
+    }
+  } else {
+    try {
+      window.addEventListener("load", () => {
+        if (localStorage.getItem(RETURNING_PREPARATION_KEY) === "1") {
+          const prepare = () => void prepareApplication().catch((error) => {
+            console.error("Storefront repeat-visit preparation failed.", error);
+          });
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(prepare, { timeout: 2_000 });
+          } else {
+            window.setTimeout(prepare, 1_000);
+          }
         }
-      }
-    }, { once: true });
-  } catch {
-    // Static delivery remains fully functional when storage is unavailable.
+      }, { once: true });
+    } catch {
+      // Static delivery remains fully functional when storage is unavailable.
+    }
   }
 }
