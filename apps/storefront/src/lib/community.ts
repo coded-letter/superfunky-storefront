@@ -13,7 +13,10 @@ import { filterTranslationCandidates } from "./translationCandidates.ts";
 import { communityHandleFromUser, isCommunityArchiveAuthor } from "./communityProfiles.ts";
 import { resolveCommerceProductType } from "@funky/commerce";
 import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings.ts";
-import { removeGraphqlFieldSelections } from "./graphqlFieldFallback.ts";
+import {
+  removeGraphqlFieldSelections,
+  removeNestedGraphqlFieldSelections,
+} from "./graphqlFieldFallback.ts";
 
 export type CommunityMember = {
   databaseId: number;
@@ -254,7 +257,7 @@ type RawComment = {
   parentId: string | null;
   parentDatabaseId: number | null;
   rating: number | null;
-  author: { node: { name: string | null } | null } | null;
+  author?: { node: { name: string | null } | null } | null;
 };
 
 type RawCommunityPost = {
@@ -992,6 +995,13 @@ async function communityGraphqlRequest<T>(
     );
     response = await graphqlRequest<T>(compatibleQuery, variables, token);
   }
+  const commentAuthorUnavailable = response.errors?.some(({ message }) =>
+    message === "Internal server error" && compatibleQuery.includes("comments(")
+  );
+  if (commentAuthorUnavailable) {
+    compatibleQuery = removeNestedGraphqlFieldSelections(compatibleQuery, "comments", "author");
+    response = await graphqlRequest<T>(compatibleQuery, variables, token);
+  }
   const translationsFieldUnavailable = response.errors?.some(({ message }) =>
     /Cannot query field "funkycommerceTranslations" on type/.test(message)
   );
@@ -1380,7 +1390,7 @@ export async function getCommunityProfileConnection(
       }
     }
   }`;
-  const { data, errors } = await graphqlRequest<{
+  const { data, errors } = await communityGraphqlRequest<{
     communityProfileByHandle: Record<"followers" | "following" | "pendingFollowRequests", RawCommunityProfileConnection> | null;
   }>(query, { handle, after }, token);
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
