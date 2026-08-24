@@ -13,6 +13,13 @@ import { buildStoreCheckoutPayload } from "./checkoutContext";
 import { BACKEND_ORIGIN, graphqlRequest, isBackendConfigured } from "@funky/sdk";
 import { getStripe } from "./stripe";
 import {
+  type CryptoAsset,
+  type PaymentGatewayCacheSeed,
+  type PaymentGatewayNode,
+  parsePaymentGatewayCacheSeed,
+  restorePaymentGatewayCache,
+} from "./paymentGatewayCache";
+import {
   buildStripePaymentData,
   buildStripeOrderStatusRequest,
   parseStripeConfirmationRedirect,
@@ -55,15 +62,7 @@ const PAYMENT_GATEWAYS_QUERY = /* GraphQL */ `
   }
 `;
 
-type PaymentGatewayNode = { id: string; title: string; description?: string | null };
-export type CryptoAsset = {
-  code: string;
-  label: string;
-  network: string;
-  wallet: string;
-  fiatRate: number;
-  qrUrl?: string | null;
-};
+export type { CryptoAsset } from "./paymentGatewayCache";
 type PaymentGatewaysResult = {
   paymentGateways: { nodes: PaymentGatewayNode[] } | null;
   funkycommerceStorefrontConfig: {
@@ -77,14 +76,97 @@ type PaymentGatewaySnapshot = {
   cryptoAssets: CryptoAsset[];
 };
 
-let cachedGatewaySnapshot: PaymentGatewaySnapshot | null = null;
+type PersistedPaymentGatewayCache = PaymentGatewayCacheSeed & {
+  cachedAt: number;
+};
+
+const PAYMENT_GATEWAY_CACHE_KEY = "storefront:payment-gateways:v1";
+const PAYMENT_GATEWAY_FRESH_MS = 10 * 60 * 1_000;
+
+function snapshotFromSeed(seed: PaymentGatewayCacheSeed): PaymentGatewaySnapshot {
+  return {
+    ids: new Set(seed.gateways.map(({ id }) => id)),
+    gateways: new Map(seed.gateways.map((gateway) => [gateway.id, gateway])),
+    cryptoAssets: seed.cryptoAssets,
+  };
+}
+
+function readPrerenderedGatewaySnapshot(): PaymentGatewaySnapshot | null {
+  if (typeof document === "undefined") return null;
+  const serialized = document.getElementById("storefront-payment-gateway-cache")?.textContent;
+  if (!serialized) return null;
+  try {
+    const seed = parsePaymentGatewayCacheSeed(JSON.parse(serialized));
+    if (!seed) {
+      console.warn("Prerendered payment-gateway cache was rejected because it is malformed.");
+      return null;
+    }
+    return snapshotFromSeed(seed);
+  } catch (error) {
+    console.warn("Prerendered payment-gateway cache could not be restored.", error);
+    return null;
+  }
+}
+
+function readPersistedGatewaySnapshot(): { snapshot: PaymentGatewaySnapshot; cachedAt: number } | null {
+  if (typeof localStorage === "undefined") return null;
+  const discardPersistedCache = () => {
+    try {
+      localStorage.removeItem(PAYMENT_GATEWAY_CACHE_KEY);
+    } catch (error) {
+      console.warn("Invalid payment-gateway cache could not be removed.", error);
+    }
+  };
+  try {
+    const serialized = localStorage.getItem(PAYMENT_GATEWAY_CACHE_KEY);
+    const restored = restorePaymentGatewayCache(serialized);
+    if (!restored) {
+      if (serialized) discardPersistedCache();
+      return null;
+    }
+    return {
+      snapshot: snapshotFromSeed(restored.seed),
+      cachedAt: restored.cachedAt,
+    };
+  } catch (error) {
+    discardPersistedCache();
+    console.warn("Payment-gateway cache could not be restored.", error);
+    return null;
+  }
+}
+
+function persistGatewaySnapshot(snapshot: PaymentGatewaySnapshot, cachedAt: number) {
+  if (typeof localStorage === "undefined") return;
+  const payload: PersistedPaymentGatewayCache = {
+    cachedAt,
+    gateways: Array.from(snapshot.gateways.values()),
+    cryptoAssets: snapshot.cryptoAssets,
+  };
+  try {
+    localStorage.setItem(PAYMENT_GATEWAY_CACHE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Payment-gateway cache could not be persisted.", error);
+  }
+}
+
+const persistedGatewayCache = readPersistedGatewaySnapshot();
+let cachedGatewaySnapshot = persistedGatewayCache?.snapshot || readPrerenderedGatewaySnapshot();
+let cachedGatewayAt = persistedGatewayCache?.cachedAt || 0;
 let inFlight: Promise<PaymentGatewaySnapshot> | null = null;
 
 function fetchEnabledGatewaySnapshot(): Promise<PaymentGatewaySnapshot> {
-  if (cachedGatewaySnapshot) return Promise.resolve(cachedGatewaySnapshot);
+  if (cachedGatewaySnapshot && Date.now() - cachedGatewayAt < PAYMENT_GATEWAY_FRESH_MS) {
+    return Promise.resolve(cachedGatewaySnapshot);
+  }
   if (inFlight) return inFlight;
 
-  inFlight = graphqlRequest<PaymentGatewaysResult>(PAYMENT_GATEWAYS_QUERY).then(({ data }) => {
+  inFlight = graphqlRequest<PaymentGatewaysResult>(PAYMENT_GATEWAYS_QUERY).then(({ data, errors }) => {
+    if (errors?.length) {
+      throw new Error(errors.map(({ message }) => message).join("; "));
+    }
+    if (!data?.paymentGateways) {
+      throw new Error("The payment-gateway query returned no gateway data.");
+    }
     const gatewayNodes = data?.paymentGateways?.nodes ?? [];
     const snapshot = {
       ids: new Set(gatewayNodes.map((node) => node.id)),
@@ -92,7 +174,11 @@ function fetchEnabledGatewaySnapshot(): Promise<PaymentGatewaySnapshot> {
       cryptoAssets: data?.funkycommerceStorefrontConfig?.cryptoAssets ?? [],
     };
     cachedGatewaySnapshot = snapshot;
+    cachedGatewayAt = Date.now();
+    persistGatewaySnapshot(snapshot, cachedGatewayAt);
     return snapshot;
+  }).finally(() => {
+    inFlight = null;
   });
   return inFlight;
 }
@@ -118,6 +204,35 @@ export type PaymentGatewayAvailability = {
   loaded: boolean;
 };
 
+function paymentGatewayAvailability(
+  snapshot: PaymentGatewaySnapshot | null,
+  currencyCode?: string,
+): PaymentGatewayAvailability {
+  const cryptoAssets = (snapshot?.cryptoAssets ?? []).filter(
+    (asset) => typeof asset.fiatRate === "number" && asset.fiatRate > 0,
+  );
+  return {
+    isStripeGatewayEnabled: snapshot?.ids.has("stripe") ?? false,
+    isBlikAvailable: currencyCode === "PLN" && (snapshot?.ids.has("stripe_blik") ?? false),
+    isCryptoAvailable:
+      (snapshot?.ids.has("funkycommerce_crypto") ?? false) &&
+      cryptoAssets.length > 0,
+    cryptoGatewayTitle: snapshot?.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
+    cryptoGatewayDescription:
+      snapshot?.gateways.get("funkycommerce_crypto")?.description ||
+      "Pay directly with one of the configured store wallets.",
+    cryptoAssets,
+    isCodAvailable: snapshot?.ids.has("cod") ?? false,
+    isBacsAvailable: snapshot?.ids.has("bacs") ?? false,
+    isCheckAvailable: snapshot?.ids.has("cheque") ?? false,
+    loaded: Boolean(snapshot),
+  };
+}
+
+export function getCachedPaymentGatewayAvailability(currencyCode?: string): PaymentGatewayAvailability {
+  return paymentGatewayAvailability(cachedGatewaySnapshot, currencyCode);
+}
+
 /** Live payment-gateway availability, sourced from WPGraphQL's `paymentGateways` query
  * (public, confirmed working on the live backend — lists whichever gateways are
  * actually enabled in wp-admin, so this never drifts out of sync with the real store
@@ -126,45 +241,18 @@ export type PaymentGatewayAvailability = {
  * its plugin/account/currency availability is represented by the `stripe_blik` node.
  * For Crypto, checks the real gateway plus whether at least one wallet asset is configured. */
 export function usePaymentGateways(currencyCode?: string): PaymentGatewayAvailability {
-  const [state, setState] = useState<PaymentGatewayAvailability>({
-    isStripeGatewayEnabled: cachedGatewaySnapshot?.ids.has("stripe") ?? false,
-    isBlikAvailable: currencyCode === "PLN" && (cachedGatewaySnapshot?.ids.has("stripe_blik") ?? false),
-    isCryptoAvailable:
-      (cachedGatewaySnapshot?.ids.has("funkycommerce_crypto") ?? false) &&
-      (cachedGatewaySnapshot?.cryptoAssets.length ?? 0) > 0,
-    cryptoGatewayTitle: cachedGatewaySnapshot?.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
-    cryptoGatewayDescription:
-      cachedGatewaySnapshot?.gateways.get("funkycommerce_crypto")?.description ||
-      "Pay directly with one of the configured store wallets.",
-    cryptoAssets: cachedGatewaySnapshot?.cryptoAssets ?? [],
-    isCodAvailable: cachedGatewaySnapshot?.ids.has("cod") ?? false,
-    isBacsAvailable: cachedGatewaySnapshot?.ids.has("bacs") ?? false,
-    isCheckAvailable: cachedGatewaySnapshot?.ids.has("cheque") ?? false,
-    loaded: Boolean(cachedGatewaySnapshot),
-  });
+  const [state, setState] = useState<PaymentGatewayAvailability>(() =>
+    getCachedPaymentGatewayAvailability(currencyCode));
 
   useEffect(() => {
     if (!isBackendConfigured) return;
     let cancelled = false;
     void fetchEnabledGatewaySnapshot().then((snapshot) => {
       if (!cancelled) {
-        setState({
-          isStripeGatewayEnabled: snapshot.ids.has("stripe"),
-          isBlikAvailable: currencyCode === "PLN" && snapshot.ids.has("stripe_blik"),
-          isCryptoAvailable:
-            snapshot.ids.has("funkycommerce_crypto") &&
-            snapshot.cryptoAssets.length > 0,
-          cryptoGatewayTitle: snapshot.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
-          cryptoGatewayDescription:
-            snapshot.gateways.get("funkycommerce_crypto")?.description ||
-            "Pay directly with one of the configured store wallets.",
-          cryptoAssets: snapshot.cryptoAssets,
-          isCodAvailable: snapshot.ids.has("cod"),
-          isBacsAvailable: snapshot.ids.has("bacs"),
-          isCheckAvailable: snapshot.ids.has("cheque"),
-          loaded: true,
-        });
+        setState(paymentGatewayAvailability(snapshot, currencyCode));
       }
+    }).catch((error) => {
+      console.error("Payment-gateway configuration could not be refreshed.", error);
     });
     return () => {
       cancelled = true;

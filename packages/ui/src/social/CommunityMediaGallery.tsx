@@ -115,8 +115,8 @@ export function CommunityMediaGallery({
     ? `${activeMedia.width} / ${activeMedia.height}`
     : aspect.replace("/", " / ");
   const mediaClassName = fit === "contain-right"
-    ? "h-full w-full object-contain object-right"
-    : "h-full w-full object-cover";
+    ? "block !h-full !w-full max-w-none object-contain object-right"
+    : "block !h-full !w-full max-w-none object-cover";
 
   const togglePlayback = async () => {
     const video = videoRef.current;
@@ -204,7 +204,7 @@ export function CommunityMediaGallery({
             onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
             playsInline
             preload="none"
-            className={`h-full w-full bg-black object-center ${variant === "feed" ? "object-cover" : "object-contain"}`}
+            className={`block !h-full !w-full max-w-none bg-black object-center ${variant === "feed" ? "object-cover" : "object-contain"}`}
           >
             <source src={activeMedia.url} type={activeMedia.mimeType} />
           </video>

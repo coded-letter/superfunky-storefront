@@ -22,6 +22,7 @@ export type CommunityMember = {
   bio: string;
   avatarUrl?: string;
   role: "member" | "creator" | "collaborator";
+  memberTypes: Array<"member" | "customer" | "subscriber" | "admin" | "creator" | "collaborator">;
   isPublic: boolean;
   followerCount: number;
   followingCount: number;
@@ -227,6 +228,7 @@ type RawUser = {
   description: string | null;
   avatar: { url: string | null } | null;
   communityRole: string | null;
+  communityMemberTypes?: string[] | null;
   communityProfilePublic: boolean | null;
   followerCount?: number | null;
   followingCount?: number | null;
@@ -335,15 +337,28 @@ type RawProduct = {
 };
 
 type CommunityQueryResult = {
-  communityPosts: { nodes: RawCommunityPost[] };
+  communityPosts: {
+    nodes: RawCommunityPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
   marketplaceProducts: (RawProduct | null)[] | null;
   viewerMarketplaceProducts?: (RawProduct | null)[] | null;
 };
 
 type CommunityFeedQueryResult = {
-  communityPosts: { nodes: RawCommunityPost[] };
+  communityPosts: {
+    nodes: RawCommunityPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
   communityProfilesPublicEnabled?: boolean;
   communityFollowersEnabled?: boolean;
+};
+
+type CommunityFeedPageQueryResult = {
+  communityPosts: {
+    nodes: RawCommunityPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  } | null;
 };
 
 type CommunityArchivePostsResult = {
@@ -376,8 +391,8 @@ type RawCommunityProfile = RawUser & {
 };
 
 const COMMUNITY_QUERY = /* GraphQL */ `
-  query StorefrontCommunity($language: LanguageCodeFilterEnum, $languageSlug: String, $viewerSellerId: Int, $hasViewer: Boolean!) {
-    communityPosts(first: 100, where: { language: $language }) {
+  query StorefrontCommunity($languageSlug: String, $viewerSellerId: Int, $hasViewer: Boolean!) {
+    communityPosts(first: 100) {
       nodes {
         id
         databaseId
@@ -397,7 +412,7 @@ const COMMUNITY_QUERY = /* GraphQL */ `
         }
         canEdit
         canDelete
-        language { code }
+        language: funkycommerceLanguage { code }
         media {
           databaseId
           url
@@ -457,6 +472,7 @@ const COMMUNITY_QUERY = /* GraphQL */ `
           pageInfo { hasNextPage endCursor }
         }
       }
+      pageInfo { hasNextPage endCursor }
     }
     marketplaceProducts(first: 48, language: $languageSlug) {
       __typename
@@ -615,72 +631,88 @@ const COMMUNITY_QUERY = /* GraphQL */ `
   }
 `;
 
-const COMMUNITY_FEED_QUERY = /* GraphQL */ `
-  query StorefrontCommunityFeed($language: LanguageCodeFilterEnum) {
-    communityPosts(first: 12, where: { language: $language }) {
-      nodes {
-        id
-        databaseId
-        uri
-        title(format: RENDERED)
-        description
-        date
-        likesCount
-        commentCount
-        language { code }
-        engagementRating {
-          average
-          count
-          guestCount
-          authoredCount
-          histogram
-        }
-        media {
-          databaseId
-          url
-          mimeType
-          mediaType
-          altText
+const COMMUNITY_FEED_POST_FIELDS = /* GraphQL */ `
+  fragment StorefrontCommunityFeedPostFields on CommunityPost {
+    id
+    databaseId
+    uri
+    title(format: RENDERED)
+    description
+    date
+    likesCount
+    commentCount
+    language: funkycommerceLanguage { code }
+    engagementRating {
+      average
+      count
+      guestCount
+      authoredCount
+      histogram
+    }
+    media {
+      databaseId
+      url
+      mimeType
+      mediaType
+      altText
+      width
+      height
+      srcSet
+      sizes
+    }
+    featuredImage {
+      node {
+        sourceUrl(size: LARGE)
+        srcSet(size: LARGE)
+        mediaDetails {
           width
           height
-          srcSet
-          sizes
-        }
-        featuredImage {
-          node {
-            sourceUrl(size: LARGE)
-            srcSet(size: LARGE)
-            mediaDetails {
-              width
-              height
-            }
-          }
-        }
-        communityTags {
-          nodes {
-            name
-            slug
-          }
-        }
-        author {
-          node {
-            databaseId
-            name
-            communityHandle
-            description
-            avatar(size: 192) {
-              url
-            }
-            communityCover { url }
-            communityRole
-            communityProfilePublic
-          }
         }
       }
+    }
+    communityTags {
+      nodes {
+        name
+        slug
+      }
+    }
+    author {
+      node {
+        databaseId
+        name
+        communityHandle
+        description
+        avatar(size: 192) {
+          url
+        }
+        communityCover { url }
+        communityRole
+        communityProfilePublic
+      }
+    }
+  }
+`;
+
+const COMMUNITY_FEED_QUERY = /* GraphQL */ `
+  query StorefrontCommunityFeed {
+    communityPosts(first: 100) {
+      nodes { ...StorefrontCommunityFeedPostFields }
+      pageInfo { hasNextPage endCursor }
     }
     communityProfilesPublicEnabled
     communityFollowersEnabled
   }
+  ${COMMUNITY_FEED_POST_FIELDS}
+`;
+
+const COMMUNITY_FEED_PAGE_QUERY = /* GraphQL */ `
+  query StorefrontCommunityFeedPage($after: String) {
+    communityPosts(first: 100, after: $after) {
+      nodes { ...StorefrontCommunityFeedPostFields }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+  ${COMMUNITY_FEED_POST_FIELDS}
 `;
 
 const COMMUNITY_POST_FIELDS = /* GraphQL */ `
@@ -714,13 +746,13 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
       srcSet
       sizes
     }
-    language {
+    language: funkycommerceLanguage {
       code
     }
-    translations {
+    translations: funkycommerceTranslations {
       databaseId
       uri
-      language {
+      language: funkycommerceLanguage {
         code
       }
     }
@@ -866,11 +898,8 @@ const COMMUNITY_PROFILE_MEMBER_QUERY = /* GraphQL */ `
 `;
 
 const COMMUNITY_ARCHIVE_POSTS_QUERY = /* GraphQL */ `
-  query StorefrontCommunityArchivePosts(
-    $language: LanguageCodeFilterEnum
-    $after: String
-  ) {
-    communityPosts(first: 100, after: $after, where: { language: $language }) {
+  query StorefrontCommunityArchivePosts($after: String) {
+    communityPosts(first: 100, after: $after) {
       nodes {
         ...StorefrontCommunityPostFields
       }
@@ -890,9 +919,9 @@ const COMMUNITY_POST_QUERY = /* GraphQL */ `
   ${COMMUNITY_POST_FIELDS}
 `;
 
-const COMMUNITY_POST_BY_URI_QUERY = /* GraphQL */ `
-  query StorefrontCommunityPostByUri($uri: String!) {
-    nodeByUri(uri: $uri) {
+const COMMUNITY_POST_BY_SLUG_QUERY = /* GraphQL */ `
+  query StorefrontCommunityPostBySlug($slug: ID!) {
+    communityPost(id: $slug, idType: SLUG) {
       __typename
       ...StorefrontCommunityPostFields
     }
@@ -963,10 +992,19 @@ async function communityGraphqlRequest<T>(
     );
     response = await graphqlRequest<T>(compatibleQuery, variables, token);
   }
+  const translationsFieldUnavailable = response.errors?.some(({ message }) =>
+    /Cannot query field "funkycommerceTranslations" on type/.test(message)
+  );
+  if (translationsFieldUnavailable) {
+    compatibleQuery = removeGraphqlFieldSelections(compatibleQuery, "translations");
+    response = await graphqlRequest<T>(compatibleQuery, variables, token);
+  }
   const hasOptionalLocalization = compatibleQuery.includes("LanguageCodeFilterEnum")
     || compatibleQuery.includes("$languageSlug")
     || compatibleQuery.includes("language {")
-    || compatibleQuery.includes("translations {");
+    || compatibleQuery.includes("translations {")
+    || compatibleQuery.includes("funkycommerceLanguage")
+    || compatibleQuery.includes("funkycommerceTranslations");
   const localizationFieldsUnavailable = response.errors?.some(({ message }) => (
     [
       'Unknown type "LanguageCodeFilterEnum"',
@@ -977,11 +1015,76 @@ async function communityGraphqlRequest<T>(
     // fields on products/articles, which fail with a type-specific message on backends
     // without Polylang support for those content types.
     || /Cannot query field "(?:language|translations)" on type/.test(message)
+    || /Cannot query field "(?:funkycommerceLanguage|funkycommerceTranslations)" on type/.test(message)
     || /Unknown argument "language" on field/.test(message)
     || (hasOptionalLocalization && message === "Internal server error")
   ));
   if (!localizationFieldsUnavailable) return response;
   return graphqlRequest<T>(withoutCommunityLocalizationFields(compatibleQuery), variables, token);
+}
+
+async function loadRemainingCommunityPosts(
+  initial: {
+    nodes: RawCommunityPost[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  },
+  token?: string,
+): Promise<RawCommunityPost[]> {
+  const posts = [...initial.nodes];
+  let pageInfo = initial.pageInfo;
+  const seenCursors = new Set<string>();
+
+  while (pageInfo.hasNextPage) {
+    const after = pageInfo.endCursor;
+    if (!after || seenCursors.has(after)) {
+      throw new Error("The community post query returned an incomplete pagination cursor");
+    }
+    seenCursors.add(after);
+    const response = await communityGraphqlRequest<CommunityArchivePostsResult>(
+      COMMUNITY_ARCHIVE_POSTS_QUERY,
+      { after },
+      token,
+    );
+    if (response.errors?.length) {
+      throw new Error(response.errors.map(({ message }) => message).join("; "));
+    }
+    const connection = response.data?.communityPosts;
+    if (!connection) throw new Error("The paginated community post query returned no data");
+    posts.push(...connection.nodes);
+    pageInfo = connection.pageInfo;
+  }
+
+  return posts;
+}
+
+async function loadCommunityFeedPosts(
+  initial: CommunityFeedQueryResult["communityPosts"],
+  languageCode: string,
+): Promise<RawCommunityPost[]> {
+  const posts = [...initial.nodes];
+  let pageInfo = initial.pageInfo;
+  const seenCursors = new Set<string>();
+
+  while (pageInfo.hasNextPage && filterRawNodesByLanguage(posts, languageCode).length < 12) {
+    const after = pageInfo.endCursor;
+    if (!after || seenCursors.has(after)) {
+      throw new Error("The community feed query returned an incomplete pagination cursor");
+    }
+    seenCursors.add(after);
+    const response = await communityGraphqlRequest<CommunityFeedPageQueryResult>(
+      COMMUNITY_FEED_PAGE_QUERY,
+      { after },
+    );
+    if (response.errors?.length) {
+      throw new Error(response.errors.map(({ message }) => message).join("; "));
+    }
+    const connection = response.data?.communityPosts;
+    if (!connection) throw new Error("The paginated community feed query returned no data");
+    posts.push(...connection.nodes);
+    pageInfo = connection.pageInfo;
+  }
+
+  return posts;
 }
 
 export async function getCommunityData(languageCode: string, backendLanguageCode: string): Promise<CommunityData> {
@@ -990,7 +1093,6 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
     communityGraphqlRequest<CommunityQueryResult>(
       COMMUNITY_QUERY,
       {
-        language: backendLanguageCode,
         languageSlug: languageCode.toLowerCase(),
         viewerSellerId: auth?.user?.databaseId || null,
         hasViewer: Boolean(auth?.user?.databaseId),
@@ -1024,6 +1126,7 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
   }
 
   if (!data) throw new Error("The community query returned no data");
+  const rawCommunityPosts = await loadRemainingCommunityPosts(data.communityPosts, auth?.authToken);
 
   const members = rawMembers.map(mapMember);
   const membersById = new Map(members.map((member) => [member.databaseId, member]));
@@ -1037,12 +1140,12 @@ export async function getCommunityData(languageCode: string, backendLanguageCode
     }
     return member;
   };
-  const posts = filterCommunityPostsByLanguage(data.communityPosts.nodes.flatMap((post) => {
+  const posts = filterCommunityPostsByLanguage(rawCommunityPosts.flatMap((post) => {
     const author = post.author?.node;
     if (!author) return [];
     const member = includePublicAuthor(author);
     return [mapCommunityPost(post, member)];
-  }), languageCode);
+  }), backendLanguageCode);
 
   const seenProductIds = new Set<string>();
   const marketplaceItems = [...(data.viewerMarketplaceProducts || []), ...(data.marketplaceProducts || [])].flatMap((product) => {
@@ -1123,16 +1226,19 @@ export async function getCommunityFeedData(
 ): Promise<CommunityData> {
   const { data, errors } = await communityGraphqlRequest<CommunityFeedQueryResult>(
     COMMUNITY_FEED_QUERY,
-    { language: backendLanguageCode },
   );
   if (errors?.length) {
     throw new Error(errors.map(({ message }) => message).join("; "));
   }
   if (!data) throw new Error("The community feed query returned no data");
+  const rawCommunityPosts = await loadCommunityFeedPosts(
+    data.communityPosts,
+    backendLanguageCode || languageCode,
+  );
 
   const members: CommunityMember[] = [];
   const membersById = new Map<number, CommunityMember>();
-  const posts = filterCommunityPostsByLanguage(data.communityPosts.nodes.flatMap((post) => {
+  const posts = filterCommunityPostsByLanguage(rawCommunityPosts.flatMap((post) => {
     const author = post.author?.node;
     if (!author) return [];
     let member = membersById.get(author.databaseId);
@@ -1142,7 +1248,7 @@ export async function getCommunityFeedData(
       members.push(member);
     }
     return [mapCommunityPost(post, member)];
-  }), languageCode);
+  }), backendLanguageCode || languageCode).slice(0, 12);
 
   return {
     posts,
@@ -1163,6 +1269,7 @@ const COMMUNITY_MEMBERS_QUERY = /* GraphQL */ `
       description
       avatar(size: 192) { url }
       communityRole
+      communityMemberTypes
       communityProfilePublic
       followerCount
       followingCount
@@ -1187,7 +1294,12 @@ const LEGACY_COMMUNITY_MEMBERS_QUERY = /* GraphQL */ `
 `;
 
 async function getCommunityMembers(token?: string): Promise<RawUser[]> {
-  const response = await graphqlRequest<{ communityMembers: (RawUser | null)[] | null }>(COMMUNITY_MEMBERS_QUERY, undefined, token);
+  let query = COMMUNITY_MEMBERS_QUERY;
+  let response = await graphqlRequest<{ communityMembers: (RawUser | null)[] | null }>(query, undefined, token);
+  if (response.errors?.some(({ message }) => message.includes('Cannot query field "communityMemberTypes"'))) {
+    query = removeGraphqlFieldSelections(query, "communityMemberTypes");
+    response = await graphqlRequest<{ communityMembers: (RawUser | null)[] | null }>(query, undefined, token);
+  }
   if (!response.errors?.length) return (response.data?.communityMembers || []).filter((member): member is RawUser => Boolean(member));
   const missingMemberField = response.errors.some(({ message }) => message.includes('Cannot query field "communityMembers"'));
   if (missingMemberField) return [];
@@ -1327,7 +1439,7 @@ export async function getCommunityArchiveData(backendLanguageCode: string): Prom
   do {
     const response: GraphqlResponse<CommunityArchivePostsResult> = await communityGraphqlRequest<CommunityArchivePostsResult>(
       COMMUNITY_ARCHIVE_POSTS_QUERY,
-      { language: backendLanguageCode, after },
+      { after },
       auth?.authToken,
     );
     const pageData: CommunityArchivePostsResult | null = response.data;
@@ -1418,18 +1530,29 @@ export async function getCommunityPostByDatabaseId(postId: string): Promise<Comm
   return mapCommunityPostDetail(completeNode, postId);
 }
 
-export async function getCommunityPostByUri(uri: string): Promise<CommunityPostDetail | null> {
+export function communityPostSlugFromUri(uri: string): string | null {
   const normalizedUri = uri.startsWith("/") ? uri : `/${uri}`;
-  const { data, errors } = await communityGraphqlRequest<{ nodeByUri: RawCommunityPostDetail | { __typename: string } | null }>(
-    COMMUNITY_POST_BY_URI_QUERY,
-    { uri: normalizedUri.endsWith("/") ? normalizedUri : `${normalizedUri}/` },
+  const slug = normalizedUri
+    .split(/[?#]/, 1)[0]
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  return slug ? decodeURIComponent(slug) : null;
+}
+
+export async function getCommunityPostByUri(uri: string): Promise<CommunityPostDetail | null> {
+  const slug = communityPostSlugFromUri(uri);
+  if (!slug) return null;
+  const { data, errors } = await communityGraphqlRequest<{ communityPost: RawCommunityPostDetail | { __typename: string } | null }>(
+    COMMUNITY_POST_BY_SLUG_QUERY,
+    { slug },
     authStore.load()?.authToken,
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  const node = data?.nodeByUri || null;
+  const node = data?.communityPost || null;
   if (!node || node.__typename !== "CommunityPost") return null;
   const completeNode = await loadRemainingCommunityPostComments(node as RawCommunityPostDetail);
-  return mapCommunityPostDetail(completeNode, normalizedUri);
+  return mapCommunityPostDetail(completeNode, uri);
 }
 
 async function loadRemainingCommunityPostComments(
@@ -1846,7 +1969,7 @@ const TRANSLATION_CANDIDATES_QUERY = /* GraphQL */ `
 const COMMUNITY_TRANSLATION_CANDIDATES_QUERY = /* GraphQL */ `
   query StorefrontCommunityTranslationCandidates($search: String!) {
     communityPosts(first: 10, where: { search: $search }) {
-      nodes { databaseId title(format: RAW) uri language { code } }
+      nodes { databaseId title(format: RAW) uri language: funkycommerceLanguage { code } }
     }
   }
 `;
@@ -2240,17 +2363,23 @@ function mapMember(user: RawUser): CommunityMember {
     || user.relationshipState === "owner"
     ? user.relationshipState
     : "none";
+  const role = user.communityRole === "collaborator"
+    ? "collaborator"
+    : user.communityRole === "creator"
+      ? "creator"
+      : "member";
+  const memberTypes = (user.communityMemberTypes || [role])
+    .filter((type): type is CommunityMember["memberTypes"][number] =>
+      ["member", "customer", "subscriber", "admin", "creator", "collaborator"].includes(type),
+    );
   return {
     databaseId: user.databaseId,
     handle: communityHandleFromUser(user),
     displayName: user.name || user.nicename || "Community member",
     bio: user.description || "",
     avatarUrl: user.avatar?.url || undefined,
-    role: user.communityRole === "collaborator"
-      ? "collaborator"
-      : user.communityRole === "creator"
-        ? "creator"
-        : "member",
+    role,
+    memberTypes: Array.from(new Set(memberTypes.length ? memberTypes : [role])),
     isPublic: user.communityProfilePublic !== false,
     followerCount: user.followerCount ?? 0,
     followingCount: user.followingCount ?? 0,

@@ -2,6 +2,7 @@ export type RecentOrdersNotifierConfig = {
   enabled: boolean;
   itemCount: number;
   intervalSeconds: number;
+  quietSeconds: number;
   endpoint: string;
 };
 
@@ -9,16 +10,30 @@ type RecentOrder = {
   id: string;
   customerFirstName: string;
   createdAt: string;
-  items: Array<{ name: string; quantity: number }>;
+  items: Array<{ name: string; quantity: number; url?: string }>;
 };
 
 type PersistedRecentOrderState = {
   orderId: string;
   nextAt: number;
+  cycleMs: number;
 };
 
-const STORAGE_KEY = "storefront:recent-orders:v1";
+const STORAGE_KEY = "storefront:recent-orders:v2";
 let activeNotifier: { signature: string; stop: () => void } | null = null;
+
+type ListFormatPart = { type: "element" | "literal"; value: string };
+type ListFormatter = {
+  format: (values: string[]) => string;
+  formatToParts: (values: string[]) => ListFormatPart[];
+};
+
+function createListFormatter(language: string): ListFormatter {
+  const Constructor = (Intl as typeof Intl & {
+    ListFormat: new (locales: string, options: { style: "long"; type: "conjunction" }) => ListFormatter;
+  }).ListFormat;
+  return new Constructor(language, { style: "long", type: "conjunction" });
+}
 
 function clampInteger(value: number, min: number, max: number, fallback: number) {
   return Number.isInteger(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -37,16 +52,18 @@ function isRecentOrder(value: unknown): value is RecentOrder {
       Boolean(item)
       && typeof item.name === "string"
       && Number.isInteger(item.quantity)
-      && item.quantity > 0);
+      && item.quantity > 0
+      && (item.url === undefined || typeof item.url === "string"));
 }
 
-function readPersistedState(): PersistedRecentOrderState | null {
+function readPersistedState(cycleMs: number): PersistedRecentOrderState | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") as Partial<PersistedRecentOrderState> | null;
     return parsed
       && typeof parsed.orderId === "string"
       && Number.isFinite(parsed.nextAt)
-      ? { orderId: parsed.orderId, nextAt: Number(parsed.nextAt) }
+      && parsed.cycleMs === cycleMs
+      ? { orderId: parsed.orderId, nextAt: Number(parsed.nextAt), cycleMs }
       : null;
   } catch (error) {
     console.warn("Recent-order notification state could not be restored.", error);
@@ -63,7 +80,7 @@ function writePersistedState(state: PersistedRecentOrderState) {
 }
 
 function formatOrderItems(order: RecentOrder, language: string) {
-  const formatter = new Intl.ListFormat(language, { style: "long", type: "conjunction" });
+  const formatter = createListFormatter(language);
   return formatter.format(order.items.map(({ name, quantity }) => quantity > 1 ? `${quantity} × ${name}` : name));
 }
 
@@ -93,6 +110,68 @@ function formatOrderMessage(order: RecentOrder) {
   return `${order.customerFirstName} ${verb} ${items} ${relativeTime}`;
 }
 
+function storefrontProductHref(url: string | undefined) {
+  if (!url?.trim()) return null;
+  const parsed = new URL(url, window.location.origin);
+  if (!["http:", "https:"].includes(parsed.protocol)) return null;
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+function renderOrderItems(container: HTMLElement, order: RecentOrder, language: string) {
+  const labels = order.items.map(({ name, quantity }) => quantity > 1 ? `${quantity} × ${name}` : name);
+  const parts = createListFormatter(language).formatToParts(labels);
+  let itemIndex = 0;
+  for (const part of parts) {
+    if (part.type !== "element") {
+      container.append(document.createTextNode(part.value));
+      continue;
+    }
+    const item = order.items[itemIndex++];
+    const href = storefrontProductHref(item.url);
+    if (!href) {
+      container.append(document.createTextNode(part.value));
+      continue;
+    }
+    const link = document.createElement("a");
+    link.className = "storefront-recent-orders__product";
+    link.href = href;
+    link.textContent = part.value;
+    container.append(link);
+  }
+}
+
+function renderOrder(element: HTMLElement, order: RecentOrder) {
+  const language = document.documentElement.lang || "en";
+  const isJapanese = language.toLowerCase().startsWith("ja");
+  const lead = isJapanese
+    ? `${order.customerFirstName}が`
+    : `${order.customerFirstName} ${language.toLowerCase().startsWith("pl") ? "kupił(a)" : "bought"} `;
+  const message = document.createElement("p");
+  message.className = "storefront-recent-orders__message";
+  message.append(document.createTextNode(lead));
+
+  const itemList = document.createElement("span");
+  itemList.className = "storefront-recent-orders__items";
+  renderOrderItems(itemList, order, language);
+  message.append(itemList);
+  if (isJapanese) message.append(document.createTextNode("を購入しました"));
+
+  const time = document.createElement("time");
+  time.className = "storefront-recent-orders__time";
+  time.dateTime = order.createdAt;
+  time.textContent = formatRelativeTime(order.createdAt, language);
+
+  const content = document.createElement("div");
+  content.className = "storefront-recent-orders__content";
+  content.append(message, time);
+  element.replaceChildren(content);
+  element.setAttribute("aria-label", formatOrderMessage(order));
+}
+
+function syncChatbotOffset(element: HTMLElement) {
+  element.dataset.chatbotOffset = String(Boolean(document.getElementById("funkycommerce-ai-assistant-root")));
+}
+
 function createNotifierElement() {
   document.getElementById("storefront-recent-orders")?.remove();
   const element = document.createElement("aside");
@@ -103,6 +182,7 @@ function createNotifierElement() {
   element.setAttribute("aria-atomic", "true");
   element.hidden = true;
   document.body.append(element);
+  syncChatbotOffset(element);
   return element;
 }
 
@@ -111,6 +191,7 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
     ...input,
     itemCount: clampInteger(input.itemCount, 1, 10, 5),
     intervalSeconds: clampInteger(input.intervalSeconds, 3, 300, 10),
+    quietSeconds: clampInteger(input.quietSeconds, 2, 300, 8),
   };
   const signature = JSON.stringify(config);
   if (activeNotifier?.signature === signature) return activeNotifier.stop;
@@ -118,13 +199,18 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
   if (!config.enabled) return () => undefined;
 
   const controller = new AbortController();
-  let timer = 0;
-  let transitionTimer = 0;
+  let hideTimer = 0;
+  let hideTransitionTimer = 0;
+  let cycleTimer = 0;
   const element = createNotifierElement();
+  const chatbotObserver = new window.MutationObserver(() => syncChatbotOffset(element));
+  chatbotObserver.observe(document.body, { childList: true, subtree: true });
   const stop = () => {
     controller.abort();
-    window.clearTimeout(timer);
-    window.clearTimeout(transitionTimer);
+    chatbotObserver.disconnect();
+    window.clearTimeout(hideTimer);
+    window.clearTimeout(hideTransitionTimer);
+    window.clearTimeout(cycleTimer);
     element.remove();
     if (activeNotifier?.stop === stop) activeNotifier = null;
   };
@@ -154,33 +240,48 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
     return () => undefined;
   }
 
-  const intervalMs = config.intervalSeconds * 1_000;
-  const persisted = readPersistedState();
+  const displayMs = config.intervalSeconds * 1_000;
+  const quietMs = config.quietSeconds * 1_000;
+  const cycleMs = displayMs + quietMs;
+  const persisted = readPersistedState(cycleMs);
   let index = persisted ? orders.findIndex(({ id }) => id === persisted.orderId) : 0;
   if (index < 0) index = 0;
-  let nextAt = persisted && persisted.nextAt > 0 ? persisted.nextAt : Date.now() + intervalMs;
+  let nextAt = persisted && persisted.nextAt > 0 ? persisted.nextAt : Date.now() + cycleMs;
   if (Date.now() >= nextAt) {
-    const elapsedIntervals = Math.floor((Date.now() - nextAt) / intervalMs) + 1;
-    index = (index + elapsedIntervals) % orders.length;
-    nextAt += elapsedIntervals * intervalMs;
+    const elapsedCycles = Math.floor((Date.now() - nextAt) / cycleMs) + 1;
+    index = (index + elapsedCycles) % orders.length;
+    nextAt += elapsedCycles * cycleMs;
   }
 
-  const render = () => {
+  const scheduleCycle = () => {
+    window.clearTimeout(hideTimer);
+    window.clearTimeout(hideTransitionTimer);
     const order = orders[index];
-    element.textContent = formatOrderMessage(order);
-    element.hidden = false;
-    element.dataset.visible = "true";
-    writePersistedState({ orderId: order.id, nextAt });
-    timer = window.setTimeout(() => {
+    const now = Date.now();
+    const displayEndsAt = nextAt - quietMs;
+    writePersistedState({ orderId: order.id, nextAt, cycleMs });
+    if (now < displayEndsAt) {
+      renderOrder(element, order);
+      element.hidden = false;
+      element.dataset.visible = "true";
+      hideTimer = window.setTimeout(() => {
+        element.dataset.visible = "false";
+        hideTransitionTimer = window.setTimeout(() => {
+          if (!controller.signal.aborted) element.hidden = true;
+        }, 180);
+      }, displayEndsAt - now);
+    } else {
       element.dataset.visible = "false";
-      transitionTimer = window.setTimeout(() => {
-        if (controller.signal.aborted) return;
-        index = (index + 1) % orders.length;
-        nextAt = Date.now() + intervalMs;
-        render();
-      }, 180);
-    }, Math.max(0, nextAt - Date.now()));
+      element.hidden = true;
+    }
+    cycleTimer = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
+      const elapsedCycles = Math.floor((Date.now() - nextAt) / cycleMs) + 1;
+      index = (index + Math.max(1, elapsedCycles)) % orders.length;
+      nextAt += Math.max(1, elapsedCycles) * cycleMs;
+      scheduleCycle();
+    }, Math.max(0, nextAt - now));
   };
-  render();
+  scheduleCycle();
   return stop;
 }

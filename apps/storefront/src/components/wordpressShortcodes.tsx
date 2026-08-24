@@ -781,6 +781,7 @@ function CommunityTagPicksShortcode({ attributes }: ShortcodeProps) {
 function CommunityMembersShortcode({ attributes }: ShortcodeProps) {
   const { data, isLoading, error } = useCommunityData();
   const include = csv(attributes.include);
+  const memberTypes = csv(attributes.members).map((type) => type === "administrator" ? "admin" : type);
   const permission = attributes.permission && attributes.permission !== "all"
     ? attributes.permission
     : attributes.role;
@@ -788,6 +789,7 @@ function CommunityMembersShortcode({ attributes }: ShortcodeProps) {
     (data?.members || []).filter((member) =>
       member.isPublic &&
       (permission === "all" || !permission || member.role === permission) &&
+      (!memberTypes.length || memberTypes.some((type) => member.memberTypes.some((memberType) => memberType === type))) &&
       (!include.length || include.includes(member.handle)),
     ),
     attributes.offset,

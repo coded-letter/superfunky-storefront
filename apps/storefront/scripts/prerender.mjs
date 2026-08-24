@@ -267,6 +267,41 @@ const STATIC_RECENT_ORDERS_QUERY = `
         enabled
         itemCount
         intervalSeconds
+        quietSeconds
+      }
+    }
+  }
+`;
+
+const STATIC_RECENT_ORDERS_LEGACY_QUERY = `
+  query StorefrontStaticRecentOrdersLegacy($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      recentOrders {
+        enabled
+        itemCount
+        intervalSeconds
+      }
+    }
+  }
+`;
+
+const STATIC_PAYMENT_GATEWAYS_QUERY = `
+  query StorefrontStaticPaymentGateways {
+    paymentGateways {
+      nodes {
+        id
+        title
+        description
+      }
+    }
+    storefrontConfig: funkycommerceStorefrontConfig {
+      cryptoAssets {
+        code
+        label
+        network
+        wallet
+        fiatRate
+        qrUrl
       }
     }
   }
@@ -338,6 +373,11 @@ const DEFAULT_STATIC_CHROME = {
     enabled: false,
     itemCount: 5,
     intervalSeconds: 10,
+    quietSeconds: 8,
+  },
+  paymentGatewayCache: {
+    gateways: [],
+    cryptoAssets: [],
   },
 };
 
@@ -614,6 +654,7 @@ async function discoverStaticChrome() {
   let headerControls = null;
   let headerAssistant = null;
   let recentOrders = null;
+  let paymentGateways = null;
   try {
     decoration = await requestGraphql(
       STATIC_CHROME_DECORATION_QUERY,
@@ -623,6 +664,18 @@ async function discoverStaticChrome() {
   } catch (error) {
     console.warn(
       `Static navigation decoration unavailable; preserving style-critical chrome: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  try {
+    paymentGateways = await requestGraphql(
+      STATIC_PAYMENT_GATEWAYS_QUERY,
+      {},
+      "storefront payment gateways",
+      { attempts: 1 },
+    );
+  } catch (error) {
+    console.warn(
+      `Payment gateways unavailable for prerender caching; checkout will refresh them at runtime: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   try {
@@ -655,9 +708,21 @@ async function discoverStaticChrome() {
       { attempts: 1 },
     );
   } catch (error) {
-    console.warn(
-      `Recent-order controls unavailable; keeping notifications disabled: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    try {
+      recentOrders = await requestGraphql(
+        STATIC_RECENT_ORDERS_LEGACY_QUERY,
+        { language: defaultLanguage },
+        "legacy storefront recent-order controls",
+        { attempts: 1 },
+      );
+      console.warn(
+        `Recent-order quiet-time controls are unavailable on this backend; using the default quiet interval: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } catch (legacyError) {
+      console.warn(
+        `Recent-order controls unavailable; keeping notifications disabled: ${legacyError instanceof Error ? legacyError.message : String(legacyError)}`,
+      );
+    }
   }
   const decorationBranding = decoration?.data?.storefrontConfig?.branding;
   const decorationLayout = decoration?.data?.storefrontConfig?.layout;
@@ -665,6 +730,8 @@ async function discoverStaticChrome() {
   const assistantControls = headerAssistant?.data?.storefrontConfig;
   const assistantConfig = assistantControls?.aiAssistant;
   const recentOrdersConfig = recentOrders?.data?.storefrontConfig?.recentOrders;
+  const gatewayNodes = paymentGateways?.data?.paymentGateways?.nodes;
+  const cryptoAssets = paymentGateways?.data?.storefrontConfig?.cryptoAssets;
   const controlFeatures = controls?.features;
   const controlLayout = controls?.layout;
   const baseCurrency = typeof controls?.baseCurrency === "string" && controls.baseCurrency.trim()
@@ -702,6 +769,11 @@ async function discoverStaticChrome() {
       enabled: recentOrdersConfig?.enabled === true,
       itemCount: Math.max(1, Math.min(10, Number(recentOrdersConfig?.itemCount) || 5)),
       intervalSeconds: Math.max(3, Math.min(300, Number(recentOrdersConfig?.intervalSeconds) || 10)),
+      quietSeconds: Math.max(2, Math.min(300, Number(recentOrdersConfig?.quietSeconds) || 8)),
+    },
+    paymentGatewayCache: {
+      gateways: Array.isArray(gatewayNodes) ? gatewayNodes : [],
+      cryptoAssets: Array.isArray(cryptoAssets) ? cryptoAssets : [],
     },
     customCss: boundedStaticCss(themeStyles?.customCss, "WordPress custom CSS", 256_000),
     fontFaceStyles: boundedStaticCss(themeStyles?.fontFaceStyles, "WordPress font-face CSS", 128_000),
@@ -1365,6 +1437,9 @@ async function renderRoute(route) {
       : "",
     staticTheme ? `<style data-storefront-static-theme>${staticTheme}</style>` : "",
     `<script type="application/json" id="storefront-static-layout">${serializeStaticLayoutSeed(staticChromeConfig)}</script>`,
+    staticChromeConfig.paymentGatewayCache.gateways.length
+      ? `<script type="application/json" id="storefront-payment-gateway-cache">${serializePaymentGatewaySeed(staticChromeConfig.paymentGatewayCache)}</script>`
+      : "",
     hydrationAssetUrls.length
       ? `<script type="application/json" id="storefront-static-hydration-assets">${JSON.stringify(hydrationAssetUrls).replaceAll("<", "\\u003c")}</script>`
       : "",
@@ -1389,7 +1464,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -1920,6 +1995,10 @@ function serializeStaticLayoutSeed(config) {
     brandGradientStyle: config.brandGradientStyle,
     themeMaxWidthPx: config.themeMaxWidthPx,
   }).replaceAll("<", "\\u003c");
+}
+
+function serializePaymentGatewaySeed(cache) {
+  return JSON.stringify(cache).replaceAll("<", "\\u003c");
 }
 
 async function buildStaticStyleAsset(styles) {

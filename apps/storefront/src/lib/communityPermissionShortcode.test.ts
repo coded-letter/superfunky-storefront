@@ -8,6 +8,7 @@ const themeRoot = new URL(
 );
 const schema = readFileSync(new URL("functions.php", themeRoot), "utf8");
 const nativeShortcodes = readFileSync(new URL("inc/native-shortcodes.php", themeRoot), "utf8");
+const communityBackend = readFileSync(new URL("inc/community.php", themeRoot), "utf8");
 const storefrontShortcodes = readFileSync(
   new URL("../components/wordpressShortcodes.tsx", import.meta.url),
   "utf8",
@@ -24,4 +25,16 @@ test("community members accept a permission filter while preserving the role ali
   assert.match(storefrontShortcodes, /member\.role === permission/);
   assert.match(library, /\["permission", \["all", "member", "creator", "collaborator"\]\]/);
   assert.match(library, /\["role \(legacy alias\)"/);
+});
+
+test("community members expose an appendable member-type filter", () => {
+  assert.match(schema, /'members'\s*=>\s*array\(\s*'default'\s*=>\s*'',\s*'type'\s*=>\s*'member-type-list'/);
+  assert.match(schema, /'member', 'customer', 'subscriber', 'admin', 'creator', 'collaborator'/);
+  assert.match(nativeShortcodes, /\$member_types = funkycommerce_native_csv_terms\( \$a\['members'\] \)/);
+  assert.match(nativeShortcodes, /funkycommerce_community_member_types\( \$user_id \)/);
+  assert.match(communityBackend, /'communityMemberTypes'[\s\S]*'resolve'\s*=>\s*'funkycommerce_community_member_types'/);
+  assert.match(storefrontShortcodes, /csv\(attributes\.members\)/);
+  assert.match(storefrontShortcodes, /member\.memberTypes/);
+  assert.match(library, /members: \["customer", "admin", "member"\]/);
+  assert.match(library, /\["members \(appendable\)", \["member", "customer", "subscriber", "admin", "creator", "collaborator"\]\]/);
 });

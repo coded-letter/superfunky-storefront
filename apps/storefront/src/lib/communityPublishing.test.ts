@@ -90,11 +90,12 @@ test("headless community feeds invalidate legacy media caches", () => {
   assert.match(communityDataSource, /getCommunityFeedData/);
   assert.match(communityDataSource, /feedOnly/);
   assert.match(communitySource, /query StorefrontCommunityFeed/);
-  assert.match(communitySource, /communityPosts\(first: 12/);
+  assert.match(communitySource, /communityPosts\(first: 100\)/);
   assert.match(communitySource, /commentCount/);
   assert.match(fullQuery, /likedByViewer[\s\S]*?canEdit[\s\S]*?canDelete/);
   assert.doesNotMatch(feedQuery, /likedByViewer|canEdit|canDelete/);
-  assert.match(communitySource, /getCommunityFeedData[\s\S]*?communityGraphqlRequest<CommunityFeedQueryResult>\([\s\S]*?COMMUNITY_FEED_QUERY,[\s\S]*?\{ language: backendLanguageCode \},[\s\S]*?\)/);
+  assert.match(communitySource, /getCommunityFeedData[\s\S]*?communityGraphqlRequest<CommunityFeedQueryResult>\([\s\S]*?COMMUNITY_FEED_QUERY,[\s\S]*?\)/);
+  assert.match(communitySource, /backendLanguageCode \|\| languageCode\)\.slice\(0, 12\)/);
 });
 
 test("community data remains available without optional marketplace GraphQL fields", () => {
@@ -137,7 +138,7 @@ test("community posts tolerate backends without optional localization fields", (
   );
   assert.match(
     communitySource,
-    /getCommunityPostByUri[\s\S]*?communityGraphqlRequest[\s\S]*?COMMUNITY_POST_BY_URI_QUERY/,
+    /getCommunityPostByUri[\s\S]*?communityGraphqlRequest[\s\S]*?COMMUNITY_POST_BY_SLUG_QUERY/,
   );
   assert.match(
     communitySource,
