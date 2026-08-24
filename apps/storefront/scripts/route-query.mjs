@@ -80,8 +80,13 @@ const USER_SEO_FIELDS = `
 export function buildRoutesQuery({
   commerce = false,
   multilingual = false,
+  publicRobots = false,
+  translations = multilingual,
   seo = false,
 } = {}) {
+  const publicRobotsField = publicRobots
+    ? "funkycommercePublicRobots { noindex nofollow }"
+    : "";
   const productLanguageFragments = commerce && multilingual
     ? `
         ... on ExternalProduct { language { code } }
@@ -100,10 +105,16 @@ export function buildRoutesQuery({
     : "";
   const pageFields = `
         ... on Page {
+          id
           databaseId
+          slug
           isFrontPage
+          content(format: RENDERED)
           headlessContent
-          ${multilingual ? "language { code }\n          translations { databaseId }" : ""}
+          headlessShortcodes
+          ${multilingual
+    ? "language { code }\n          translations { databaseId uri language { code } }"
+    : translations ? "translations { databaseId uri }" : ""}
         }
   `;
   const coreLanguageFields = multilingual
@@ -146,6 +157,7 @@ export function buildRoutesQuery({
           ... on ContentNode {
             date
             modified
+            ${publicRobotsField}
             ${seo ? "seo { ...StorefrontPostTypeRouteSeo }" : ""}
           }
           ... on NodeWithTitle {
@@ -187,14 +199,19 @@ export function buildRoutesQuery({
 export function buildCoreRoutesQuery({
   connections = ["pages", "posts", "categories", "tags", "users"],
   multilingual = false,
+  publicRobots = false,
+  translations = multilingual,
   seo = false,
 } = {}) {
   const selectedConnections = new Set(connections);
   const languageField = multilingual ? "language { code }" : "";
   const pageLanguageFields = multilingual
-    ? "language { code }\n          translations { databaseId }"
-    : "";
+    ? "language { code }\n          translations { databaseId uri }"
+    : translations ? "translations { databaseId uri }" : "";
   const postSeoField = seo ? "seo { ...StorefrontPostTypeRouteSeo }" : "";
+  const publicRobotsField = publicRobots
+    ? "funkycommercePublicRobots { noindex nofollow }"
+    : "";
   const taxonomySeoField = seo ? "seo { ...StorefrontTaxonomyRouteSeo }" : "";
 
   return `
@@ -216,10 +233,17 @@ export function buildCoreRoutesQuery({
           date
           modified
           title
+          id
           databaseId
+          slug
           isFrontPage
+          content(format: RENDERED)
           headlessContent
-          ${pageLanguageFields}
+          headlessShortcodes
+          ${publicRobotsField}
+          ${multilingual
+    ? "language { code }\n          translations { databaseId uri language { code } }"
+    : pageLanguageFields}
           ${postSeoField}
           featuredImage { node { ...StorefrontRouteImage } }
         }
@@ -232,6 +256,7 @@ export function buildCoreRoutesQuery({
           date
           modified
           title
+          ${publicRobotsField}
           ${languageField}
           ${postSeoField}
           featuredImage { node { ...StorefrontRouteImage } }

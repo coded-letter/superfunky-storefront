@@ -1,4 +1,5 @@
 import { useTheme } from "../state/ThemeContext";
+import { useOptionalCookieConsent } from "../state/CookieConsentContext";
 import { useEffect, useRef, useState } from "react";
 import { parseSpotifyReference } from "./spotifyEmbed";
 
@@ -47,43 +48,32 @@ export function SpotifyPlayerMock({
   title = "Spotify player",
 }: SpotifyPlayerMockProps) {
   const { isDarkMode } = useTheme();
+  const consentContext = useOptionalCookieConsent();
   const containerRef = useRef<HTMLDivElement>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
   const resolvedReference = parseSpotifyReference(uri, contentType);
   const resolvedType = resolvedReference?.contentType ?? contentType ?? "playlist";
   const resolvedHeight = height ?? DEFAULT_HEIGHTS[resolvedType] ?? DEFAULT_HEIGHTS.playlist;
   const isDark = theme === "auto" ? isDarkMode : theme === "dark";
-  const saveData = typeof navigator !== "undefined"
-    && Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
-  const idleCallbacks = typeof window === "undefined"
-    ? {}
-    : window as unknown as {
-        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-        cancelIdleCallback?: (handle: number) => void;
-      };
+  const canLoadThirdPartyMedia = consentContext?.consent?.marketing === true;
 
   useEffect(() => {
     const target = containerRef.current;
-    if (!target || !resolvedReference || shouldLoad) return;
+    if (!target || !resolvedReference || !canLoadThirdPartyMedia || shouldLoad) return;
 
     if ("IntersectionObserver" in window) {
       const observer = new IntersectionObserver(([entry]) => {
         if (!entry.isIntersecting) return;
         setShouldLoad(true);
         observer.disconnect();
-      }, { rootMargin: saveData ? "0px" : "600px 0px" });
+      }, { rootMargin: "0px" });
       observer.observe(target);
       return () => observer.disconnect();
     }
 
-    let fallbackId = 0;
-    if (idleCallbacks.requestIdleCallback) {
-      fallbackId = idleCallbacks.requestIdleCallback(() => setShouldLoad(true), { timeout: 2_000 });
-      return () => idleCallbacks.cancelIdleCallback?.(fallbackId);
-    }
-    fallbackId = setTimeout(() => setShouldLoad(true), 0);
+    const fallbackId = setTimeout(() => setShouldLoad(true), 0);
     return () => clearTimeout(fallbackId);
-  }, [resolvedReference?.contentType, resolvedReference?.id, saveData, shouldLoad]);
+  }, [canLoadThirdPartyMedia, resolvedReference?.contentType, resolvedReference?.id, shouldLoad]);
 
   if (!resolvedReference) return null;
 
@@ -94,7 +84,13 @@ export function SpotifyPlayerMock({
       className="sf-spotify-player funky-spotify-player flex w-full items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-center dark:bg-zinc-900"
       style={{ height: resolvedHeight }}
       role="group"
-      aria-label={shouldLoad ? undefined : `${title} will load near the viewport`}
+      aria-label={
+        shouldLoad
+          ? undefined
+          : canLoadThirdPartyMedia
+            ? `${title} will load in the viewport`
+            : `${title} requires marketing cookie consent`
+      }
     >
       {shouldLoad ? (
         <iframe

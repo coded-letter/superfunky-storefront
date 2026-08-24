@@ -1,8 +1,15 @@
 import type { PostCardData } from "@funky/ui";
-import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
-import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility";
-import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
-import { MALFORMED_POST_ARCHIVE_RULE } from "./postArchiveGraphqlCompatibility";
+import {
+  BACKEND_ORIGIN,
+  graphqlRequest,
+  STOREFRONT_BACKEND_PROFILE,
+  STOREFRONT_DEFAULT_LANGUAGE,
+  STOREFRONT_EXPECTED_LOCALES,
+} from "@funky/sdk";
+import { resolvePathLanguageCode } from "@funky/ui/src/locale/urlPaths.ts";
+import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility.ts";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
+import { MALFORMED_POST_ARCHIVE_RULE } from "./postArchiveGraphqlCompatibility.ts";
 import {
   mapScript,
   mapSeo,
@@ -11,12 +18,14 @@ import {
   type CmsPageTranslation,
   type RawCmsScript,
   type RawCmsSeo,
-} from "./pages";
+} from "./pages.ts";
 import { normalizeFeaturedImage, type RawFeaturedImage } from "@funky/cms";
 import {
   createCorePostArchiveQuery,
   shouldPreferCoreGraphqlQueries,
-} from "./profileGraphqlCompatibility";
+} from "./profileGraphqlCompatibility.ts";
+import { htmlToPlainText } from "./htmlText.ts";
+import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, getArchivePageSize } from "./archiveSettings.ts";
 
 export type PostTaxonomy = "category" | "tag";
 export type TaxonomyIdentifierType = "URI" | "SLUG";
@@ -60,7 +69,7 @@ export type RawBlogPost = {
   uri: string | null;
   title: string | null;
   excerpt: string | null;
-  content: string | null;
+  content?: string | null;
   date: string | null;
   modified: string | null;
   language: { code: string | null } | null;
@@ -97,7 +106,7 @@ type RawTaxonomyArchive = {
   translations: ({ databaseId: number; uri: string | null; language: { code: string | null } | null } | null)[] | null;
   posts: {
     nodes: RawBlogPost[];
-    pageInfo: { hasNextPage: boolean };
+    pageInfo: { hasNextPage: boolean; endCursor?: string | null };
   } | null;
   enqueuedScripts: { nodes: RawCmsScript[] } | null;
   seo: RawTaxonomySeo | null;
@@ -106,6 +115,13 @@ type RawTaxonomyArchive = {
 type TaxonomyArchiveResult = {
   archive: RawTaxonomyArchive | null;
   terms: { nodes: RawBlogTerm[] } | null;
+};
+
+type RestTaxonomyTerm = {
+  id: number;
+  name: string;
+  slug: string;
+  link: string;
 };
 
 export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
@@ -184,6 +200,7 @@ export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
   }
   pageInfo {
     hasNextPage
+    endCursor
   }
 `;
 
@@ -260,7 +277,7 @@ const TERM_FIELDS = /* GraphQL */ `
 `;
 
 const CATEGORY_ARCHIVE_QUERY = /* GraphQL */ `
-  query StorefrontCategoryArchive($id: ID!, $idType: CategoryIdType!) {
+  query StorefrontCategoryArchive($id: ID!, $idType: CategoryIdType!, $first: Int!, $after: String) {
     archive: category(id: $id, idType: $idType) {
       id
       databaseId
@@ -278,7 +295,7 @@ const CATEGORY_ARCHIVE_QUERY = /* GraphQL */ `
           code
         }
       }
-      posts(first: 100) {
+      posts(first: $first, after: $after) {
         ${BLOG_POST_CARD_FIELDS}
       }
       enqueuedScripts(first: 100) {
@@ -295,7 +312,7 @@ const CATEGORY_ARCHIVE_QUERY = /* GraphQL */ `
 `;
 
 const TAG_ARCHIVE_QUERY = /* GraphQL */ `
-  query StorefrontTagArchive($id: ID!, $idType: TagIdType!) {
+  query StorefrontTagArchive($id: ID!, $idType: TagIdType!, $first: Int!, $after: String) {
     archive: tag(id: $id, idType: $idType) {
       id
       databaseId
@@ -313,7 +330,7 @@ const TAG_ARCHIVE_QUERY = /* GraphQL */ `
           code
         }
       }
-      posts(first: 100) {
+      posts(first: $first, after: $after) {
         ${BLOG_POST_CARD_FIELDS}
       }
       enqueuedScripts(first: 100) {
@@ -333,31 +350,64 @@ export async function getPostTaxonomyArchive(
   taxonomy: PostTaxonomy,
   identifier: string,
   idType: TaxonomyIdentifierType,
+  expectedLanguageCode = "en",
 ): Promise<CmsPostArchive | null> {
   const query = taxonomy === "category" ? CATEGORY_ARCHIVE_QUERY : TAG_ARCHIVE_QUERY;
+  const targetCount = await getArchivePageSize();
   const initialQuery = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
     ? createCorePostArchiveQuery(query)
     : query;
-  const { data, errors } = await requestGraphqlWithCompatibility<TaxonomyArchiveResult>(
-    graphqlRequest,
-    initialQuery,
-    { id: identifier, idType },
-    [MALFORMED_POST_ARCHIVE_RULE, ...BLOG_DATA_COMPATIBILITY_RULES],
-  );
+  const loadArchivePage = async (first: number, after: string | null): Promise<TaxonomyArchiveResult> => {
+    const { data, errors } = await requestGraphqlWithCompatibility<TaxonomyArchiveResult>(
+      graphqlRequest,
+      initialQuery,
+      { id: identifier, idType, first, after },
+      [MALFORMED_POST_ARCHIVE_RULE, ...BLOG_DATA_COMPATIBILITY_RULES],
+    );
 
-  // Only treat GraphQL errors as fatal when no usable data came back — a term with
-  // zero published posts still resolves normally and shouldn't be downgraded to an
-  // "unavailable" error page by unrelated, non-fatal resolver warnings.
-  if (!data) {
-    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-    throw new Error(`The ${taxonomy} archive query returned no data`);
-  }
-  if (!data.archive) {
+    // Only treat GraphQL errors as fatal when no usable data came back — a term with
+    // zero published posts still resolves normally and shouldn't be downgraded to an
+    // "unavailable" error page by unrelated, non-fatal resolver warnings.
+    if (!data) {
+      if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+      throw new Error(`The ${taxonomy} archive query returned no data`);
+    }
+    return data;
+  };
+
+  const initialData = await loadArchivePage(Math.min(targetCount, ARCHIVE_BATCH_SIZE), null);
+  if (!initialData.archive) {
+    if (idType === "URI") {
+      const slug = taxonomySlugFromUri(identifier);
+      if (slug) {
+        return getPostTaxonomyArchive(taxonomy, slug, "SLUG", expectedLanguageCode);
+      }
+    }
     return null;
   }
 
-  const archive = data.archive;
-  const languageCode = archive.language?.code?.toLowerCase() || "en";
+  let firstPageData: TaxonomyArchiveResult | null = initialData;
+  const { nodes: posts, hasMore } = await fetchArchiveNodesInBatches<RawBlogPost>(
+    targetCount,
+    async (first, after) => {
+      const pageData = firstPageData || await loadArchivePage(first, after);
+      firstPageData = null;
+      if (!pageData.archive) {
+        throw new Error(`The ${taxonomy} archive pagination query returned no archive`);
+      }
+      return {
+        nodes: pageData.archive.posts?.nodes || [],
+        pageInfo: pageData.archive.posts?.pageInfo || { hasNextPage: false },
+      };
+    },
+  );
+
+  const archive = initialData.archive;
+  const languageCode = archive.language?.code?.toLowerCase() || expectedLanguageCode.toLowerCase();
+
+  const terms = initialData.terms?.nodes.some((term) => term.language?.code)
+    ? mapTerms(initialData.terms.nodes, languageCode)
+    : await getRestTerms(taxonomy, languageCode);
 
   return {
     id: archive.id,
@@ -370,24 +420,61 @@ export async function getPostTaxonomyArchive(
     languageCode,
     translations:
       archive.translations?.flatMap((translation) =>
-        translation?.uri && translation.language?.code
+        translation?.uri
           ? [{
               databaseId: translation.databaseId,
               uri: translation.uri,
-              languageCode: translation.language.code.toLowerCase(),
+              languageCode: translation.language?.code?.toLowerCase() || resolveContentLanguage(translation.uri),
             }]
           : [],
       ) || [],
-    posts: archive.posts?.nodes.map(mapBlogPost) || [],
-    hasMorePosts: archive.posts?.pageInfo.hasNextPage || false,
-    terms: mapTerms(data.terms?.nodes, languageCode),
+    posts: posts
+      .filter((post) => !post.language?.code || post.language.code.toLowerCase() === languageCode)
+      .map(mapBlogPost),
+    hasMorePosts: hasMore,
+    terms,
     seo: mapTaxonomySeo(archive.seo),
     scripts: archive.enqueuedScripts?.nodes.map(mapScript) || [],
   };
 }
 
+async function getRestTerms(taxonomy: PostTaxonomy, languageCode: string): Promise<CmsTaxonomyTerm[]> {
+  const resource = taxonomy === "category" ? "categories" : "tags";
+  const url = new URL(`/wp-json/wp/v2/${resource}`, BACKEND_ORIGIN);
+  url.searchParams.set("per_page", "100");
+  url.searchParams.set("hide_empty", "true");
+  url.searchParams.set("lang", languageCode);
+  url.searchParams.set("_fields", "id,name,slug,link");
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`The ${taxonomy} archive term query failed with status ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error(`The ${taxonomy} archive term query returned an invalid payload`);
+  }
+  return payload.flatMap((term: RestTaxonomyTerm) => {
+    if (!Number.isInteger(term?.id) || !term.name || !term.slug || !term.link) return [];
+    return [{
+      id: String(term.id),
+      name: htmlToPlainText(term.name),
+      slug: term.slug,
+      uri: term.link,
+    }];
+  });
+}
+
+function resolveContentLanguage(uri: string): string {
+  return resolvePathLanguageCode(
+    uri,
+    STOREFRONT_EXPECTED_LOCALES,
+    STOREFRONT_DEFAULT_LANGUAGE,
+    STOREFRONT_BACKEND_PROFILE === "blog",
+  );
+}
+
 export function mapBlogPost(post: RawBlogPost): PostCardData {
-  const contentText = htmlToText(post.content || "");
+  const contentText = htmlToPlainText(post.content || post.excerpt || "");
   const wordCount = contentText ? contentText.split(/\s+/).length : 0;
   const readingTime = post.seo?.readingTime;
   const languageCode = post.language?.code?.toLowerCase();
@@ -405,7 +492,7 @@ export function mapBlogPost(post: RawBlogPost): PostCardData {
     slug: post.slug || "",
     href: post.uri || undefined,
     title: post.title?.trim() || "Untitled post",
-    excerpt: htmlToText(post.excerpt || ""),
+    excerpt: htmlToPlainText(post.excerpt || ""),
     imageUrl: featuredImage?.sourceUrl || undefined,
     date: post.date || "",
     lastEditedDate: post.modified || undefined,
@@ -417,6 +504,7 @@ export function mapBlogPost(post: RawBlogPost): PostCardData {
       avatarUrl: post.author?.node.avatar?.url || undefined,
     },
     authorDatabaseId: post.author?.node.databaseId || undefined,
+    languageCode,
     wordCount,
     readingTimeMinutes: readingTime && readingTime > 0 ? Math.ceil(readingTime) : Math.max(1, Math.ceil(wordCount / 200)),
     categories: mapPostTerms(post.categories?.nodes, languageCode),
@@ -429,7 +517,7 @@ function mapTerms(terms: RawBlogTerm[] | undefined, languageCode: string): CmsTa
   const mapped = new Map<string, CmsTaxonomyTerm>();
   terms?.forEach((term) => {
     if (!term.name || !term.slug || !term.uri) return;
-    if (term.language?.code && term.language.code.toLowerCase() !== languageCode) return;
+    if (term.language?.code?.toLowerCase() !== languageCode) return;
     mapped.set(term.name.trim().toLocaleLowerCase(), {
       id: term.id,
       name: term.name,
@@ -455,11 +543,17 @@ function mapPostTerms(terms: RawBlogTerm[] | undefined, languageCode?: string): 
 }
 
 function mapTaxonomySeo(seo: RawTaxonomySeo | null): CmsPageSeo {
-  if (!seo) return mapSeo(null);
+  if (!seo) return { ...mapSeo(null), robots: "index, follow" };
   const { schema: _schema, ...commonSeo } = seo;
-  return mapSeo({ ...commonSeo, schema: null });
+  return { ...mapSeo({ ...commonSeo, schema: null }), robots: "index, follow" };
 }
 
-function htmlToText(html: string): string {
-  return new DOMParser().parseFromString(html, "text/html").body.textContent?.replace(/\s+/g, " ").trim() || "";
+export function taxonomySlugFromUri(uri: string): string | null {
+  const segment = uri.split(/[?#]/, 1)[0].split("/").filter(Boolean).at(-1);
+  if (!segment) return null;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }

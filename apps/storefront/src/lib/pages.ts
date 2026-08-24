@@ -1,22 +1,30 @@
 import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { normalizeFeaturedImage, type CmsFeaturedImage, type RawFeaturedImage } from "@funky/cms";
-import { languageHomePath } from "@funky/ui/src/locale/urlPaths.ts";
-import { resolveHomePageDatabaseId } from "./homepageResolution";
+import {
+  languageHomePath,
+  resolvePathLanguageCode,
+} from "@funky/ui/src/locale/urlPaths.ts";
+import {
+  STOREFRONT_DEFAULT_LANGUAGE,
+  STOREFRONT_EXPECTED_LOCALES,
+} from "@funky/sdk";
+import { resolveHomePageDatabaseId } from "./homepageResolution.ts";
 import {
   createCompatiblePageLookupQuery,
+  normalizePageLookupUri,
   selectPageLookupCandidate,
-} from "./pageLookupCompatibility";
+} from "./pageLookupCompatibility.ts";
 import {
   missingGraphqlFieldRule,
   removeGraphqlFieldSelections,
   requestGraphqlWithCompatibility,
   unsupportedRenderedFormatRule,
   type GraphqlCompatibilityRule,
-} from "./graphqlFieldFallback";
+} from "./graphqlFieldFallback.ts";
 import {
-  createCorePageQuery,
-  shouldPreferCoreGraphqlQueries,
-} from "./profileGraphqlCompatibility";
+  createLanguageCompatiblePageQuery,
+  createProfilePageQuery,
+} from "./profileGraphqlCompatibility.ts";
 
 export type CmsPageScript = {
   id: string;
@@ -41,6 +49,7 @@ export type CmsPageSeo = {
   keywords: string | null;
   canonical: string | null;
   robots: string;
+  robotsSource: "explicit" | "seo";
   opengraphTitle: string | null;
   opengraphDescription: string | null;
   opengraphType: string | null;
@@ -133,6 +142,11 @@ export type RawCmsSeo = {
   twitterTitle: string | null;
 };
 
+export type CmsPublicRobots = {
+  noindex: boolean;
+  nofollow: boolean;
+};
+
 export const THEME_STYLES_FIELDS = /* GraphQL */ `
   customCss
   fontFaceStyles
@@ -175,6 +189,7 @@ type PageResult = {
       nodes: RawCmsScript[];
     } | null;
     seo: RawCmsSeo | null;
+    funkycommercePublicRobots?: CmsPublicRobots | null;
     themeStyles: CmsThemeStyles | null;
   } | null;
 };
@@ -312,6 +327,7 @@ const PAGE_QUERY = /* GraphQL */ `
         twitterDescription
         twitterTitle
       }
+      funkycommercePublicRobots { noindex nofollow }
       themeStyles {
         ${THEME_STYLES_FIELDS}
       }
@@ -322,7 +338,7 @@ const PAGE_QUERY = /* GraphQL */ `
 const PAGE_COMPATIBILITY_RULES = [
   {
     matches: (message) => message.includes("Cannot access offset of type string on string"),
-    transform: (query) => removeGraphqlFieldSelections(query, "template"),
+    transform: createLanguageCompatiblePageQuery,
   },
   missingGraphqlFieldRule("headlessContent"),
   missingGraphqlFieldRule("headlessShortcodes"),
@@ -331,6 +347,7 @@ const PAGE_COMPATIBILITY_RULES = [
   missingGraphqlFieldRule("language"),
   missingGraphqlFieldRule("translations"),
   missingGraphqlFieldRule("seo"),
+  missingGraphqlFieldRule("funkycommercePublicRobots"),
   unsupportedRenderedFormatRule,
 ] as const;
 
@@ -352,10 +369,10 @@ const PAGE_BY_NAME_QUERY = /* GraphQL */ `
 `;
 
 export async function getPageByUri(uri: string): Promise<CmsPage | null> {
-  const page = await getPage(uri, "URI");
+  const normalizedUri = normalizePageLookupUri(uri);
+  const page = await getPage(normalizedUri, "URI");
   if (page) return page;
 
-  const normalizedUri = normalizePageLookupUri(uri);
   const slug = normalizedUri.split("/").filter(Boolean).at(-1);
   if (!slug) return null;
 
@@ -372,7 +389,14 @@ export async function getPageByUri(uri: string): Promise<CmsPage | null> {
     throw new Error("The page name lookup returned no pages");
   }
 
-  const candidate = selectPageLookupCandidate(data.pages.nodes, normalizedUri, slug);
+  const requireExactUri = STOREFRONT_BACKEND_PROFILE === "blog"
+    && /^\/[a-z]{2}(?:-[a-z0-9]+)*(?:\/|$)/i.test(normalizedUri);
+  const candidate = selectPageLookupCandidate(
+    data.pages.nodes,
+    normalizedUri,
+    slug,
+    requireExactUri,
+  );
   if (!candidate) return null;
 
   const resolvedPage = await getPage(candidate.databaseId, "DATABASE_ID");
@@ -398,8 +422,20 @@ export async function getHomePage(
   if (!frontPage) {
     throw new Error(`The configured static front page ${settings.pageOnFront} was not found`);
   }
-  const selectedPageId = resolveHomePageDatabaseId(frontPage, languageCode, configuredLanguageCodes);
-  if (!selectedPageId) return null;
+  const selectedPageId = resolveHomePageDatabaseId(
+    frontPage,
+    languageCode,
+    configuredLanguageCodes,
+    configuredLanguageCodes[0],
+  );
+  if (!selectedPageId) {
+    const localizedHome = await getPageByUri(languageHomePath(languageCode, configuredLanguageCodes));
+    if (!localizedHome) return null;
+    return {
+      ...localizedHome,
+      uri: languageHomePath(languageCode, configuredLanguageCodes),
+    };
+  }
   const selectedPage = selectedPageId === frontPage.databaseId
     ? frontPage
     : await getPage(selectedPageId, "DATABASE_ID");
@@ -417,15 +453,8 @@ export async function getHomePage(
   };
 }
 
-function normalizePageLookupUri(uri: string): string {
-  const pathname = uri.startsWith("/") ? uri : `/${uri}`;
-  return pathname === "/" || pathname.endsWith("/") ? pathname : `${pathname}/`;
-}
-
 async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Promise<CmsPage | null> {
-  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
-    ? createCorePageQuery(PAGE_QUERY)
-    : PAGE_QUERY;
+  const query = createProfilePageQuery(PAGE_QUERY, STOREFRONT_BACKEND_PROFILE);
   const result = await requestGraphqlWithCompatibility<PageResult>(
     graphqlRequest,
     query,
@@ -459,14 +488,24 @@ async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Prom
     headlessShortcodes: page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [],
     modified: page.modified,
     templateName: page.template?.templateName || null,
-    languageCode: page.language?.code?.toLowerCase() || "en",
+    languageCode: page.language?.code?.toLowerCase() || resolvePathLanguageCode(
+      page.uri || (idType === "URI" ? String(id) : ""),
+      STOREFRONT_EXPECTED_LOCALES,
+      STOREFRONT_DEFAULT_LANGUAGE,
+      STOREFRONT_BACKEND_PROFILE === "blog",
+    ),
     translations:
       page.translations?.flatMap((translation) =>
-        translation?.uri && translation.language?.code
+        translation?.uri
           ? [{
               databaseId: translation.databaseId,
               uri: translation.uri,
-              languageCode: translation.language.code.toLowerCase(),
+              languageCode: translation.language?.code?.toLowerCase() || resolvePathLanguageCode(
+                translation.uri,
+                STOREFRONT_EXPECTED_LOCALES,
+                STOREFRONT_DEFAULT_LANGUAGE,
+                STOREFRONT_BACKEND_PROFILE === "blog",
+              ),
             }]
           : [],
       ) || [],
@@ -482,7 +521,7 @@ async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Prom
     featuredImage: normalizeFeaturedImage(page.featuredImage, seo?.schema),
     scripts: page.enqueuedScripts?.nodes.map(mapScript) || [],
     themeStyles: page.themeStyles || emptyThemeStyles(),
-    seo: mapSeo(seo),
+    seo: mapSeo(seo, page.funkycommercePublicRobots),
   };
 }
 
@@ -515,13 +554,17 @@ export function mapScript(script: RawCmsScript): CmsPageScript {
   };
 }
 
-export function mapSeo(seo: RawCmsSeo | null | undefined): CmsPageSeo {
+export function mapSeo(
+  seo: RawCmsSeo | null | undefined,
+  publicRobots?: CmsPublicRobots | null,
+): CmsPageSeo {
   return {
     title: seo?.title || null,
     description: seo?.metaDesc || null,
     keywords: seo?.metaKeywords || null,
     canonical: seo?.canonical || null,
-    robots: buildRobotsValue(seo?.metaRobotsNoindex, seo?.metaRobotsNofollow),
+    robots: buildRobotsValue(seo?.metaRobotsNoindex, seo?.metaRobotsNofollow, publicRobots),
+    robotsSource: publicRobots ? "explicit" : "seo",
     opengraphTitle: seo?.opengraphTitle || null,
     opengraphDescription: seo?.opengraphDescription || null,
     opengraphType: seo?.opengraphType || null,
@@ -543,6 +586,12 @@ export function mapSeo(seo: RawCmsSeo | null | undefined): CmsPageSeo {
   };
 }
 
-function buildRobotsValue(noindex?: string | null, nofollow?: string | null): string {
-  return `${noindex === "noindex" ? "noindex" : "index"}, ${nofollow === "nofollow" ? "nofollow" : "follow"}`;
+function buildRobotsValue(
+  noindex?: string | null,
+  nofollow?: string | null,
+  publicRobots?: CmsPublicRobots | null,
+): string {
+  const shouldNoindex = publicRobots ? publicRobots.noindex : noindex === "noindex";
+  const shouldNofollow = publicRobots ? publicRobots.nofollow : nofollow === "nofollow";
+  return `${shouldNoindex ? "noindex" : "index"}, ${shouldNofollow ? "nofollow" : "follow"}`;
 }

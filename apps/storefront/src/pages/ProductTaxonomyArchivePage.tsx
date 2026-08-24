@@ -1,5 +1,6 @@
+import { useRef } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { PaginableProductGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { normalizeLanguagePath, PaginableProductGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs, seoBreadcrumbsToItems } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { HeroMock } from "../components/HeroMock";
@@ -16,14 +17,33 @@ import {
   taxonomyNotFoundMessage,
 } from "../lib/taxonomyRoutes";
 import { ArchiveDescriptionSection } from "./shared";
+import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
 
 export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTaxonomy }) {
   const { pathname } = useLocation();
   const { slug } = useParams();
-  const { identifier, idType } = resolveTaxonomyArchiveIdentifier(pathname, slug);
-  const { data: archive, isLoading, error } = useIncrementalData(
-    `product-${taxonomy}:${idType}:${identifier}`,
-    () => getProductArchive(taxonomy, identifier, idType),
+  const { languageCode, languageBackendCode } = useLanguage();
+  const lastResolvedArchive = useRef<CmsProductArchive | null>(null);
+  const currentIdentifier = resolveTaxonomyArchiveIdentifier(pathname, slug);
+  const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
+    `product-${taxonomy}:${currentIdentifier.idType}:${currentIdentifier.identifier}:${languageCode}`,
+    () => getProductArchive(
+      taxonomy,
+      currentIdentifier.identifier,
+      currentIdentifier.idType,
+      languageCode,
+      languageBackendCode,
+    ),
+  );
+  if (archive) lastResolvedArchive.current = archive;
+
+  useCanonicalContentLanguage(
+    archive?.languageCode || lastResolvedArchive.current?.languageCode,
+    archive?.translations || lastResolvedArchive.current?.translations || [],
+    pathname,
+    !isLoading && !isRevalidating,
+    true,
+    archive?.uri || lastResolvedArchive.current?.uri,
   );
 
   if (isLoading) return <ContentLoadingState label="Loading product archive" />;
@@ -47,10 +67,17 @@ const TAXONOMY_LABELS: Record<CommerceTaxonomy, string> = {
 };
 
 function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
-  const { languageCode } = useLanguage();
-  const { productArchiveHeroLayout: heroVariant } = useLayoutPreferences();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const {
+    productArchiveHeroLayout: heroVariant,
+    shopProductCardVariant,
+    showArchiveDescriptionInHero,
+  } = useLayoutPreferences();
+  const isFullBleed = heroVariant === "fullbleed";
   const shopPath = useStorefrontPath("shop", "/shop");
   const taxonomyLabel = TAXONOMY_LABELS[archive.taxonomy];
+  const brandDirectoryPath = normalizeLanguagePath("/product-brand", languageCode, configuredLanguageCodes);
+  const localizedArchiveUri = normalizeLanguagePath(archive.uri, languageCode, configuredLanguageCodes);
   const title = archive.taxonomy === "tag" ? `#${archive.name}` : archive.name;
   const description = stripHtml(archive.descriptionHtml) ||
     `Browse products in the ${archive.name} ${archive.taxonomy}.`;
@@ -59,17 +86,17 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
     [
       { label: "Home", href: "/" },
       { label: "Shop", href: shopPath },
-      ...(archive.taxonomy === "brand" ? [{ label: "Product brands", href: "/product-brand" }] : []),
+      ...(archive.taxonomy === "brand" ? [{ label: "Product brands", href: brandDirectoryPath }] : []),
       { label: title },
     ],
   );
 
   return (
-    <div className="grid gap-8">
+    <div className={`grid gap-8 ${isFullBleed ? "relative" : ""}`}>
       <Seo
         title={archive.seo.title || title}
         description={archive.seo.description || archive.seo.opengraphDescription || description}
-        canonical={archive.seo.canonical || archive.seo.opengraphUrl || archive.uri}
+        canonical={archive.seo.canonical || archive.seo.opengraphUrl || localizedArchiveUri}
         languageCode={languageCode}
         keywords={archive.seo.keywords || undefined}
         siteName={archive.seo.siteName || undefined}
@@ -88,7 +115,9 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         schema={{ pageType: archive.seo.pageType || "CollectionPage" }}
         breadcrumbs={archive.seo.breadcrumbs}
       />
-      <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
+      <div className={isFullBleed ? "absolute left-0 top-4 z-20 text-white [&_a]:text-white/80 [&_span]:text-white/70" : ""}>
+        <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
+      </div>
 
       <div className="grid gap-3">
         <HeroMock
@@ -96,10 +125,11 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
           headingLevel="h1"
           kicker={taxonomyLabel}
           title={title}
-          description={description}
+          description={showArchiveDescriptionInHero ? description : undefined}
           image={archive.imageUrl || undefined}
+          fullWidth={isFullBleed}
           secondaryCta={archive.taxonomy === "brand"
-            ? { label: "All brands", href: "/product-brand" }
+            ? { label: "All brands", href: brandDirectoryPath }
             : { label: "All products", href: shopPath }}
         />
       </div>
@@ -109,7 +139,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
           {archive.siblings.map((term) => (
             <Link
               key={term.id}
-              to={term.uri}
+              to={normalizeLanguagePath(term.uri, languageCode, configuredLanguageCodes)}
               className={`rounded-full px-4 py-2 text-sm font-medium no-underline transition ${
                 term.id === archive.id
                   ? "bg-brand-gradient text-white shadow-glow"
@@ -127,7 +157,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
           title={`${title} products`}
           products={archive.products}
           pageSize={6}
-          cardVariant="default"
+          cardVariant={shopProductCardVariant}
           gridVariant="standard"
         />
       ) : (

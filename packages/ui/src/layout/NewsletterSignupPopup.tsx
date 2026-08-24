@@ -1,24 +1,29 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, CheckCircle2, ImagePlus, Mail, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useLayoutPreferences, useSoundUX } from "../state";
+import {
+  NEWSLETTER_POPUP_OPEN_DELAY_MS,
+  NEWSLETTER_POPUP_STORAGE_KEY,
+  readPopupState,
+  resolveNewsletterPopupOpenMode,
+  type PopupState,
+} from "./NewsletterSignupPopup.behavior";
 
 /** `"split"` is the original image + form side-by-side treatment. `"modern-card"` and
  * `"modern-center"` are 2 newer, fresher alternatives — a compact bottom-corner toast
  * and a centered image-less gradient card — both triggerable from the layout studio. */
 export type NewsletterPopupVariant = "split" | "modern-card" | "modern-center";
 
-type PopupState = {
-  status: "idle" | "dismissed" | "subscribed";
-  nextVisibleAt: number | null;
-};
-
-const STORAGE_KEY = "funkycommerce-mailing-list-popup";
 const SUBSCRIBE_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 30;
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 function writePopupState(next: PopupState) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  try {
+    window.localStorage.setItem(NEWSLETTER_POPUP_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage failures — closing the popup should still work.
+  }
 }
 
 export function NewsletterSignupPopup({
@@ -41,34 +46,64 @@ export function NewsletterSignupPopup({
   const [error, setError] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const openTimerRef = useRef<number | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const dismissCooldownMs = Math.max(0, newsletterPopupCooldownDays) * DAY_MS;
 
   useEffect(() => {
     return () => {
+      if (openTimerRef.current !== null) {
+        window.clearTimeout(openTimerRef.current);
+      }
       if (closeTimerRef.current !== null) {
         window.clearTimeout(closeTimerRef.current);
       }
     };
   }, []);
 
+  const openPopup = useCallback(() => {
+    if (!showNewsletterPopup) return;
+
+    const closingTimer = closeTimerRef.current;
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closingTimer !== null) {
+      window.clearTimeout(closingTimer);
+      closeTimerRef.current = null;
+      setIsVisible(true);
+    }
+
+    setError(null);
+    setIsSubscribed(false);
+    setIsSubmitting(false);
+    setIsOpen(true);
+  }, [showNewsletterPopup]);
+
   // Any link/URL ending in `#newsletter` opens this popup on demand — a plain anchor
-  // works from the footer, a nav item, inline copy, etc. — bypassing the initial delay
-  // and the dismiss/subscribe cooldown since it's an explicit, deliberate trigger.
+  // works from the footer, a nav item, inline copy, etc. — bypassing the interaction
+  // gate, delay, and dismiss/subscribe cooldown since it's an explicit trigger.
   // Checked on mount (direct URL/hash navigation) and via a delegated click listener
   // (so re-clicking the same in-page hash link still reopens it).
   useEffect(() => {
     if (!showNewsletterPopup) return;
 
-    const hashMatchesNewsletter = (hash: string) => hash.replace(/^#/, "") === "newsletter";
-
-    if (hashMatchesNewsletter(window.location.hash)) {
-      setIsOpen(true);
+    if (resolveNewsletterPopupOpenMode({
+      showNewsletterPopup,
+      popupState: { status: "idle", nextVisibleAt: null },
+      locationHash: window.location.hash,
+    }) === "explicit") {
+      openPopup();
     }
 
     const handleHashChange = () => {
-      if (hashMatchesNewsletter(window.location.hash)) {
-        setIsOpen(true);
+      if (resolveNewsletterPopupOpenMode({
+        showNewsletterPopup,
+        popupState: { status: "idle", nextVisibleAt: null },
+        locationHash: window.location.hash,
+      }) === "explicit") {
+        openPopup();
       }
     };
 
@@ -77,8 +112,12 @@ export function NewsletterSignupPopup({
       if (!anchor) return;
       const href = anchor.getAttribute("href") ?? "";
       const hashPart = href.includes("#") ? href.slice(href.indexOf("#")) : "";
-      if (hashMatchesNewsletter(hashPart)) {
-        setIsOpen(true);
+      if (resolveNewsletterPopupOpenMode({
+        showNewsletterPopup,
+        popupState: { status: "idle", nextVisibleAt: null },
+        locationHash: hashPart,
+      }) === "explicit") {
+        openPopup();
       }
     };
 
@@ -88,7 +127,65 @@ export function NewsletterSignupPopup({
       window.removeEventListener("hashchange", handleHashChange);
       document.removeEventListener("click", handleClick);
     };
-  }, [showNewsletterPopup]);
+  }, [openPopup, showNewsletterPopup]);
+
+  useEffect(() => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+
+    if (!showNewsletterPopup) {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setIsVisible(false);
+      setIsOpen(false);
+      setError(null);
+      setIsSubscribed(false);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (resolveNewsletterPopupOpenMode({
+      showNewsletterPopup,
+      popupState: readPopupState(),
+      locationHash: window.location.hash,
+      now: Date.now(),
+    }) !== "automatic") {
+      return;
+    }
+
+    let isListeningForInteraction = true;
+    const handleInteraction = () => {
+      if (!isListeningForInteraction) return;
+      isListeningForInteraction = false;
+      window.removeEventListener("pointerdown", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+      window.removeEventListener("scroll", handleInteraction);
+
+      openTimerRef.current = window.setTimeout(() => {
+        openTimerRef.current = null;
+        openPopup();
+      }, NEWSLETTER_POPUP_OPEN_DELAY_MS);
+    };
+
+    window.addEventListener("pointerdown", handleInteraction, { passive: true });
+    window.addEventListener("keydown", handleInteraction);
+    window.addEventListener("scroll", handleInteraction, { passive: true });
+
+    return () => {
+      isListeningForInteraction = false;
+      window.removeEventListener("pointerdown", handleInteraction);
+      window.removeEventListener("keydown", handleInteraction);
+      window.removeEventListener("scroll", handleInteraction);
+      if (openTimerRef.current !== null) {
+        window.clearTimeout(openTimerRef.current);
+        openTimerRef.current = null;
+      }
+    };
+  }, [openPopup, showNewsletterPopup]);
 
   useEffect(() => {
     if (!isOpen) {

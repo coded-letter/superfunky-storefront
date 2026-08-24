@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ViewSwitch } from "@funky/ui";
+import { ViewSwitch, useLayoutPreferences } from "@funky/ui";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -29,8 +29,6 @@ export type AuthShortcodeMode = AuthMode | "combined";
  * - `centered`: no split background, a single centered card on a plain page.
  * - `image-bg`: full-bleed photographic background with a glass-morphism card floating on top.
  */
-export type AuthLayout = "split" | "centered" | "image-bg";
-
 const AUTH_BACKGROUND_IMAGE =
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80";
 
@@ -65,9 +63,8 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
   const [searchParams] = useSearchParams();
-  const config = useApplicationShortcode(["funkycommerce_auth"], { layout: "split", mode });
-  const configuredLayout = ["split", "centered", "image-bg"].includes(config.layout) ? config.layout as AuthLayout : "split";
-  const layout = configuredLayout;
+  const config = useApplicationShortcode(["funkycommerce_auth"], { mode });
+  const { authLayout: layout } = useLayoutPreferences();
   const combined = mode === "combined";
   const configuredDefaultMode = AUTH_MODE_OPTIONS.some((option) => option.value === config["default-mode"])
     ? config["default-mode"] as AuthMode

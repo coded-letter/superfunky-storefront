@@ -86,7 +86,10 @@ function mapMenuItem(
   const label = item.label?.trim();
   if (!label || ancestors.has(item.databaseId)) return [];
 
-  const href = normalizeHref(item.path || item.uri || item.url, parentHref);
+  // WPGraphQL can expose a local-looking `path` for custom links. The canonical
+  // `url` preserves an explicitly configured external host; backend URLs are still
+  // converted to storefront paths by the normalizer.
+  const href = normalizeHref(item.url || item.path || item.uri, parentHref);
   const nextAncestors = new Set(ancestors).add(item.databaseId);
   const children = (childrenByParent.get(item.databaseId) || []).flatMap((child) =>
     mapMenuItem(child, childrenByParent, normalizeHref, href, nextAncestors),

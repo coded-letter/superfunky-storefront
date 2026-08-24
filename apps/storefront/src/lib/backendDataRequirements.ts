@@ -28,6 +28,26 @@ function readShortcodeMarkers(markup: string): ShortcodeMarker[] {
     .filter(({ name }) => Boolean(name));
 }
 
+export function canUseHomepageCommunityFeed(pathname: string, renderedMarkup: string): boolean {
+  if (stripLanguagePrefix(pathname).toLowerCase() !== "/") return false;
+  const communityMarkers = readShortcodeMarkers(renderedMarkup).filter(({ name, type }) =>
+    name.startsWith("community-") || type === "community-article",
+  );
+  return communityMarkers.some(({ name }) => name === "community-feed")
+    && communityMarkers.every(({ name }) =>
+      ["community-feed", "community-hero", "community-tag-picks"].includes(name),
+    );
+}
+
+export function canUseHomepageBlogSummary(pathname: string, renderedMarkup: string): boolean {
+  if (stripLanguagePrefix(pathname).toLowerCase() !== "/") return false;
+  if (!renderedMarkup.trim()) return false;
+  return !readShortcodeMarkers(renderedMarkup).some(({ name, type }) =>
+    (name === "categories" && type === "post")
+    || ["authors", "comments", "tags", "post_archive", "funkycommerce_blog", "reading_list", "funkycommerce_reading_list"].includes(name),
+  );
+}
+
 export function resolveBackendDataRequirements(
   profile: StorefrontBackendProfile,
   pathname: string,
@@ -39,6 +59,8 @@ export function resolveBackendDataRequirements(
   const isHome = route === "/";
   const isShortcodeLibrary = route === "/shortcodes";
   const hasRelatedSections = markup.includes("related-sections");
+  const hasWooCommerceBlocks = markup.includes("wp-block-woocommerce")
+    || markup.includes("wc-block-");
   const hasStickyPosts = markers.some(({ name }) => name === "sticky-posts" || name === "sticky_posts");
   const hasPostCollection = markers.some(({ name, type }) =>
     type === "post"
@@ -55,23 +77,31 @@ export function resolveBackendDataRequirements(
     return false;
   });
   const hasCommunityCollection = markers.some(({ name, type }) =>
-    name.startsWith("community-") || type === "community-article",
+    name.startsWith("community-")
+    || type === "community-article"
+    || ["account", "funkycommerce_account", "woocommerce_my_account"].includes(name),
   );
   const isBlogRoute = /^\/(?:blog|author|reading-list)(?:\/|$)/.test(route);
   const isCommerceRoute = /^\/(?:shop|product|product-category|product-tag|brand|cart|checkout|wishlist|order)(?:\/|$)/.test(route);
-  const isCommunityRoute = /^\/(?:community|community-author|community-tag|account|layout-studio)(?:\/|$)/.test(route);
+  const isCommunityRoute = /^\/(?:community|community-author|community-tag|account)(?:\/|$)/.test(route);
 
   return {
     commerce: profile !== "blog"
       && profile !== "shell"
-      && (isHome || isCommerceRoute || isShortcodeLibrary || hasProductCollection || hasRelatedSections),
+      && (
+        (isHome && profile === "shop")
+        || isCommerceRoute
+        || isShortcodeLibrary
+        || hasProductCollection
+        || hasWooCommerceBlocks
+        || hasRelatedSections
+      ),
     blog: isBlogRoute
       || isShortcodeLibrary
       || hasPostCollection
       || hasRelatedSections
       || (isHome && (profile === "blog" || profile === "full")),
     stickyPosts: hasStickyPosts,
-    community: profile === "full"
-      && (isCommunityRoute || isShortcodeLibrary || hasCommunityCollection),
+    community: isCommunityRoute || isShortcodeLibrary || hasCommunityCollection,
   };
 }

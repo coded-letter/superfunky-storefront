@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyPageRouteKeys,
+  resolveRoutePageUri,
   type RoutePageNode,
 } from "./storefrontRouteClassification.ts";
 
@@ -63,6 +64,18 @@ test("dedicated shortcode-backed routes remain discoverable", () => {
   );
   assert.deepEqual(
     classifyPageRouteKeys(page({
+      uri: "/ja/journal/",
+      slug: "journal",
+      headlessShortcodes: [
+        "[slider type=\"post\" slides=\"3\"]",
+        "[grid type=\"post\" paginated=\"true\" page_size=\"6\"]",
+        "[categories type=\"post\"]",
+      ],
+    })),
+    ["blog"],
+  );
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
       uri: "/community/",
       slug: "community",
       headlessShortcodes: [
@@ -81,4 +94,10 @@ test("dedicated shortcode-backed routes remain discoverable", () => {
     })),
     ["auth-register"],
   );
+});
+
+test("a WordPress posts page without a URI falls back to its canonical slug", () => {
+  assert.equal(resolveRoutePageUri(page({ uri: null, slug: "blog" })), "/blog/");
+  assert.equal(resolveRoutePageUri(page({ uri: null, slug: null })), null);
+  assert.equal(resolveRoutePageUri(page({ uri: "/en/blog-2/", slug: "blog-2" })), "/en/blog-2/");
 });

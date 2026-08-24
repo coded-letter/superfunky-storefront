@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import {
+  afterMountedPageStylesSettle,
   applyThemePresetVariables,
   createWordPressElementTypographyCss,
   mountPageStyles,
@@ -10,8 +11,43 @@ import {
   sanitizeWordPressStylesheetUrls,
   WORDPRESS_BLOCK_COMPATIBILITY_CSS,
 } from "./pageStyles.ts";
+import { staticStyleSourceHash } from "./staticStyleContract.mjs";
 
 const bundledCss = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const photoHeroSource = readFileSync(new URL("../components/HeroMock.tsx", import.meta.url), "utf8");
+const videoHeroSource = readFileSync(new URL("../components/VideoHero.tsx", import.meta.url), "utf8");
+
+test("page style readiness waits for every CMS stylesheet chunk", () => {
+  const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>");
+  const previousDocumentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: dom.window.document });
+  try {
+    const first = dom.window.document.createElement("link");
+    const second = dom.window.document.createElement("link");
+    for (const link of [first, second]) {
+      link.rel = "stylesheet";
+      link.dataset.wordpressPageStyle = "wordpress-block-library";
+      dom.window.document.head.appendChild(link);
+    }
+    let settled = false;
+    const stopWaiting = afterMountedPageStylesSettle(() => {
+      settled = true;
+    });
+
+    first.dispatchEvent(new dom.window.Event("load"));
+    assert.equal(settled, false);
+    second.dispatchEvent(new dom.window.Event("load"));
+    assert.equal(settled, true);
+    stopWaiting();
+  } finally {
+    if (previousDocumentDescriptor) {
+      Object.defineProperty(globalThis, "document", previousDocumentDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
+    dom.window.close();
+  }
+});
 
 test("bundled and hydrated CSS implement the same full-width breakout", () => {
   for (const css of [bundledCss, WORDPRESS_BLOCK_COMPATIBILITY_CSS]) {
@@ -62,6 +98,14 @@ test("centered images and desktop Columns retain native WordPress layout semanti
   }
 });
 
+test("editor icon blocks have low-specificity first-paint geometry", () => {
+  for (const css of [bundledCss, WORDPRESS_BLOCK_COMPATIBILITY_CSS]) {
+    assert.match(css, /:where\(\.wp-site-blocks\.entry-content \.wp-block-icon\)\s*\{[\s\S]{0,180}--funky-cms-inline-icon-size:\s*24px[\s\S]{0,180}line-height:\s*0/);
+    assert.match(css, /:where\(\.wp-site-blocks\.entry-content \.wp-block-icon\.aligncenter\)\s*\{[\s\S]{0,120}display:\s*flex[\s\S]{0,120}justify-content:\s*center/);
+    assert.match(css, /:where\(\.wp-site-blocks\.entry-content \.wp-block-icon > svg\)\s*\{[\s\S]{0,300}height:\s*auto[\s\S]{0,180}max-height:\s*var\(--funky-cms-inline-icon-size,\s*24px\)[\s\S]{0,180}max-width:\s*var\(--funky-cms-inline-icon-size,\s*24px\)[\s\S]{0,120}width:\s*auto/);
+  }
+});
+
 test("basic WordPress button variants use the theme accent without underlines", () => {
   for (const css of [bundledCss, WORDPRESS_BLOCK_COMPATIBILITY_CSS]) {
     assert.match(css, /\.wp-block-button__link[\s\S]{0,600}border-radius:\s*var\(--theme-radius\)/);
@@ -72,17 +116,32 @@ test("basic WordPress button variants use the theme accent without underlines", 
   }
 });
 
-test("Cover blocks inherit the theme radius unless the editor sets one", () => {
+test("constrained Cover blocks inherit the theme radius while full-bleed covers stay square", () => {
   for (const css of [bundledCss, WORDPRESS_BLOCK_COMPATIBILITY_CSS]) {
     assert.match(
       css,
-      /\.wp-block-cover:not\(\[style\*="border-radius"\]\):not\(\[style\*="border-top-left-radius"\]\)[\s\S]{0,300}border-radius:\s*var\(--theme-radius\)/,
+      /\.wp-block-cover:not\(\.alignfull\):not\(\[style\*="border-radius"\]\):not\(\[style\*="border-top-left-radius"\]\)[\s\S]{0,300}border-radius:\s*var\(--theme-radius\)/,
+    );
+    assert.match(
+      css,
+      /\.wp-block-cover\.alignfull:not\(\[style\*="border-radius"\]\)[\s\S]{0,300}border-radius:\s*0/,
     );
     assert.match(
       css,
       /\.wp-block-cover[\s\S]{0,120}>\s*:where\([\s\S]{0,300}\.wp-block-cover__image-background[\s\S]{0,300}border-radius:\s*inherit\s*!important/,
     );
   }
+});
+
+test("photo and video heroes use theme radius only when width-constrained", () => {
+  assert.match(photoHeroSource, /borderRadius: fullWidth \? 0 : "var\(--theme-radius\)"/);
+  assert.doesNotMatch(photoHeroSource, /fullWidth \?[^:\n]+:\s*"rounded-(?:2xl|3xl)"/);
+  assert.match(videoHeroSource, /borderRadius: variant === "fullbleed" \? 0 : "var\(--theme-radius\)"/);
+  assert.doesNotMatch(videoHeroSource, /variant === "fullbleed" \? "rounded-none/);
+  assert.match(
+    bundledCss,
+    /\[data-funkycommerce-fullwidth="true"\][\s\S]{0,220}:where\(\.sf-hero,\s*\.wp-block-cover\)[\s\S]{0,100}border-radius:\s*0\s*!important/,
+  );
 });
 
 test("Cover content width and overlay controls match Gutenberg output", () => {
@@ -298,6 +357,101 @@ test("mounts core block styles after global defaults and before editor custom CS
   );
 
   secondCleanup();
+  cleanup();
+  dom.window.close();
+});
+
+test("keeps the loaded prerendered WordPress style bundle authoritative during hydration", () => {
+  const styles = {
+    customCss: ".editor-rule{color:red}",
+    fontFaceStyles: "",
+    globalStyles: ":root :where(.wp-element-button){background:#32373c}",
+    stylesheets: [
+      "https://v3.superfunky.pro/wp-includes/css/dist/block-library/style.min.css?ver=7.0.2",
+      "https://v3.superfunky.pro/wp-includes/css/dist/block-library/theme.min.css?ver=7.0.2",
+    ],
+    colors: [],
+    fontFamilies: [],
+    fontSizes: [],
+    gradients: [],
+    spacingSizes: [],
+    contentSize: "",
+    wideSize: "",
+  };
+  const sourceHash = staticStyleSourceHash(styles);
+  const dom = new JSDOM(
+    `<html><head><style data-wordpress-static-style-source="${sourceHash}">body{color:inherit}</style></head><body></body></html>`,
+  );
+  Object.assign(globalThis, { document: dom.window.document });
+  const staticStyleBundle = document.querySelector("[data-wordpress-static-style-source]");
+  Object.defineProperty(staticStyleBundle, "sheet", { value: {} });
+
+  const cleanup = mountPageStyles(styles, "https://v3.superfunky.pro/graphql");
+  assert.equal(document.querySelectorAll('link[data-wordpress-page-style="wordpress-block-library"]').length, 0);
+  assert.equal(document.querySelectorAll('style[data-wordpress-page-style="wordpress-global-styles"]').length, 0);
+  assert.equal(document.querySelectorAll('style[data-wordpress-page-style="wordpress-custom-css"]').length, 0);
+  assert.equal(document.querySelectorAll("[data-wordpress-page-style]").length, 0);
+
+  cleanup();
+  assert.ok(document.querySelector("style[data-wordpress-static-style-source]"));
+  dom.window.close();
+});
+
+test("mounts runtime fallback styles when the prerendered stylesheet failed to load", () => {
+  const styles = {
+    customCss: ".editor-rule{color:red}",
+    fontFaceStyles: "",
+    globalStyles: ":root :where(.wp-element-button){background:#32373c}",
+    stylesheets: [],
+    colors: [],
+    fontFamilies: [],
+    fontSizes: [],
+    gradients: [],
+    spacingSizes: [],
+    contentSize: "",
+    wideSize: "",
+  };
+  const sourceHash = staticStyleSourceHash(styles);
+  const dom = new JSDOM(
+    `<html><head><link rel="stylesheet" href="/assets/missing.css" data-wordpress-static-style-source="${sourceHash}"></head><body></body></html>`,
+  );
+  Object.assign(globalThis, { document: dom.window.document });
+
+  const cleanup = mountPageStyles(styles, "https://v3.superfunky.pro/graphql");
+  assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-global-styles"]'));
+  assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-custom-css"]'));
+  assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-block-compatibility"]'));
+  assert.equal(document.querySelector("link[data-wordpress-static-style-source]"), null);
+
+  cleanup();
+  dom.window.close();
+});
+
+test("does not replace a loaded prerendered style bundle with runtime styles", () => {
+  const styles = {
+    customCss: ".new-rule{color:blue}",
+    fontFaceStyles: "",
+    globalStyles: "",
+    stylesheets: [],
+    colors: [],
+    fontFamilies: [],
+    fontSizes: [],
+    gradients: [],
+    spacingSizes: [],
+    contentSize: "",
+    wideSize: "",
+  };
+  const dom = new JSDOM(
+    '<html><head><link rel="stylesheet" href="/assets/old.css" data-wordpress-static-style-source="stale"></head><body></body></html>',
+  );
+  Object.assign(globalThis, { document: dom.window.document });
+  const staticStyleBundle = document.querySelector("link[data-wordpress-static-style-source]");
+  Object.defineProperty(staticStyleBundle, "sheet", { value: {} });
+
+  const cleanup = mountPageStyles(styles, "https://v3.superfunky.pro/graphql");
+  assert.ok(document.querySelector("link[data-wordpress-static-style-source]"));
+  assert.equal(document.querySelector('[data-wordpress-page-style]'), null);
+
   cleanup();
   dom.window.close();
 });

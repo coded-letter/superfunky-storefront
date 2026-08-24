@@ -25,7 +25,8 @@ import type {
 import type { NewsletterPopupVariant } from "@funky/ui/src/layout/NewsletterSignupPopup.tsx";
 import type { CurrencyOption, LanguageOption, SocialPlatform } from "@funky/ui/src/locale/options.ts";
 import type { ProductPageLayout } from "@funky/ui/src/state/productPageLayout.ts";
-import { BACKEND_ORIGIN, graphqlRequest, hasOnlyMissingGraphqlFields } from "@funky/sdk";
+import type { RelatedProductsColumns } from "@funky/ui/src/state/LayoutPreferencesContext.tsx";
+import { BACKEND_ORIGIN, graphqlRequest, hasOnlyMissingGraphqlFields, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { mapBackendLanguages } from "./languageMapping.ts";
 import { normalizeContentHref } from "./internalLinks.ts";
 import { mapFooterColumns, mapMenuItems, type RawMenuItem } from "./menuMapping.ts";
@@ -35,18 +36,20 @@ import {
 } from "./compatibleBranding.ts";
 import { hasOnlyKnownNavigationResolverErrors } from "./navigationCompatibility.ts";
 
+type RawMenu = {
+  id: string;
+  databaseId: number;
+  name: string | null;
+  slug: string | null;
+  locations: string[] | null;
+  menuItems: {
+    nodes: RawMenuItem[];
+  } | null;
+};
+
 type NavigationQueryResult = {
   menus: {
-    nodes: {
-      id: string;
-      databaseId: number;
-      name: string | null;
-      slug: string | null;
-      locations: string[] | null;
-      menuItems: {
-        nodes: RawMenuItem[];
-      } | null;
-    }[];
+    nodes: RawMenu[];
   } | null;
   languages: { code: string; name: string; slug: string }[] | null;
   storefrontConfig: StorefrontConfiguration | null;
@@ -57,15 +60,44 @@ type StorefrontRuntimeQueryResult = {
   storefrontConfig: Pick<StorefrontConfiguration, "defaultCustomerCountry" | "shippingCountries" | "freeShippingZones" | "stripePublishableKey"> | null;
 };
 
+type StorefrontUiStringsQueryResult = {
+  uiStrings: string | null;
+};
+
+type StorefrontRadioQueryResult = {
+  storefrontConfig: {
+    footer: {
+      spotifyPlaylistUrl?: string | null;
+      spotifyPlaylistEmbedUrl?: string | null;
+      spotifyPlayerTitle?: string | null;
+      spotifyPlayerDescription?: string | null;
+    } | null;
+  } | null;
+};
+
 export type NoPriceBehavior = "free" | "inquiry";
-export type PrismLightTheme = "one-light" | "solarized-light" | "duotone-light";
-export type PrismDarkTheme = "one-dark" | "dracula" | "duotone-dark";
+export type PrismTheme =
+  | "one-light"
+  | "one-dark"
+  | "dracula"
+  | "duotone-light"
+  | "duotone-dark"
+  | "prism"
+  | "coy"
+  | "dark"
+  | "funky"
+  | "okaidia"
+  | "solarized-light"
+  | "tomorrow"
+  | "twilight";
+export type PrismLightTheme = PrismTheme;
+export type PrismDarkTheme = PrismTheme;
 
 /**
  * Canonical, site-wide storefront layout configuration — mirrors the backend's
  * `FunkyCommerceLayout` GraphQL type (see `funkycommerce_layout_control_fields()` in
- * `inc/control-center-schema.php`). This is the single source of truth for every
- * layout/chrome preference the storefront renders; there is no client-side override.
+ * `inc/control-center-schema.php`). Backend values are authoritative for normal
+ * storefront sessions; authenticated Layout Studio sessions may override them in memory.
  */
 export type StorefrontLayoutConfiguration = {
   schemaVersion: number;
@@ -78,6 +110,8 @@ export type StorefrontLayoutConfiguration = {
   newsletterPopupVariant: NewsletterPopupVariant;
   newsletterPopupCooldownDays: number;
   productPageLayout: ProductPageLayout;
+  relatedProductsColumns: RelatedProductsColumns;
+  showStudioRelatedProductsUnderMeta: boolean;
   checkoutStoreMode: "physical" | "digital";
   checkoutCouponPosition: "inline" | "top";
   checkoutPaymentPosition: "left" | "right";
@@ -111,6 +145,7 @@ export type StorefrontLayoutConfiguration = {
   showHeaderReadingListLink: boolean;
   showHeaderWishlistLink: boolean;
   showHeaderCartIcon: boolean;
+  showHeaderPublishButton: boolean;
   showFooterLogo: boolean;
   showFooterExtraWrapper: boolean;
   showFooterSpotifyPlayer: boolean;
@@ -156,7 +191,8 @@ export type StorefrontLayoutConfiguration = {
   cartSummaryPosition: "sticky" | "static";
   productArchiveHeroLayout: "split" | "fullbleed" | "minimal";
   postArchiveHeroLayout: "split" | "fullbleed" | "minimal";
-  postTocLayout: "current" | "hidden" | "above";
+  showArchiveDescriptionInHero: boolean;
+  postTocLayout: "current" | "rail-left" | "rail-right" | "above";
   postSharePosition: "above-toc" | "on-image" | "below-toc-right";
   postAuthorLayout: "fullwidth" | "compact" | "editorial";
   discussionLayout: "stacked" | "split-left" | "split-right";
@@ -210,7 +246,15 @@ export type StorefrontConfiguration = {
     enabled?: boolean;
     provider?: string;
     placement?: "footer" | "header" | "fixed";
+    showHeader?: boolean;
+    showFooter?: boolean;
+    showFixed?: boolean;
     nativeProviderActive?: boolean;
+    title?: string | null;
+    subtitle?: string | null;
+    greeting?: string | null;
+    composerPlaceholder?: string | null;
+    launcherLabel?: string | null;
     iframeUrl?: string | null;
     iframeTitle: string;
     iframeSandbox: string;
@@ -223,6 +267,8 @@ export type StorefrontConfiguration = {
     newsletterPrivacyLabel: string;
     spotifyPlaylistUrl: string;
     spotifyPlaylistEmbedUrl: string;
+    spotifyPlayerTitle: string;
+    spotifyPlayerDescription: string;
     extraHtml: string;
     copyrightText: string;
   };
@@ -278,6 +324,8 @@ export type CmsNavigationData = {
   uiStrings: Record<string, string>;
 };
 
+export type CmsNavigationMenus = Pick<CmsNavigationData, "header" | "mobile" | "footer">;
+
 /** Deterministic defaults for every layout field — always identical to the backend's
  * own `funkycommerce_layout_control_fields()` defaults, so a misconfigured or
  * unreachable backend still renders the theme's original, documented chrome. */
@@ -292,6 +340,8 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   newsletterPopupVariant: "split",
   newsletterPopupCooldownDays: 7,
   productPageLayout: "classic",
+  relatedProductsColumns: "4",
+  showStudioRelatedProductsUnderMeta: false,
   checkoutStoreMode: "physical",
   checkoutCouponPosition: "inline",
   checkoutPaymentPosition: "left",
@@ -325,6 +375,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   showHeaderReadingListLink: true,
   showHeaderWishlistLink: true,
   showHeaderCartIcon: true,
+  showHeaderPublishButton: true,
   showFooterLogo: true,
   showFooterExtraWrapper: true,
   showFooterSpotifyPlayer: true,
@@ -370,6 +421,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   cartSummaryPosition: "sticky",
   productArchiveHeroLayout: "split",
   postArchiveHeroLayout: "split",
+  showArchiveDescriptionInHero: false,
   postTocLayout: "current",
   postSharePosition: "above-toc",
   postAuthorLayout: "fullwidth",
@@ -409,6 +461,9 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     enabled: false,
     provider: "native-first",
     placement: "footer",
+    showHeader: false,
+    showFooter: true,
+    showFixed: false,
     nativeProviderActive: false,
     iframeUrl: null,
     iframeTitle: "AI Assistant",
@@ -417,11 +472,13 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
   },
   footer: {
     socialLinks: [],
-    newsletterHeading: "Get product drops and offers first",
-    newsletterText: "Subscribe for curated picks, launch alerts and monthly updates. No spam, unsubscribe anytime.",
-    newsletterPrivacyLabel: "I agree to receive marketing emails and accept the privacy policy.",
+    newsletterHeading: "",
+    newsletterText: "",
+    newsletterPrivacyLabel: "",
     spotifyPlaylistUrl: "",
     spotifyPlaylistEmbedUrl: "",
+    spotifyPlayerTitle: "",
+    spotifyPlayerDescription: "",
     extraHtml: "",
     copyrightText: "",
   },
@@ -463,7 +520,6 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
 
 const NAVIGATION_QUERY = /* GraphQL */ `
   query StorefrontNavigation($language: String) {
-    languages { code name slug }
     uiStrings: funkycommerceUiStrings(language: $language)
     storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
       baseCurrency
@@ -474,6 +530,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         symbol
         rate
       }
+
       branding {
         storeName
         companyName
@@ -501,16 +558,6 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         cart
         menu
         assistant
-      }
-      aiAssistant {
-        enabled
-        provider
-        placement
-        nativeProviderActive
-        iframeUrl
-        iframeTitle
-        iframeSandbox
-        iframeReferrerPolicy
       }
       footer {
         newsletterHeading
@@ -572,6 +619,8 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         newsletterPopupVariant
         newsletterPopupCooldownDays
         productPageLayout
+        relatedProductsColumns
+        showStudioRelatedProductsUnderMeta
         checkoutStoreMode
         checkoutCouponPosition
         checkoutPaymentPosition
@@ -605,6 +654,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         showHeaderReadingListLink
         showHeaderWishlistLink
         showHeaderCartIcon
+        showHeaderPublishButton
         showFooterLogo
         showFooterExtraWrapper
         showFooterSpotifyPlayer
@@ -650,37 +700,70 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         cartSummaryPosition
         productArchiveHeroLayout
         postArchiveHeroLayout
+        showArchiveDescriptionInHero
         postTocLayout
         postSharePosition
         postAuthorLayout
         discussionLayout
       }
     }
+  }
+`;
+
+const LOCALIZED_NAVIGATION_MENUS_QUERY = /* GraphQL */ `
+  query StorefrontLocalizedNavigationMenus {
     menus(first: 100) {
+      nodes {
+        ...StorefrontLocalizedMenu
+      }
+    }
+  }
+
+  fragment StorefrontLocalizedMenu on Menu {
+    id
+    databaseId
+    name
+    slug
+    locations
+    menuItems(first: 100) {
       nodes {
         id
         databaseId
-        name
-        slug
-        locations
-        menuItems(first: 100) {
-          nodes {
-            id
-            databaseId
-            parentDatabaseId
-            order
-            label
-            title
-            description
-            path
-            uri
-            url
-            target
-            cssClasses
-            linkRelationship
-            locations
-          }
-        }
+        parentDatabaseId
+        order
+        label
+        title
+        description
+        path
+        uri
+        url
+        target
+        cssClasses
+        linkRelationship
+      }
+    }
+  }
+`;
+
+const STOREFRONT_RADIO_QUERY = /* GraphQL */ `
+  query StorefrontRadio($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      footer {
+        spotifyPlaylistUrl
+        spotifyPlaylistEmbedUrl
+        spotifyPlayerTitle
+        spotifyPlayerDescription
+      }
+    }
+  }
+`;
+
+const LEGACY_STOREFRONT_RADIO_QUERY = /* GraphQL */ `
+  query StorefrontRadioLegacy($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      footer {
+        spotifyPlaylistUrl
+        spotifyPlaylistEmbedUrl
       }
     }
   }
@@ -755,6 +838,48 @@ const STOREFRONT_RUNTIME_QUERY = /* GraphQL */ `
   }
 `;
 
+const STOREFRONT_AI_ASSISTANT_QUERY = /* GraphQL */ `
+  query StorefrontAiAssistant($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      aiAssistant {
+        enabled
+        provider
+        placement
+        showHeader
+        showFooter
+        showFixed
+        nativeProviderActive
+        iframeUrl
+        iframeTitle
+        iframeSandbox
+        iframeReferrerPolicy
+      }
+    }
+  }
+`;
+
+const COMPATIBLE_STOREFRONT_AI_ASSISTANT_QUERY = /* GraphQL */ `
+  query StorefrontAiAssistantCompatible($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      aiAssistant {
+        enabled
+        provider
+        nativeProviderActive
+        iframeUrl
+        iframeTitle
+        iframeSandbox
+        iframeReferrerPolicy
+      }
+    }
+  }
+`;
+
+const STOREFRONT_UI_STRINGS_QUERY = /* GraphQL */ `
+  query StorefrontUiStrings($language: String) {
+    uiStrings: funkycommerceUiStrings(language: $language)
+  }
+`;
+
 const STOREFRONT_LANGUAGES_QUERY = /* GraphQL */ `
   query StorefrontLanguages {
     languages { code name slug }
@@ -781,15 +906,56 @@ const NAVIGATION_COMPATIBILITY_FIELDS = [
  "productPresentation",
  "codeHighlighting",
  "stripeCustomerPortalUrl",
+ "spotifyPlayerTitle",
+ "spotifyPlayerDescription",
  "layout",
  "LanguageCodeFilterEnum",
 ] as const;
+
+export function omitUnsupportedLayoutFields(
+  query: string,
+  errors: { message: string }[] | undefined,
+): string | null {
+  const knownFields = new Set(Object.keys(DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION));
+  const unsupported = new Set<string>();
+  for (const { message } of errors ?? []) {
+    const match = message.match(/(?:Cannot query field|Field) "(\w+)"[\s\S]*?(?:type )?"FunkyCommerceLayout"/i);
+    if (match && knownFields.has(match[1])) unsupported.add(match[1]);
+  }
+  if (!unsupported.size) return null;
+
+  let depth = 0;
+  let layoutChildDepth: number | null = null;
+  let removed = false;
+  const lines = query.split("\n").filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed === "layout {") layoutChildDepth = depth + 1;
+    if (layoutChildDepth !== null && depth === layoutChildDepth && unsupported.has(trimmed)) {
+      removed = true;
+      return false;
+    }
+
+    depth += (line.match(/\{/g) ?? []).length;
+    depth -= (line.match(/\}/g) ?? []).length;
+    if (layoutChildDepth !== null && depth < layoutChildDepth) layoutChildDepth = null;
+    return true;
+  });
+  if (!removed) return null;
+
+  return lines.join("\n").replace(/\n\s+layout \{\s*\}/, "");
+}
 
 function isNavigationCompatibilityError(
   errors: { message: string; extensions?: { debugMessage?: string } }[] | undefined,
 ): boolean {
  return hasOnlyMissingGraphqlFields(errors, NAVIGATION_COMPATIBILITY_FIELDS)
    || hasOnlyKnownNavigationResolverErrors(errors);
+}
+
+export function hasOnlyMenuSchemaCompatibilityErrors(
+  errors: { message: string }[] | undefined,
+): boolean {
+  return hasOnlyMissingGraphqlFields(errors, ["menus", "menuItems", "locations"]);
 }
 
 const EMPTY_NAVIGATION_RESULT: NavigationQueryResult = {
@@ -800,7 +966,13 @@ const EMPTY_NAVIGATION_RESULT: NavigationQueryResult = {
 };
 
 type StorefrontLanguagesQueryResult = {
-  languages: { code: string; name: string; slug: string }[] | null;
+  languages: { code: string; name: string; slug: string; isDefault?: boolean }[] | null;
+};
+
+type PolylangRestLanguage = {
+  name: string;
+  slug: string;
+  is_default?: boolean;
 };
 
 function mapNavigationLanguages(languages: StorefrontLanguagesQueryResult["languages"]): LanguageOption[] {
@@ -810,30 +982,141 @@ function mapNavigationLanguages(languages: StorefrontLanguagesQueryResult["langu
   }));
 }
 
+async function getPolylangRestLanguages(
+  signal?: AbortSignal,
+): Promise<StorefrontLanguagesQueryResult["languages"]> {
+  const response = await fetch(
+    new URL("/wp-json/pll/v1/languages", BACKEND_ORIGIN),
+    signal ? { signal } : undefined,
+  );
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new Error(`Polylang REST language discovery failed with status ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error("Polylang REST returned a non-array language payload");
+  }
+  return payload.flatMap((language: PolylangRestLanguage) => {
+    const slug = typeof language?.slug === "string" ? language.slug.trim().toLowerCase() : "";
+    const name = typeof language?.name === "string" ? language.name.trim() : "";
+    return slug && name
+      ? [{ code: slug.toUpperCase(), name, slug, isDefault: language.is_default === true }]
+      : [];
+  });
+}
+
+async function getOptionalPolylangRestLanguages(): Promise<StorefrontLanguagesQueryResult["languages"]> {
+  try {
+    return await getPolylangRestLanguages(AbortSignal.timeout(3_000));
+  } catch (error) {
+    console.warn(
+      "Polylang REST language discovery was unavailable.",
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
+}
+
 export async function getStorefrontLanguages(): Promise<LanguageOption[]> {
-  const { data, errors } = await graphqlRequest<StorefrontLanguagesQueryResult>(STOREFRONT_LANGUAGES_QUERY);
+  if (STOREFRONT_BACKEND_PROFILE === "shell") return [];
+  if (STOREFRONT_BACKEND_PROFILE === "blog") {
+    return mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+  }
+  const graphqlResponse = await graphqlRequest<StorefrontLanguagesQueryResult>(STOREFRONT_LANGUAGES_QUERY);
+  const { data, errors } = graphqlResponse;
   if (errors?.length) {
-    if (isNavigationCompatibilityError(errors)) return [];
+    if (isNavigationCompatibilityError(errors)) {
+      return mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+    }
     throw new Error(errors.map(({ message }) => message).join("; "));
   }
   if (!data) return [];
   return mapNavigationLanguages(data.languages);
 }
 
+async function getNavigationMenuData(): Promise<NavigationQueryResult> {
+  let response = await graphqlRequest<NavigationQueryResult>(LOCALIZED_NAVIGATION_MENUS_QUERY);
+  if (
+    hasOnlyMenuSchemaCompatibilityErrors(response.errors)
+    || hasOnlyKnownNavigationResolverErrors(response.errors)
+  ) {
+    response = await graphqlRequest<NavigationQueryResult>(COMPATIBLE_NAVIGATION_QUERY);
+  }
+  if (response.errors?.length) {
+    throw new Error(response.errors.map(({ message }) => message).join("; "));
+  }
+  return response.data ?? EMPTY_NAVIGATION_RESULT;
+}
+
+export async function getNavigationMenus(
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): Promise<CmsNavigationMenus> {
+  return resolveNavigationMenus(
+    await getNavigationMenuData(),
+    languageCode,
+    configuredLanguageCodes,
+  );
+}
+
+type StorefrontAiAssistantQueryResult = {
+  storefrontConfig?: {
+    aiAssistant?: StorefrontConfiguration["aiAssistant"] | null;
+  } | null;
+};
+
+export async function getAiAssistantConfiguration(
+  languageCode: string,
+): Promise<StorefrontConfiguration["aiAssistant"] | null> {
+  const variables = { language: languageCode.toLowerCase() };
+  let response = await graphqlRequest<StorefrontAiAssistantQueryResult>(
+    STOREFRONT_AI_ASSISTANT_QUERY,
+    variables,
+  );
+  if (hasOnlyMissingGraphqlFields(response.errors, ["showHeader", "showFooter", "showFixed"])) {
+    response = await graphqlRequest<StorefrontAiAssistantQueryResult>(
+      COMPATIBLE_STOREFRONT_AI_ASSISTANT_QUERY,
+      variables,
+    );
+  }
+  if (response.errors?.length) {
+    throw new Error(
+      `AI assistant configuration was unavailable: ${response.errors.map(({ message }) => message).join("; ")}`,
+    );
+  }
+  const configuration = response.data?.storefrontConfig?.aiAssistant ?? null;
+  if (!configuration || configuration.showHeader != null) return configuration;
+  return {
+    ...configuration,
+    placement: "footer",
+    showHeader: false,
+    showFooter: true,
+    showFixed: false,
+  };
+}
+
 export async function getNavigationData(languageCode: string): Promise<CmsNavigationData> {
-  let [navigationResponse, runtimeResponse] = await Promise.all([
-    graphqlRequest<NavigationQueryResult>(NAVIGATION_QUERY, { language: languageCode.toLowerCase() }),
-    graphqlRequest<StorefrontRuntimeQueryResult>(STOREFRONT_RUNTIME_QUERY, { language: languageCode.toLowerCase() }),
+  const variables = { language: languageCode.toLowerCase() };
+  let [navigationResponse, menuData, runtimeResponse, uiStringsResponse, radioResponse, languages] = await Promise.all([
+    graphqlRequest<NavigationQueryResult>(NAVIGATION_QUERY, variables),
+    getNavigationMenuData(),
+    graphqlRequest<StorefrontRuntimeQueryResult>(STOREFRONT_RUNTIME_QUERY, variables),
+    graphqlRequest<StorefrontUiStringsQueryResult>(STOREFRONT_UI_STRINGS_QUERY, variables),
+    graphqlRequest<StorefrontRadioQueryResult>(STOREFRONT_RADIO_QUERY, variables),
+    getStorefrontLanguages(),
   ]);
 
+  const compatibleLayoutQuery = omitUnsupportedLayoutFields(NAVIGATION_QUERY, navigationResponse.errors);
+  if (compatibleLayoutQuery) {
+    navigationResponse = await graphqlRequest<NavigationQueryResult>(compatibleLayoutQuery, variables);
+  }
+
   if (isNavigationCompatibilityError(navigationResponse.errors)) {
-    const [menuFallback, brandingFallback] = await Promise.all([
-      graphqlRequest<NavigationQueryResult>(COMPATIBLE_NAVIGATION_QUERY),
-      graphqlRequest<CompatibleBrandingQueryResult>(
-        COMPATIBLE_BRANDING_QUERY,
-        { language: languageCode.toLowerCase() },
-      ),
-    ]);
+    const brandingFallback = await graphqlRequest<CompatibleBrandingQueryResult>(
+      COMPATIBLE_BRANDING_QUERY,
+      { language: languageCode.toLowerCase() },
+    );
     if (
       brandingFallback.errors?.length
       && !isNavigationCompatibilityError(brandingFallback.errors)
@@ -842,7 +1125,6 @@ export async function getNavigationData(languageCode: string): Promise<CmsNaviga
     }
     navigationResponse = {
       data: {
-        ...(menuFallback.data || EMPTY_NAVIGATION_RESULT),
         storefrontConfig: {
           ...DEFAULT_STOREFRONT_CONFIGURATION,
           branding: resolveCompatibleBranding(
@@ -851,12 +1133,27 @@ export async function getNavigationData(languageCode: string): Promise<CmsNaviga
           ),
         },
       },
-      errors: menuFallback.data ? menuFallback.errors : undefined,
+      errors: undefined,
     };
   }
 
   if (isNavigationCompatibilityError(runtimeResponse.errors)) {
     runtimeResponse = { data: null, errors: undefined };
+  }
+  if (isNavigationCompatibilityError(uiStringsResponse.errors)) {
+    uiStringsResponse = { data: null, errors: undefined };
+  }
+  if (uiStringsResponse.errors?.length) {
+    throw new Error(uiStringsResponse.errors.map(({ message }) => message).join("; "));
+  }
+  if (isNavigationCompatibilityError(radioResponse.errors)) {
+    radioResponse = await graphqlRequest<StorefrontRadioQueryResult>(LEGACY_STOREFRONT_RADIO_QUERY, variables);
+  }
+  if (isNavigationCompatibilityError(radioResponse.errors)) {
+    radioResponse = { data: null, errors: undefined };
+  }
+  if (radioResponse.errors?.length) {
+    throw new Error(radioResponse.errors.map(({ message }) => message).join("; "));
   }
 
   const data = navigationResponse.data ?? EMPTY_NAVIGATION_RESULT;
@@ -864,29 +1161,57 @@ export async function getNavigationData(languageCode: string): Promise<CmsNaviga
     throw new Error(navigationResponse.errors.map(({ message }) => message).join("; "));
   }
 
-  const menus = (data.menus?.nodes || []).filter((menu) => menu.menuItems?.nodes.length);
-  const languages = mapNavigationLanguages(data.languages);
   const languageCodes = languages.map(({ code }) => code);
-  const header = localizeMenu(mapBestAvailableMenu(menus, "HEADER", languageCode), languageCode, languageCodes);
-  const mobile = localizeMenu(mapBestAvailableMenu(menus, "MOBILE", languageCode, ["HEADER"]), languageCode, languageCodes);
-  const footer = localizeMenu(mapBestAvailableMenu(menus, "FOOTER", languageCode, ["HEADER", "MOBILE"]), languageCode, languageCodes);
+  const { header, mobile, footer } = resolveNavigationMenus(menuData, languageCode, languageCodes);
   return {
     header,
-    mobile: mobile.length ? mobile : header,
-    footer: mapFooterColumns(footer.length ? footer : header),
+    mobile,
+    footer,
     languages,
     storefrontConfig: normalizeStorefrontConfiguration({
       ...(data.storefrontConfig || {}),
       ...(runtimeResponse.data?.storefrontConfig || {}),
+      footer: {
+        ...(data.storefrontConfig?.footer || {}),
+        ...normalizeStorefrontRadioFooter(radioResponse.data?.storefrontConfig?.footer),
+      },
     } as StorefrontConfiguration),
-    uiStrings: parseUiStrings(data.uiStrings),
+    uiStrings: parseUiStrings(uiStringsResponse.data?.uiStrings ?? data.uiStrings),
+  };
+}
+
+function resolveNavigationMenus(
+  data: NavigationQueryResult,
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): CmsNavigationMenus {
+  const menus = (data.menus?.nodes || []).filter((menu) => menu.menuItems?.nodes.length);
+  const header = localizeMenu(
+    mapBestAvailableMenu(menus, "HEADER", languageCode),
+    languageCode,
+    configuredLanguageCodes,
+  );
+  const mobile = localizeMenu(
+    mapBestAvailableMenu(menus, "MOBILE", languageCode, ["HEADER"]),
+    languageCode,
+    configuredLanguageCodes,
+  );
+  const footer = localizeMenu(
+    mapBestAvailableMenu(menus, "FOOTER", languageCode, ["HEADER", "MOBILE"]),
+    languageCode,
+    configuredLanguageCodes,
+  );
+  return {
+    header,
+    mobile: mobile.length ? mobile : header,
+    footer: mapFooterColumns(footer.length ? footer : header),
   };
 }
 
 function localizeMenu(
   items: HeaderNavItem[],
   languageCode: string,
-  configuredLanguageCodes: string[],
+  configuredLanguageCodes: readonly string[],
 ): HeaderNavItem[] {
   return items.map((item) => ({
     ...item,
@@ -908,6 +1233,20 @@ function parseUiStrings(raw: string | null | undefined): Record<string, string> 
     // Malformed JSON — fall through to empty map.
   }
   return {};
+}
+
+function normalizeStorefrontRadioFooter(
+  footer: {
+    spotifyPlaylistUrl?: string | null;
+    spotifyPlaylistEmbedUrl?: string | null;
+    spotifyPlayerTitle?: string | null;
+    spotifyPlayerDescription?: string | null;
+  } | null | undefined,
+): Partial<StorefrontConfiguration["footer"]> {
+  if (!footer) return {};
+  return Object.fromEntries(
+    Object.entries(footer).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
 }
 
 export function normalizeStorefrontConfiguration(configuration: StorefrontConfiguration | null): StorefrontConfiguration {
@@ -1039,6 +1378,11 @@ export function normalizeStorefrontLayoutConfiguration(
     ),
     newsletterPopupCooldownDays: pickBoundedInt(source.newsletterPopupCooldownDays, 1, 365, defaults.newsletterPopupCooldownDays),
     productPageLayout: pickEnum(source.productPageLayout, ["classic", "studio"] as const, defaults.productPageLayout),
+    relatedProductsColumns: pickEnum(source.relatedProductsColumns, ["2", "3", "4"] as const, defaults.relatedProductsColumns),
+    showStudioRelatedProductsUnderMeta: pickBoolean(
+      source.showStudioRelatedProductsUnderMeta,
+      defaults.showStudioRelatedProductsUnderMeta,
+    ),
     checkoutStoreMode: pickEnum(source.checkoutStoreMode, ["physical", "digital"] as const, defaults.checkoutStoreMode),
     checkoutCouponPosition: pickEnum(source.checkoutCouponPosition, ["inline", "top"] as const, defaults.checkoutCouponPosition),
     checkoutPaymentPosition: pickEnum(source.checkoutPaymentPosition, ["left", "right"] as const, defaults.checkoutPaymentPosition),
@@ -1088,6 +1432,7 @@ export function normalizeStorefrontLayoutConfiguration(
     showHeaderReadingListLink: pickBoolean(source.showHeaderReadingListLink, defaults.showHeaderReadingListLink),
     showHeaderWishlistLink: pickBoolean(source.showHeaderWishlistLink, defaults.showHeaderWishlistLink),
     showHeaderCartIcon: pickBoolean(source.showHeaderCartIcon, defaults.showHeaderCartIcon),
+    showHeaderPublishButton: pickBoolean(source.showHeaderPublishButton, defaults.showHeaderPublishButton),
     showFooterLogo: pickBoolean(source.showFooterLogo, defaults.showFooterLogo),
     showFooterExtraWrapper: pickBoolean(source.showFooterExtraWrapper, defaults.showFooterExtraWrapper),
     showFooterSpotifyPlayer: pickBoolean(source.showFooterSpotifyPlayer, defaults.showFooterSpotifyPlayer),
@@ -1161,7 +1506,15 @@ export function normalizeStorefrontLayoutConfiguration(
       ["split", "fullbleed", "minimal"] as const,
       defaults.postArchiveHeroLayout,
     ),
-    postTocLayout: pickEnum(source.postTocLayout, ["current", "hidden", "above"] as const, defaults.postTocLayout),
+    showArchiveDescriptionInHero: pickBoolean(
+      source.showArchiveDescriptionInHero,
+      defaults.showArchiveDescriptionInHero,
+    ),
+    postTocLayout: pickEnum(
+      source.postTocLayout,
+      ["current", "rail-left", "rail-right", "above"] as const,
+      defaults.postTocLayout,
+    ),
     postSharePosition: pickEnum(
       source.postSharePosition,
       ["above-toc", "on-image", "below-toc-right"] as const,
@@ -1234,11 +1587,27 @@ function isNoPriceBehavior(value: unknown): value is NoPriceBehavior {
 }
 
 function isPrismLightTheme(value: unknown): value is PrismLightTheme {
-  return value === "one-light" || value === "solarized-light" || value === "duotone-light";
+  return isPrismTheme(value);
 }
 
 function isPrismDarkTheme(value: unknown): value is PrismDarkTheme {
-  return value === "one-dark" || value === "dracula" || value === "duotone-dark";
+  return isPrismTheme(value);
+}
+
+function isPrismTheme(value: unknown): value is PrismTheme {
+  return value === "one-light"
+    || value === "one-dark"
+    || value === "dracula"
+    || value === "duotone-light"
+    || value === "duotone-dark"
+    || value === "prism"
+    || value === "coy"
+    || value === "dark"
+    || value === "funky"
+    || value === "okaidia"
+    || value === "solarized-light"
+    || value === "tomorrow"
+    || value === "twilight";
 }
 
 function normalizeAssistantThemeConfiguration(
@@ -1253,7 +1622,15 @@ function normalizeAssistantThemeConfiguration(
       placement === "footer" || placement === "header" || placement === "fixed"
         ? placement
         : defaults.placement,
+    showHeader: assistant?.showHeader ?? (placement === "header" ? true : defaults.showHeader),
+    showFooter: assistant?.showFooter ?? (placement ? placement === "footer" : defaults.showFooter),
+    showFixed: assistant?.showFixed ?? (placement === "fixed" ? true : defaults.showFixed),
     nativeProviderActive: assistant?.nativeProviderActive ?? defaults.nativeProviderActive,
+    title: assistant?.title,
+    subtitle: assistant?.subtitle,
+    greeting: assistant?.greeting,
+    composerPlaceholder: assistant?.composerPlaceholder,
+    launcherLabel: assistant?.launcherLabel,
     iframeUrl: assistant?.iframeUrl?.trim() || defaults.iframeUrl,
     iframeTitle: assistant?.iframeTitle?.trim() || defaults.iframeTitle,
     iframeSandbox: assistant?.iframeSandbox?.trim() || defaults.iframeSandbox,
@@ -1292,7 +1669,6 @@ export function normalizeFooterSocialProfiles(profiles: StorefrontSocialProfile[
   });
 }
 
-type RawMenu = NonNullable<NavigationQueryResult["menus"]>["nodes"][number];
 type MenuLocation = "HEADER" | "MOBILE" | "FOOTER";
 
 const MENU_LOCATION_HINTS: Record<MenuLocation, string[]> = {
@@ -1363,9 +1739,20 @@ function normalizeMenuHref(value: string | null, parentHref: string | undefined)
   }
   if (href.startsWith("/")) return href;
 
+  const storefrontOrigin = typeof window !== "undefined"
+    ? window.location.origin
+    : (() => {
+        const environment = (
+          globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }
+        ).process?.env;
+        return environment?.VITE_SITE_URL
+          || environment?.URL
+          || environment?.DEPLOY_PRIME_URL
+          || "http://localhost";
+      })();
   return normalizeContentHref(href, {
-    storefrontOrigin: window.location.origin,
+    storefrontOrigin,
     backendOrigin: BACKEND_ORIGIN,
-    baseUrl: BACKEND_ORIGIN || window.location.origin,
+    baseUrl: BACKEND_ORIGIN || storefrontOrigin,
   });
 }

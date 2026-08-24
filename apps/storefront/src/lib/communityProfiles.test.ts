@@ -4,11 +4,21 @@ import {
   canAccessCommunityProfile,
   communityFollowActionLabel,
   communityHandleFromUser,
+  isCommunityArchiveAuthor,
   isCommunityArticlePost,
   normalizeCommunityHandle,
   normalizeCommunityRelationshipState,
   resolvePublicCommunityMember,
 } from "./communityProfiles.ts";
+
+test("community author directory includes public members who have published posts", () => {
+  const publishedAuthorIds = new Set([3]);
+
+  assert.equal(isCommunityArchiveAuthor({ databaseId: 3, role: "member" }, publishedAuthorIds), true);
+  assert.equal(isCommunityArchiveAuthor({ databaseId: 4, role: "member" }, publishedAuthorIds), false);
+  assert.equal(isCommunityArchiveAuthor({ databaseId: 5, role: "creator" }, new Set()), true);
+  assert.equal(isCommunityArchiveAuthor({ databaseId: 6, role: "collaborator" }, new Set()), true);
+});
 
 const v1PublicMember = {
   databaseId: 3,

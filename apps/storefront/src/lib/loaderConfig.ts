@@ -114,6 +114,61 @@ export function loaderSpeedMultiplier(durationMs: number): number {
   return LOADER_SPEED_BASELINE_MS / durationMs;
 }
 
+function normalizeCssRgbValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const directHex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed) ? trimmed : null;
+  if (directHex) return directHex;
+
+  const rgbMatch = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgbMatch) {
+    const [, r, g, b] = rgbMatch;
+    return `#${[r, g, b].map((channel) => Number(channel).toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  const spaceSeparated = trimmed.match(/^(\d+)\s+(\d+)\s+(\d+)$/);
+  if (spaceSeparated) {
+    const [, r, g, b] = spaceSeparated;
+    return `#${[r, g, b].map((channel) => Number(channel).toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  return null;
+}
+
+function resolveCssColorValue(
+  style: Pick<CSSStyleDeclaration, "getPropertyValue"> | null | undefined,
+  candidates: string[],
+  fallback: string,
+): string {
+  if (!style) return normalizeHexColor(fallback, DEFAULT_LOADER_CONFIGURATION.primaryColor);
+
+  for (const candidate of candidates) {
+    const rawValue = style.getPropertyValue(candidate).trim();
+    const normalized = normalizeCssRgbValue(rawValue);
+    if (normalized) return normalized;
+  }
+
+  return normalizeHexColor(fallback, DEFAULT_LOADER_CONFIGURATION.primaryColor);
+}
+
+/** Resolves the loader palette from the current theme CSS variables so the route-level
+ * suspense fallback matches the active storefront branding instead of flashing the
+ * static purple default while WordPress theme styles are still settling. */
+export function resolveThemeAwareLoaderConfiguration(
+  fallback: Partial<LoaderConfiguration> | null | undefined = DEFAULT_LOADER_CONFIGURATION,
+): LoaderConfiguration {
+  const base = normalizeLoaderConfiguration(fallback ?? DEFAULT_LOADER_CONFIGURATION);
+  if (typeof document === "undefined") return base;
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  return {
+    ...base,
+    primaryColor: resolveCssColorValue(rootStyle, ["--brand-500", "--brand-400", "--brand-300", "--wp--preset--color--primary"], base.primaryColor),
+    glowColor: resolveCssColorValue(rootStyle, ["--brand-600", "--brand-500", "--brand-400", "--wp--preset--color--primary"], base.glowColor),
+  };
+}
+
 export type LoaderPresentation =
   | { mode: "hidden" }
   | { mode: "crystal" }

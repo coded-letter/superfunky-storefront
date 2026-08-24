@@ -53,6 +53,55 @@ test("a prerendered hydration seed is immediately revalidated with fresh content
   dom.window.close();
 });
 
+test("a revisionless static hydration seed revalidates after storefront readiness", async () => {
+  const dom = new JSDOM('<html data-storefront-ready="true"><body><div id="root"></div></body></html>', {
+    url: "https://storefront.test/",
+  });
+  Object.assign(globalThis, {
+    document: dom.window.document,
+    localStorage: dom.window.localStorage,
+    window: dom.window,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  dom.window.requestIdleCallback = (callback: IdleRequestCallback) => {
+    callback({ didTimeout: false, timeRemaining: () => 50 });
+    return 1;
+  };
+
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const key = `revisionless-hydration-test:${Date.now()}`;
+  let fetchCount = 0;
+
+  assert.ok(seedStorefrontHydration({
+    schemaVersion: 1,
+    shellVersion: "shell-test",
+    contentRevision: 0,
+    generatedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString(),
+    entries: [{ cacheKey: key, value: "build-old", dependencies: ["page:67"] }],
+  }));
+
+  function Probe() {
+    const { data } = useIncrementalData(key, async () => {
+      fetchCount += 1;
+      return "editor-fresh";
+    });
+    return React.createElement("span", null, data);
+  }
+
+  const root = createRoot(document.querySelector("#root")!);
+  await React.act(async () => {
+    root.render(React.createElement(Probe));
+    await Promise.resolve();
+  });
+
+  assert.equal(fetchCount, 1);
+  assert.equal(document.querySelector("span")?.textContent, "editor-fresh");
+  await React.act(async () => root.unmount());
+  dom.window.close();
+});
+
 test("a current trusted artifact seed avoids duplicate first-render data requests", async () => {
   const dom = new JSDOM(
     '<head><meta name="storefront-artifact-revision-endpoint" content="https://cms.test/wp-json/funkycommerce-artifacts/v1/revision"></head><body><div id="root"></div></body>',
@@ -68,7 +117,7 @@ test("a current trusted artifact seed avoids duplicate first-render data request
       siteKey: "storefront-test",
       revision: 7,
       changedAt: new Date().toISOString(),
-      dependencies: [],
+      dependencies: ["route:/"],
       etag: '"revision-7"',
     }), { status: 200, headers: { "Content-Type": "application/json" } }),
   });
@@ -106,6 +155,73 @@ test("a current trusted artifact seed avoids duplicate first-render data request
 
   assert.equal(document.querySelector("span")?.textContent, "artifact-current");
   assert.equal(fetchCount, 0);
+  dom.window.dispatchEvent(new dom.window.Event("funky:storefront-ready"));
+  await React.act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  assert.equal(fetchCount, 0);
+  await React.act(async () => root.unmount());
+  dom.window.close();
+});
+
+test("an outdated artifact seed defers live refresh until the storefront is ready", async () => {
+  const dom = new JSDOM(
+    '<head><meta name="storefront-artifact-revision-endpoint" content="https://cms.test/revision"></head><body><div id="root"></div></body>',
+    { url: "https://storefront.test/" },
+  );
+  let revisionChecks = 0;
+  Object.assign(globalThis, {
+    document: dom.window.document,
+    localStorage: dom.window.localStorage,
+    window: dom.window,
+    IS_REACT_ACT_ENVIRONMENT: true,
+    fetch: async () => {
+      revisionChecks += 1;
+      return new Response(JSON.stringify({
+        schemaVersion: 1,
+        siteKey: "storefront-test",
+        revision: 9,
+        changedAt: new Date().toISOString(),
+        dependencies: ["route:/"],
+        etag: '"revision-9"',
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+  });
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const key = `artifact-route:v1:/outdated-${Date.now()}`;
+  let dataFetches = 0;
+
+  assert.ok(seedStorefrontHydration({
+    schemaVersion: 1,
+    shellVersion: "shell-test",
+    contentRevision: 6,
+    generatedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    entries: [{ cacheKey: key, value: "artifact-old", dependencies: ["route:/"] }],
+  }));
+
+  function Probe() {
+    const { data } = useIncrementalData(key, async () => {
+      dataFetches += 1;
+      return "network-fresh";
+    });
+    return React.createElement("span", null, data);
+  }
+
+  const root = createRoot(document.querySelector("#root")!);
+  await React.act(async () => root.render(React.createElement(Probe)));
+  assert.equal(document.querySelector("span")?.textContent, "artifact-old");
+  assert.equal(revisionChecks, 0);
+  assert.equal(dataFetches, 0);
+
+  dom.window.dispatchEvent(new dom.window.Event("funky:storefront-ready"));
+  await React.act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  assert.equal(revisionChecks, 0, "the recent revision response is deduplicated");
+  assert.equal(dataFetches, 1);
+  assert.equal(document.querySelector("span")?.textContent, "network-fresh");
   await React.act(async () => root.unmount());
   dom.window.close();
 });

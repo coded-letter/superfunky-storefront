@@ -95,10 +95,11 @@ Full returns to the controlled shell-inner cap. WordPress continues to own typog
 colours, block spacing, columns, media height/aspect/object-fit, and bounded widget sizing.
 Homepage application sections and product layouts are outside this CMS scope.
 
-Publishing content with utilities from the stable contract does not require a CSS rebuild.
-Extending the contract itself remains an application-code change and requires a new
-storefront build. Configure the credential-free `VITE_GRAPHQL_ENDPOINT` in the deployment
-environment when the public reference backend is not appropriate.
+The generated class set is a build artifact, so publishing or changing a CMS-authored
+utility requires a storefront rebuild. Keep the site's Netlify `WordPress` build hook
+configured in Control Center; public-content saves already trigger that hook after the
+existing one-minute debounce. Hook URLs stay in WordPress and Netlify and must not be
+committed. Configure its credential-free `VITE_GRAPHQL_ENDPOINT` directly in Netlify.
 
 ## CMS code and bundled behaviors
 
@@ -183,6 +184,11 @@ also listen for `securitypolicyviolation` while loading the homepage, opening na
 and newsletter UI, and visiting a CMS documentation page. Violations raised inside Stripe,
 Spotify, or other cross-origin iframe documents belong to that framed origin and cannot be
 controlled by the parent storefront CSP.
+
+## Standalone Netlify deployments
+
+Configure the public `VITE_GRAPHQL_ENDPOINT` directly in Netlify. Build-hook URLs
+and provider credentials belong in WordPress or Netlify and must never be committed.
 
 The production generator also consumes the Control Center's public static-generation
 configuration. It creates or removes the sitemap, custom robots file, `llms.txt`,

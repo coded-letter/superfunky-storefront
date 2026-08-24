@@ -23,7 +23,7 @@ export function CrystalPreloader({
   style,
 }: CrystalPreloaderProps) {
   const variables = {
-    "--crystal-color": color || "var(--wp--preset--color--primary, var(--color-brand-500, rgb(var(--brand-500))))",
+    "--crystal-color": color || "var(--wp--preset--color--primary, var(--color-brand-500, rgb(var(--brand-500, 139 92 246))))",
     "--crystal-size": typeof size === "number" ? `${size}px` : size,
     "--crystal-speed": Math.max(0.25, speedMultiplier),
     ...(glowColor ? { "--crystal-glow-color": glowColor } : {}),

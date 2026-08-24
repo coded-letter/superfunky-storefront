@@ -11,12 +11,6 @@ type AssistantRobot3DProps = {
 };
 
 const MODEL_ROOT = "/assistant-model";
-const MODEL_URLS = [
-  `${MODEL_ROOT}/Head.glb`,
-  `${MODEL_ROOT}/Eyes.glb`,
-  `${MODEL_ROOT}/Glass.glb`,
-] as const;
-const assetPreloads = new Map<string, Promise<void>>();
 let rendererModulePromise: ReturnType<typeof loadRendererModule> | null = null;
 
 function loadRendererModule() {
@@ -29,48 +23,6 @@ function getRendererModule() {
     throw error;
   });
   return rendererModulePromise;
-}
-
-function preloadAsset(url: string) {
-  const existing = assetPreloads.get(url);
-  if (existing) return existing;
-  const preload = fetch(url, { cache: "force-cache", credentials: "omit" })
-    .then((response) => {
-      if (!response.ok) throw new Error(`Asset preload failed (${response.status}).`);
-      return response.arrayBuffer();
-    })
-    .then(() => undefined)
-    .catch((error: unknown) => {
-      assetPreloads.delete(url);
-      console.warn(`AI Assistant asset preload failed for ${url}.`, error);
-    });
-  assetPreloads.set(url, preload);
-  return preload;
-}
-
-export function scheduleAssistantRobotPreload(textureUrl?: string | null) {
-  if (typeof window === "undefined") return () => undefined;
-  let cancelled = false;
-  let idleHandle: number | undefined;
-  let timeoutHandle: number | undefined;
-  const preload = () => {
-    if (cancelled) return;
-    void getRendererModule().catch((error: unknown) => {
-      console.warn("AI Assistant renderer preload failed.", error);
-    });
-    MODEL_URLS.forEach((url) => void preloadAsset(url));
-    if (textureUrl) void preloadAsset(textureUrl);
-  };
-  if ("requestIdleCallback" in window) {
-    idleHandle = window.requestIdleCallback(preload, { timeout: 1000 });
-  } else {
-    timeoutHandle = window.setTimeout(preload, 200);
-  }
-  return () => {
-    cancelled = true;
-    if (idleHandle !== undefined && "cancelIdleCallback" in window) window.cancelIdleCallback(idleHandle);
-    if (timeoutHandle !== undefined) window.clearTimeout(timeoutHandle);
-  };
 }
 
 export function AssistantRobot3D({

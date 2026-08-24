@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hasOnlyMissingField, hasOnlyMissingRootField } from "./optional-graphql.mjs";
+import {
+  hasOnlyMissingField,
+  hasOnlyMissingRootField,
+  hasOnlyUnknownTypes,
+} from "./optional-graphql.mjs";
 
 test("recognizes only the requested optional RootQuery field", () => {
   assert.equal(
@@ -45,6 +49,35 @@ test("recognizes only the requested optional field and parent type", () => {
       "seo",
       "Post",
     ),
+    false,
+  );
+});
+
+test("recognizes errors caused only by unavailable optional GraphQL types", () => {
+  const commerceTypes = ["Product", "ProductBrand", "ProductCategory", "ProductTag"];
+
+  assert.equal(
+    hasOnlyUnknownTypes(
+      [
+        { message: 'Unknown type "Product".' },
+        { message: 'Unknown type "ProductCategory". Did you mean "Category"?' },
+      ],
+      commerceTypes,
+    ),
+    true,
+  );
+  assert.equal(
+    hasOnlyUnknownTypes(
+      [
+        { message: 'Unknown type "Product".' },
+        { message: "WordPress database unavailable" },
+      ],
+      commerceTypes,
+    ),
+    false,
+  );
+  assert.equal(
+    hasOnlyUnknownTypes([{ message: 'Unknown type "Post".' }], commerceTypes),
     false,
   );
 });

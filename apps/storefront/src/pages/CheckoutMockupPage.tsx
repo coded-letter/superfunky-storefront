@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { AlertTriangle, Banknote, Bitcoin, Check, ChevronDown, Copy, CreditCard, PackageCheck, QrCode, ShieldCheck, Tag, Truck } from "lucide-react";
-import { useCart, useCurrency, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { AlertTriangle, Banknote, Check, ChevronDown, Copy, CreditCard, PackageCheck, QrCode, ShieldCheck, Tag, Truck } from "lucide-react";
+import { CurrencyMark, normalizeLanguagePath, useCart, useCurrency, useLanguage, useLayoutPreferences } from "@funky/ui";
 import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { saveCheckoutEmail, saveNewsletterEmail, useAbandonedCartPublicConfig, useAbandonedCartTracking } from "../lib/abandonedCart";
 import { syncCartToBackend } from "../lib/backendCart";
@@ -21,6 +21,7 @@ import {
   type CryptoAsset,
   type PaymentSubmissionResult,
 } from "../lib/payments";
+import { withDigitalStoreApiAddress } from "../lib/checkoutContext";
 import { login, useIsUserLoggedIn } from "../lib/auth";
 import { getStorefrontAccount } from "../lib/account";
 import { claimCheckoutOrder } from "../lib/checkoutAccount";
@@ -141,24 +142,19 @@ export function CheckoutMockupPage() {
   } = useLayoutPreferences();
   const abandonedCartConfig = useAbandonedCartPublicConfig();
   const config = useApplicationShortcode(["funkycommerce_checkout", "woocommerce_checkout"], {
-    mode: checkoutStoreMode,
-    "coupon-position": checkoutCouponPosition,
-    "payment-position": checkoutPaymentPosition,
-    "summary-position": checkoutSummaryPosition,
-    "hide-optional-billing-fields": String(checkoutHideOptionalBillingFields),
-    "hide-optional-shipping-fields": String(checkoutHideOptionalShippingFields),
-    "show-order-notes": String(checkoutShowOrderNotes),
-    "show-terms": String(checkoutShowTerms),
-    "show-privacy": String(checkoutShowPrivacy),
     "allow-guest-checkout": "true",
   });
   const navigate = useNavigate();
   const cartPath = useStorefrontPath("cart", "/cart");
   const orderSuccessPath = useStorefrontPath("order-success", "/order-success");
-  const orderSuccessDigitalPath = useStorefrontPath("order-success-digital", "/order-success/digital");
+  const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
+  const orderSuccessDigitalPath = normalizeLanguagePath(
+    "/order-success/digital",
+    languageCode,
+    configuredLanguageCodes,
+  );
   const { items, subtotalAmount, subtotalLabel, isHydrated: isCartHydrated, clear: clearCart } = useCart();
   const { baseCurrency, currencyCode, formatBaseAmount, selectedRate } = useCurrency();
-  const { languageCode, languageBackendCode } = useLanguage();
   const isLoggedIn = useIsUserLoggedIn();
   const orderCompletedRef = useRef(false);
   useEffect(() => {
@@ -198,14 +194,14 @@ export function CheckoutMockupPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
-  const couponPosition: CouponPosition = config["coupon-position"] === "top" ? "top" : "inline";
-  const hideOptionalBillingFields = config["hide-optional-billing-fields"] === "true";
-  const hideOptionalShippingFields = config["hide-optional-shipping-fields"] === "true";
-  const showOrderNotes = config["show-order-notes"] !== "false";
-  const showTermsCheckbox = config["show-terms"] !== "false";
-  const showPrivacyCheckbox = config["show-privacy"] !== "false";
-  const paymentMethodsPosition: PaymentMethodsPosition = config["payment-position"] === "right" ? "right" : "left";
-  const summaryPosition: SummaryPosition = config["summary-position"] === "static" ? "static" : "sticky";
+  const couponPosition: CouponPosition = checkoutCouponPosition;
+  const hideOptionalBillingFields = checkoutHideOptionalBillingFields;
+  const hideOptionalShippingFields = checkoutHideOptionalShippingFields;
+  const showOrderNotes = checkoutShowOrderNotes;
+  const showTermsCheckbox = checkoutShowTerms;
+  const showPrivacyCheckbox = checkoutShowPrivacy;
+  const paymentMethodsPosition: PaymentMethodsPosition = checkoutPaymentPosition;
+  const summaryPosition: SummaryPosition = checkoutSummaryPosition;
 
   // Billing address fields kept in real controlled state (not the mockup's usual
   // uncontrolled `InputMock`s) because they're exactly what the WooCommerce Store
@@ -346,6 +342,27 @@ export function CheckoutMockupPage() {
     if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "cheque" && !isCheckAvailable) setPaymentMethod("stripe");
   }, [paymentMethod, isCheckAvailable, isCryptoOnlyCurrency]);
+  // Every other gateway falls back to "stripe" when it becomes unavailable, so the
+  // "Pay online" option must fall back to the next real gateway when the backend
+  // reports its Stripe gateway isn't configured/enabled — otherwise the checkout is
+  // stuck on a hidden, unselectable payment method.
+  useEffect(() => {
+    if (isCryptoOnlyCurrency || !isBackendConfigured || isStripeGatewayEnabled) return;
+    if (paymentMethod !== "stripe" && paymentMethod !== "blik") return;
+    if (isBacsAvailable) setPaymentMethod("bacs");
+    else if (isCheckAvailable) setPaymentMethod("cheque");
+    else if (isCodAvailable) setPaymentMethod("cod");
+    else if (isCryptoAvailable) setPaymentMethod("crypto");
+  }, [
+    paymentMethod,
+    isBackendConfigured,
+    isStripeGatewayEnabled,
+    isBacsAvailable,
+    isCheckAvailable,
+    isCodAvailable,
+    isCryptoAvailable,
+    isCryptoOnlyCurrency,
+  ]);
   useEffect(() => {
     setCreateAccount(requireAccountCreation);
   }, [isLoggedIn, requireAccountCreation]);
@@ -361,7 +378,7 @@ export function CheckoutMockupPage() {
     }
   }, [cryptoAssets, cryptoCoin]);
 
-  const billingStoreAddress: StoreApiAddress | null = billingAddress.countryCode
+  const rawBillingStoreAddress: StoreApiAddress | null = billingAddress.countryCode
     ? {
         first_name: billingAddress.firstName,
         last_name: billingAddress.lastName,
@@ -376,6 +393,11 @@ export function CheckoutMockupPage() {
         phone: billingPhone,
       }
     : null;
+  const cartAppearsDigital =
+    checkoutStoreMode === "digital" || isDigitalOnlyCart(null, items);
+  const billingStoreAddress = rawBillingStoreAddress && cartAppearsDigital
+    ? withDigitalStoreApiAddress(rawBillingStoreAddress)
+    : rawBillingStoreAddress;
   const deliveryStoreAddress: StoreApiAddress | null =
     shipToDifferentAddress && deliveryAddress.countryCode
       ? {
@@ -401,7 +423,7 @@ export function CheckoutMockupPage() {
     adoptCart: adoptCheckoutCart,
     selectMethod: selectCheckoutShippingMethod,
   } = useCheckoutCart(billingStoreAddress, deliveryStoreAddress, cartRevision, items);
-  const shouldHideShipping = config.mode === "digital" || isDigitalOnlyCart(checkoutCart, items);
+  const shouldHideShipping = checkoutStoreMode === "digital" || isDigitalOnlyCart(checkoutCart, items);
   useEffect(() => {
     if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "cod" && (shouldHideShipping || !isCodAvailable)) {
@@ -727,6 +749,7 @@ export function CheckoutMockupPage() {
       backendLanguage: languageBackendCode,
       customerNote: orderNotes,
       shippingAddress: shippingDetails,
+      digitalOrder: shouldHideShipping,
       cryptoAssetCode: paymentMethod === "crypto" ? cryptoCoin.toUpperCase() : undefined,
       blikCode: paymentMethod === "blik" ? blikCode : undefined,
       stripePaymentMethodId,
@@ -905,21 +928,25 @@ export function CheckoutMockupPage() {
   const paymentSection = (
     <CheckoutSection title="Payment method">
       <div className="grid gap-2.5">
-        <PaymentOption
-          icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
-          label="Pay online"
-          description="Cards and other Stripe-supported online payment methods."
-          checked={paymentMethod === "stripe"}
-          onSelect={() => setPaymentMethod("stripe")}
-          disabled={isCryptoOnlyCurrency}
-          disabledReason="Not available while paying in BTC/ETH — use the crypto wallet method instead."
-        />
-        {paymentMethod === "stripe" && !isCryptoOnlyCurrency ? (
-          <StripeCardElement
-            amount={totalValue * selectedRate}
-            currency={currencyCode.toLowerCase()}
-            onControllerChange={registerStripePaymentController}
-          />
+        {!isBackendConfigured || isStripeGatewayEnabled ? (
+          <>
+            <PaymentOption
+              icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
+              label="Pay online"
+              description="Cards and other Stripe-supported online payment methods."
+              checked={paymentMethod === "stripe"}
+              onSelect={() => setPaymentMethod("stripe")}
+              disabled={isCryptoOnlyCurrency}
+              disabledReason="Not available while paying in BTC/ETH — use the crypto wallet method instead."
+            />
+            {paymentMethod === "stripe" && !isCryptoOnlyCurrency ? (
+              <StripeCardElement
+                amount={totalValue * selectedRate}
+                currency={currencyCode.toLowerCase()}
+                onControllerChange={registerStripePaymentController}
+              />
+            ) : null}
+          </>
         ) : null}
 
         {isBlikAvailable ? (
@@ -987,7 +1014,7 @@ export function CheckoutMockupPage() {
         {!isBackendConfigured || isCryptoAvailable ? (
           <>
             <PaymentOption
-              icon={<Bitcoin className="h-5 w-5" aria-hidden="true" />}
+              icon={<CurrencyMark code="BTC" size={20} />}
               label={cryptoGatewayTitle}
               description={cryptoGatewayDescription}
               checked={paymentMethod === "crypto"}

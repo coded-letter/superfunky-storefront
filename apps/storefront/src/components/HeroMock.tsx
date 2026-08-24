@@ -78,6 +78,10 @@ export function HeroMock({
 }: HeroMockProps) {
   const Heading = headingLevel;
   const heightStyle = height ? { minHeight: height } : undefined;
+  const heroStyle = {
+    ...heightStyle,
+    borderRadius: fullWidth ? 0 : "var(--theme-radius)",
+  };
   const { themeMaxWidthPx } = useLayoutPreferences();
   // Shared edge-to-edge breakout, applied on top of each variant's own layout classes —
   // same viewport-relative trick used elsewhere in the theme, intentionally opted into
@@ -121,9 +125,9 @@ export function HeroMock({
     return (
       <section
         className={`sf-hero sf-hero-glow funky-hero funky-hero--glow relative overflow-hidden bg-zinc-900 px-6 py-14 sm:px-12 sm:py-20 dark:bg-zinc-900 ${
-          fullWidth ? breakoutClassName : "rounded-3xl"
+          fullWidth ? breakoutClassName : ""
         } ${height ? "flex h-full items-center justify-center" : ""}`}
-        style={heightStyle}
+        style={heroStyle}
       >
         {image ? (
           <ResponsiveImage
@@ -171,10 +175,10 @@ export function HeroMock({
   if (variant === "fullbleed") {
     return (
       <section
-        className={`sf-hero sf-hero-fullbleed funky-hero funky-hero--fullbleed relative flex items-center overflow-hidden rounded-none shadow-soft-lg ${
+        className={`sf-hero sf-hero-fullbleed funky-hero funky-hero--fullbleed relative flex items-center overflow-hidden shadow-soft-lg ${
           fullWidth ? breakoutClassName : ""
         } ${height ? "" : "min-h-[22rem] sm:min-h-[28rem]"}`}
-        style={heightStyle}
+        style={heroStyle}
       >
         {image ? (
           <ResponsiveImage
@@ -221,9 +225,9 @@ export function HeroMock({
     return (
       <section
         className={`sf-hero sf-hero-split funky-hero funky-hero--split grid gap-0 overflow-hidden border border-zinc-200/80 bg-white shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-2 ${
-          fullWidth ? breakoutClassName : "rounded-3xl"
+          fullWidth ? breakoutClassName : ""
         }`}
-        style={heightStyle}
+        style={heroStyle}
       >
         <div className="grid content-center gap-4 p-8 sm:p-12">
           {kicker ? (
@@ -232,7 +236,7 @@ export function HeroMock({
             </span>
           ) : null}
           <Heading className="m-0 font-display text-3xl font-bold leading-tight text-zinc-900 dark:text-zinc-100 sm:text-4xl">{title}</Heading>
-          {description ? <p className="m-0 max-w-md text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
+          {description ? <p className="m-0 line-clamp-3 max-w-md text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
           {primaryCta || secondaryCta ? (
             <div className="flex flex-wrap gap-3 pt-2">
               {primaryCta ? (
@@ -266,9 +270,9 @@ export function HeroMock({
     return (
       <section
         className={`sf-hero sf-hero-minimal funky-hero funky-hero--minimal relative grid gap-5 overflow-hidden border border-zinc-200/80 bg-gradient-to-b from-zinc-50 to-white px-6 py-14 text-center shadow-soft dark:border-zinc-800 dark:from-zinc-900/60 dark:to-zinc-950 sm:px-12 sm:py-20 ${
-          fullWidth ? breakoutClassName : "rounded-3xl"
+          fullWidth ? breakoutClassName : ""
         } ${height ? "content-center" : ""}`}
-        style={heightStyle}
+        style={heroStyle}
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-brand-gradient" aria-hidden="true" />
         <div className="mx-auto grid max-w-2xl justify-items-center gap-4">
@@ -284,7 +288,7 @@ export function HeroMock({
           ) : null}
           {kicker ? <span className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">{kicker}</span> : null}
           <Heading className="m-0 font-display text-4xl font-bold leading-tight text-zinc-900 dark:text-zinc-100 sm:text-5xl">{title}</Heading>
-          {description ? <p className="mx-auto m-0 max-w-lg text-base leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
+          {description ? <p className="mx-auto m-0 line-clamp-3 max-w-lg text-base leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
           {primaryCta || secondaryCta ? (
             <div className="mx-auto flex flex-wrap justify-center gap-3 pt-2">
               {primaryCta ? (
@@ -309,8 +313,8 @@ export function HeroMock({
     <section
       className={`sf-hero sf-hero-strip funky-hero funky-hero--strip relative flex flex-col items-center justify-between gap-4 overflow-hidden px-6 py-5 shadow-glow sm:flex-row sm:px-8 ${
         image ? "bg-zinc-950" : "bg-brand-gradient"
-      } ${fullWidth ? `${breakoutClassName} rounded-none` : "rounded-2xl"}`}
-      style={heightStyle}
+      } ${fullWidth ? breakoutClassName : ""}`}
+      style={heroStyle}
     >
       {image ? (
         <>

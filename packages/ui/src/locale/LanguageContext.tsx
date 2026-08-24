@@ -1,5 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { LANGUAGE_OPTIONS, shouldRenderLanguageSwitcher, type LanguageOption } from "./options";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  LANGUAGE_OPTIONS,
+  resolveInitialLanguage,
+  resolveSyncedLanguageCode,
+  shouldRenderLanguageSwitcher,
+  type LanguageOption,
+} from "./options";
 
 type LanguageContextValue = {
   languageCode: string;
@@ -22,19 +28,20 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function getInitialLanguage(languageOptions: LanguageOption[]): { languageCode: string; hasLanguagePreference: boolean } {
   if (typeof window === "undefined") {
-    return { languageCode: languageOptions[0]?.code || LANGUAGE_OPTIONS[0].code, hasLanguagePreference: false };
+    return resolveInitialLanguage(null, null, languageOptions);
   }
 
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)?.toLowerCase();
-    if (stored && languageOptions.some(({ code }) => code === stored)) {
-      return { languageCode: stored, hasLanguagePreference: true };
-    }
+    return resolveInitialLanguage(
+      window.localStorage.getItem(STORAGE_KEY),
+      document.documentElement.lang,
+      languageOptions,
+    );
   } catch {
     // The switch remains session-only when storage is unavailable.
   }
 
-  return { languageCode: languageOptions[0]?.code || LANGUAGE_OPTIONS[0].code, hasLanguagePreference: false };
+  return resolveInitialLanguage(null, document.documentElement.lang, languageOptions);
 }
 
 export function readPersistedBackendLanguageOptions(): LanguageOption[] | null {
@@ -74,9 +81,12 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [hasBackendLanguageOptions, setHasBackendLanguageOptions] = useState(initialBackendOptions !== null);
   const [backendLanguageOptions, setBackendLanguageOptions] = useState(initialBackendOptions || []);
   const [languageSelectionRevision, setLanguageSelectionRevision] = useState(0);
+  const currentLanguageCode = useRef(language.languageCode);
   const setLanguageCode = useCallback((nextLanguageCode: string) => {
     const normalized = nextLanguageCode.toLowerCase();
     if (!languageOptions.some(({ code }) => code === normalized)) return;
+    if (currentLanguageCode.current === normalized) return;
+    currentLanguageCode.current = normalized;
     try {
       window.localStorage.setItem(STORAGE_KEY, normalized);
     } catch {
@@ -88,21 +98,26 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const setLanguageCodeFromRoute = useCallback((nextLanguageCode: string) => {
     const normalized = nextLanguageCode.toLowerCase();
     if (!languageOptions.some(({ code }) => code === normalized)) return;
+    currentLanguageCode.current = normalized;
     try {
       window.localStorage.setItem(STORAGE_KEY, normalized);
     } catch {
       // The route language still applies for the current session.
     }
-    setLanguage({ languageCode: normalized, hasLanguagePreference: true });
+    setLanguage((current) =>
+      current.languageCode === normalized && current.hasLanguagePreference
+        ? current
+        : { languageCode: normalized, hasLanguagePreference: true },
+    );
   }, [languageOptions]);
   const syncLanguageCode = useCallback((nextLanguageCode: string) => {
     const normalized = nextLanguageCode.toLowerCase();
     if (!languageOptions.some(({ code }) => code === normalized)) return;
-    setLanguage((current) =>
-      current.hasLanguagePreference || current.languageCode === normalized
-        ? current
-        : { languageCode: normalized, hasLanguagePreference: false },
-    );
+    setLanguage((current) => {
+      if (current.hasLanguagePreference || current.languageCode === normalized) return current;
+      currentLanguageCode.current = normalized;
+      return { languageCode: normalized, hasLanguagePreference: false };
+    });
   }, [languageOptions]);
   const syncLanguageOptions = useCallback((options: LanguageOption[]) => {
     const resolvedOptions = options.length ? options : [LANGUAGE_OPTIONS[0]];
@@ -110,12 +125,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     setLanguageOptions(resolvedOptions);
     setBackendLanguageOptions(options);
     setHasBackendLanguageOptions(true);
-    setLanguage((current) =>
-      current.hasLanguagePreference
-        || resolvedOptions.some(({ code }) => code === current.languageCode)
+    setLanguage((current) => {
+      const languageCode = resolveSyncedLanguageCode(
+        current.languageCode,
+        current.hasLanguagePreference,
+        resolvedOptions,
+      );
+      currentLanguageCode.current = languageCode;
+      return languageCode === current.languageCode
         ? current
-        : { languageCode: resolvedOptions[0].code, hasLanguagePreference: false },
-    );
+        : { languageCode, hasLanguagePreference: false };
+    });
   }, []);
 
   useEffect(() => {

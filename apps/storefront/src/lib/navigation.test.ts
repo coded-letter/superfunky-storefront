@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { JSDOM } from "jsdom";
 import {
+  hasOnlyMenuSchemaCompatibilityErrors,
   mapBestAvailableMenu,
+  omitUnsupportedLayoutFields,
   scoreMenu,
 } from "./navigation.ts";
 import {
@@ -14,8 +16,69 @@ import {
 import { sanitizeStorefrontHtml } from "../../../../packages/ui/src/layout/sanitizeStorefrontHtml.ts";
 
 const navigationSource = readFileSync(new URL("navigation.ts", import.meta.url), "utf8");
+const navigationDataSource = readFileSync(new URL("../state/navigationData.tsx", import.meta.url), "utf8");
 
 let dom: JSDOM;
+
+test("layout GraphQL compatibility retries can omit unsupported child fields without dropping the layout object", () => {
+  const query = `
+    storefrontConfig {
+      siteUrl
+      layout {
+        schemaVersion
+        themeMaxWidthPx
+        communityFeedFilters
+      }
+    }
+  `;
+  const compatible = omitUnsupportedLayoutFields(query, [
+    { message: 'Cannot query field "communityFeedFilters" on type "FunkyCommerceLayout".' },
+    { message: 'Field "schemaVersion" is not defined by type "FunkyCommerceLayout".' },
+  ]);
+
+  assert.ok(compatible);
+  assert.match(compatible, /layout\s*\{/);
+  assert.match(compatible, /themeMaxWidthPx/);
+  assert.doesNotMatch(compatible, /schemaVersion/);
+  assert.doesNotMatch(compatible, /communityFeedFilters/);
+  assert.equal(omitUnsupportedLayoutFields(query, [{ message: "Unrelated resolver failure" }]), null);
+
+  const withoutLayout = omitUnsupportedLayoutFields(query, [
+    { message: 'Cannot query field "schemaVersion" on type "FunkyCommerceLayout".' },
+    { message: 'Cannot query field "themeMaxWidthPx" on type "FunkyCommerceLayout".' },
+    { message: 'Cannot query field "communityFeedFilters" on type "FunkyCommerceLayout".' },
+  ]);
+  assert.ok(withoutLayout);
+  assert.match(withoutLayout, /siteUrl/);
+  assert.doesNotMatch(withoutLayout, /layout\s*\{/);
+});
+
+test("optional language discovery cannot invalidate layout configuration", () => {
+  const navigationQuery = navigationSource.match(/const NAVIGATION_QUERY[\s\S]*?const COMPATIBLE_NAVIGATION_QUERY/)?.[0] ?? "";
+  assert.doesNotMatch(navigationQuery, /languages\s*\{/);
+  assert.match(navigationSource, /getStorefrontLanguages\(\)/);
+  assert.match(navigationSource, /getPolylangRestLanguages\(AbortSignal\.timeout\(3_000\)\)/);
+  assert.doesNotMatch(navigationSource, /const \[graphqlResponse, restLanguageResult\] = await Promise\.all\(/);
+  assert.match(
+    navigationSource,
+    /if \(isNavigationCompatibilityError\(errors\)\) \{\s*return mapNavigationLanguages\(await getOptionalPolylangRestLanguages\(\)\)/,
+  );
+  assert.match(navigationSource, /STOREFRONT_BACKEND_PROFILE === "shell"/);
+  assert.match(navigationDataSource, /navigation-data:v13/);
+  assert.match(navigationDataSource, /lastResolvedData/);
+  assert.match(navigationDataSource, /canRenderChildren = !enabled \|\| Boolean\(state\.data\) \|\| !rawState\.isLoading/);
+  assert.doesNotMatch(navigationDataSource, /useFastNavigationMenus|fastMenus/);
+  assert.match(navigationSource, /query StorefrontAiAssistant\(\$language: String\)/);
+  assert.match(navigationSource, /query StorefrontAiAssistantCompatible\(\$language: String\)/);
+  assert.match(navigationSource, /hasOnlyMissingGraphqlFields\(response\.errors, \["showHeader", "showFooter", "showFixed"\]\)/);
+  assert.match(navigationSource, /placement: "footer"/);
+  assert.match(navigationSource, /showHeader: false/);
+  assert.match(navigationSource, /showFooter: true/);
+  assert.match(navigationSource, /showFixed: false/);
+  assert.match(navigationSource, /throw new Error\(\s*`AI assistant configuration was unavailable:/);
+  assert.match(navigationSource, /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)/);
+  assert.match(navigationDataSource, /navigation-assistant:v1/);
+});
 
 before(() => {
   dom = new JSDOM("<main></main>", {
@@ -43,6 +106,8 @@ test("navigation compatibility fallback is explicit for minimal backends without
   assert.match(navigationSource, /"promoHtml"/);
   assert.match(navigationSource, /"headerIconMedia"/);
   assert.match(navigationSource, /"aiAssistant"/);
+  assert.match(navigationSource, /\/wp-json\/pll\/v1\/languages/);
+  assert.match(navigationSource, /getOptionalPolylangRestLanguages\(\)/);
   assert.doesNotMatch(navigationSource, /query StorefrontNavigationCompatible \{\s*menus\(first: 100\) \{\s*nodes \{\s*id\s*databaseId\s*name\s*slug\s*locations/);
   assert.match(navigationSource, /return \[];\n\s*\}/);
 });
@@ -156,6 +221,105 @@ test("falls back to the first available menu when the backend exposes no locatio
   assert.equal(mapBestAvailableMenu(menus, "HEADER", "en")[0]?.label, "Home");
 });
 
+test("selects exact header-en and header-pl menus from one menus response", () => {
+  const menus = [
+    {
+      name: "Header EN",
+      slug: "header-en",
+      locations: ["HEADER___EN", "MOBILE___EN"],
+      menuItems: { nodes: [{
+        id: "header-en-item",
+        databaseId: 1,
+        parentDatabaseId: null,
+        order: 1,
+        label: "Shop",
+        path: "/shop/",
+      }] },
+    },
+    {
+      name: "Header PL",
+      slug: "header-pl",
+      locations: ["HEADER", "MOBILE"],
+      menuItems: { nodes: [{
+        id: "header-pl-item",
+        databaseId: 2,
+        parentDatabaseId: null,
+        order: 1,
+        label: "Sklep",
+        path: "/sklep/",
+      }] },
+    },
+  ] as any;
+
+  assert.equal(mapBestAvailableMenu(menus, "HEADER", "en")[0]?.label, "Shop");
+  assert.equal(mapBestAvailableMenu(menus, "HEADER", "pl")[0]?.label, "Sklep");
+  assert.equal(mapBestAvailableMenu(menus, "MOBILE", "en")[0]?.label, "Shop");
+  assert.equal(mapBestAvailableMenu(menus, "MOBILE", "pl")[0]?.label, "Sklep");
+
+  const configurationQuery = navigationSource.match(
+    /const NAVIGATION_QUERY[\s\S]*?const LOCALIZED_NAVIGATION_MENUS_QUERY/,
+  )?.[0] ?? "";
+  const localizedMenuQuery = navigationSource.match(
+    /const LOCALIZED_NAVIGATION_MENUS_QUERY[\s\S]*?const STOREFRONT_RADIO_QUERY/,
+  )?.[0] ?? "";
+  assert.doesNotMatch(configurationQuery, /menus\(first: 100\)/);
+  assert.match(localizedMenuQuery, /menus\(first: 100\)/);
+  assert.doesNotMatch(localizedMenuQuery, /\bmenu\s*\(/);
+  assert.doesNotMatch(localizedMenuQuery, /idType:\s*LOCATION/);
+  assert.doesNotMatch(navigationDataSource, /getNavigationMenus|useFastNavigationMenus/);
+});
+
+test("falls back deterministically within the same response when a localized menu is absent", () => {
+  const headerEn = {
+    name: "Header EN",
+    slug: "header-en",
+    locations: ["HEADER___EN"],
+    menuItems: { nodes: [{
+      id: "header-en-item",
+      databaseId: 1,
+      parentDatabaseId: null,
+      order: 1,
+      label: "Shop",
+      path: "/shop/",
+    }] },
+  } as any;
+  const headerPl = {
+    name: "Header PL",
+    slug: "header-pl",
+    locations: ["HEADER"],
+    menuItems: { nodes: [{
+      id: "header-pl-item",
+      databaseId: 2,
+      parentDatabaseId: null,
+      order: 1,
+      label: "Sklep",
+      path: "/sklep/",
+    }] },
+  } as any;
+
+  assert.equal(mapBestAvailableMenu([headerEn, headerPl], "HEADER", "fr")[0]?.label, "Sklep");
+  assert.deepEqual(mapBestAvailableMenu([], "HEADER", "fr"), []);
+});
+
+test("does not treat direct LOCATION resolver errors as schema compatibility failures", () => {
+  assert.equal(
+    hasOnlyMenuSchemaCompatibilityErrors([
+      { message: "No menu set for the provided location" },
+    ]),
+    false,
+  );
+  assert.equal(
+    hasOnlyMenuSchemaCompatibilityErrors([
+      { message: 'Cannot query field "locations" on type "Menu".' },
+    ]),
+    true,
+  );
+  assert.match(
+    navigationSource,
+    /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)[\s\S]*response = await graphqlRequest<NavigationQueryResult>\(COMPATIBLE_NAVIGATION_QUERY\);/,
+  );
+});
+
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
 test("keeps the built-in storefront mock menu as fallback when the backend has no menus", () => {
@@ -218,6 +382,20 @@ test("omits the description field when the menu item has none", () => {
   ], normalizeHref);
 
   assert.equal(item.description, undefined);
+});
+
+test("preserves an explicitly configured external menu URL over its local-looking path", () => {
+  const [item] = mapMenuItems([
+    buildRawItem({
+      databaseId: 1,
+      label: "Examples",
+      path: "/examples/",
+      uri: "/examples/",
+      url: "https://superfunky.pro/examples/",
+    }),
+  ], normalizeHref);
+
+  assert.equal(item.href, "https://superfunky.pro/examples/");
 });
 
 test("maps arbitrary menu depth and resolves nested hash links", () => {
@@ -322,11 +500,19 @@ test("normalizeStorefrontLayoutConfiguration strictly allowlists enum fields ins
   );
   assert.match(
     navigationSource,
+    /relatedProductsColumns: pickEnum\(source\.relatedProductsColumns, \["2", "3", "4"\] as const, defaults\.relatedProductsColumns\)/,
+  );
+  assert.match(
+    navigationSource,
+    /showStudioRelatedProductsUnderMeta: pickBoolean\([\s\S]*?source\.showStudioRelatedProductsUnderMeta,[\s\S]*?defaults\.showStudioRelatedProductsUnderMeta/,
+  );
+  assert.match(
+    navigationSource,
     /discussionLayout: pickEnum\(source\.discussionLayout, \["stacked", "split-left", "split-right"\] as const, defaults\.discussionLayout\)/,
   );
   assert.match(
     navigationSource,
-    /postTocLayout: pickEnum\(source\.postTocLayout, \["current", "hidden", "above"\] as const, defaults\.postTocLayout\)/,
+    /postTocLayout: pickEnum\(\s*source\.postTocLayout,\s*\["current", "rail-left", "rail-right", "above"\] as const,\s*defaults\.postTocLayout,\s*\)/,
   );
   assert.match(
     navigationSource,

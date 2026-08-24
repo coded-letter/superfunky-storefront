@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ResponsiveImage, Seo, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
@@ -21,7 +29,7 @@ import { ShareButtonsRow } from "./ShareButtons";
 import { slugifyHeading } from "./shared";
 
 
-type TocLayout = "current" | "hidden" | "above";
+type TocLayout = "current" | "rail-left" | "rail-right" | "above";
 type SharePosition = "above-toc" | "on-image" | "below-toc-right";
 type AuthorLayout = "fullwidth" | "compact" | "editorial";
 
@@ -48,19 +56,24 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
     post?.translations || [],
     pathname,
     !isLoading && !isRevalidating,
+    true,
+    post?.uri,
   );
 
   useEffect(() => {
     if (!post || !contentRef.current) return;
     const unmountBehaviors = mountCmsBehaviors(contentRef.current);
     const unmountScripts = mountEnqueuedScripts(post.scripts);
-    const unmountStyles = mountPageStyles(post.themeStyles, BACKEND_ORIGIN);
     return () => {
       unmountBehaviors();
       unmountScripts();
-      unmountStyles();
     };
   }, [post]);
+
+  useLayoutEffect(() => {
+    if (!post) return undefined;
+    return mountPageStyles(post.themeStyles, BACKEND_ORIGIN);
+  }, [post?.themeStyles]);
 
   if (isLoading) return <ContentLoadingState label="Loading post" />;
   if (error) return <PostStatus title="Post unavailable" message={error.message} />;
@@ -199,12 +212,14 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
           ) : null}
         </div>
 
-        {tocLayout === "hidden" ? <TocDotRail entries={tocEntries} /> : null}
+        {tocLayout === "rail-left" || tocLayout === "rail-right" ? (
+          <TocDotRail entries={tocEntries} side={tocLayout === "rail-right" ? "right" : "left"} />
+        ) : null}
 
         <div className={tocLayout === "current" ? "grid gap-8 lg:grid-cols-[240px_1fr]" : "grid gap-8"}>
           {tocLayout === "current" ? (
             <div className="order-2 lg:order-1">
-              <div className="grid gap-4 lg:sticky lg:top-28">
+              <div className={`grid gap-4 lg:sticky ${sharePosition === "on-image" ? "lg:top-0" : "lg:top-28"}`}>
                 {sharePosition === "above-toc" && (
                   <div className="rounded-2xl border border-zinc-200/80 bg-white p-3 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
                     <ShareButtonsRow title={post.title} />
@@ -219,7 +234,7 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
               </div>
             </div>
           ) : null}
-          {tocLayout === "hidden" && sharePosition !== "on-image" ? (
+          {(tocLayout === "rail-left" || tocLayout === "rail-right") && sharePosition !== "on-image" ? (
             <div className="rounded-2xl border border-zinc-200/80 bg-white p-3 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
               <ShareButtonsRow title={post.title} />
             </div>
@@ -395,17 +410,21 @@ function TableOfContents({ entries }: { entries: TocEntry[] }) {
  * it stays reachable regardless of scroll position. The dot for the heading currently
  * in view is highlighted exactly like the sidebar TOC's active entry (shares the same
  * `useActiveHeading` scroll tracking). Renders nothing if there are no headings. */
-function TocDotRail({ entries }: { entries: TocEntry[] }) {
+function TocDotRail({ entries, side }: { entries: TocEntry[]; side: "left" | "right" }) {
   const activeId = useActiveHeading(entries);
   if (!entries.length) return null;
 
   return (
-    <div className="group/toc fixed left-0 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
-      <div className="grid gap-2 rounded-r-2xl border border-l-0 border-zinc-200/80 bg-white/90 py-3 pl-2 pr-1.5 shadow-soft backdrop-blur transition-all duration-200 group-hover/toc:pr-3 dark:border-zinc-800 dark:bg-zinc-900/90">
+    <div className={`group/toc fixed top-1/2 z-30 hidden -translate-y-1/2 lg:block ${side === "right" ? "right-0" : "left-0"}`}>
+      <div className={`grid gap-2 border border-zinc-200/80 bg-white/90 py-3 shadow-soft backdrop-blur transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900/90 ${
+        side === "right"
+          ? "rounded-l-2xl border-r-0 pl-1.5 pr-2 group-hover/toc:pl-3"
+          : "rounded-r-2xl border-l-0 pl-2 pr-1.5 group-hover/toc:pr-3"
+      }`}>
         {entries.map((entry) => {
           const isActive = entry.id === activeId;
           return (
-            <a key={entry.id} href={`#${entry.id}`} className="flex items-center gap-2" aria-label={entry.text} aria-current={isActive ? "location" : undefined}>
+            <a key={entry.id} href={`#${entry.id}`} className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`} aria-label={entry.text} aria-current={isActive ? "location" : undefined}>
               <span
                 className={`h-2 w-2 shrink-0 rounded-full transition ${
                   isActive ? "bg-brand-600 dark:bg-brand-400" : "bg-zinc-300 group-hover/toc:bg-brand-300 dark:bg-zinc-700"

@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmsRouteFromNode, normalizedRoutePath, normalizeLanguageRoutePath } from "./route-paths.mjs";
+import {
+  cmsRouteFromNode,
+  normalizedRoutePath,
+  normalizeLanguageRoutePath,
+  prerenderRouteDirectoryPath,
+} from "./route-paths.mjs";
+
+test("prerender writes encoded localized routes to deployable Unicode directories", () => {
+  assert.equal(
+    prerenderRouteDirectoryPath(
+      "/ja/category/%E3%82%AA%E3%83%BC%E3%82%B7%E3%83%A3%E3%83%B3%EF%BC%86%E3%82%AE%E3%82%A2/",
+    ),
+    "ja/category/オーシャン＆ギア",
+  );
+  assert.equal(prerenderRouteDirectoryPath("/category/ocean-gear/"), "category/ocean-gear");
+});
+
+test("prerender directory paths cannot decode into traversal or nested segments", () => {
+  assert.equal(prerenderRouteDirectoryPath("/category/ocean%2Fgear/"), "category/ocean%2Fgear");
+  assert.throws(() => prerenderRouteDirectoryPath("/category/%2E%2E/"), /invalid route path/);
+  assert.throws(() => prerenderRouteDirectoryPath("/category/%E0%A4%A/"), /invalid route path/);
+});
 
 test("prerender includes backend-provided custom taxonomy URIs", () => {
   const categoryRoute = cmsRouteFromNode(
@@ -87,6 +108,24 @@ test("prerender preserves canonical multilingual CMS URIs", () => {
   );
 });
 
+test("prerender restores a posts page URI from its slug", () => {
+  const route = cmsRouteFromNode(
+    {
+      __typename: "Page",
+      title: "Blog",
+      slug: "blog",
+      uri: null,
+      language: null,
+    },
+    "contentNodes",
+    "pl",
+    ["pl", "en", "ja"],
+  );
+
+  assert.equal(route?.path, "/blog");
+  assert.equal(route?.lang, "pl");
+});
+
 test("prerender gives equivalent multilingual home pages distinct language-root paths", () => {
   const languages = ["pl", "en"];
   const polishHome = cmsRouteFromNode(
@@ -116,9 +155,9 @@ test("prerender gives equivalent multilingual home pages distinct language-root 
     languages,
   );
 
-  assert.equal(polishHome?.path, "/pl");
+  assert.equal(polishHome?.path, "/");
   assert.equal(polishHome?.lang, "pl");
-  assert.equal(polishHome?.canonical, "/pl");
+  assert.equal(polishHome?.canonical, "/");
   assert.equal(englishHome?.path, "/en");
   assert.equal(englishHome?.lang, "en");
   assert.equal(englishHome?.canonical, "/en");
@@ -207,6 +246,50 @@ test("prerender preserves explicit CMS noindex metadata on generated pages", () 
 
   assert.equal(route?.robots, "noindex, nofollow");
   assert.equal(route?.indexable, false);
+});
+
+test("explicit public robots override backend-global Yoast noindex metadata", () => {
+  const publicRoute = cmsRouteFromNode(
+    {
+      __typename: "Page",
+      title: "Community",
+      uri: "/community/",
+      seo: { metaRobotsNoindex: "noindex", metaRobotsNofollow: "follow" },
+      funkycommercePublicRobots: { noindex: false, nofollow: false },
+    },
+    "contentNodes",
+  );
+  const lowValueRoute = cmsRouteFromNode(
+    {
+      __typename: "Page",
+      title: "Low value",
+      uri: "/low-value/",
+      seo: { metaRobotsNoindex: "index", metaRobotsNofollow: "follow" },
+      funkycommercePublicRobots: { noindex: true, nofollow: false },
+    },
+    "contentNodes",
+  );
+
+  assert.equal(publicRoute?.robots, "index, follow");
+  assert.equal(publicRoute?.robotsSource, "explicit");
+  assert.equal(lowValueRoute?.robots, "noindex, follow");
+  assert.equal(lowValueRoute?.indexable, false);
+});
+
+test("prerender keeps the public homepage indexable when WordPress is hidden", () => {
+  const route = cmsRouteFromNode(
+    {
+      __typename: "Page",
+      title: "Home",
+      uri: "/",
+      isFrontPage: true,
+      seo: { metaRobotsNoindex: "noindex", metaRobotsNofollow: "nofollow" },
+    },
+    "contentNodes",
+  );
+
+  assert.equal(route?.robots, "index, follow");
+  assert.equal(route?.indexable, true);
 });
 
 test("prerender route cardinality controls prefixes for 0, 1, and 2 languages", () => {

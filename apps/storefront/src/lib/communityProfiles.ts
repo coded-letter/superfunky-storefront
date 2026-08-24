@@ -22,6 +22,11 @@ export type CommunityArticlePost = {
   author: { slug?: string };
 };
 
+export type CommunityArchiveAuthorCandidate = {
+  databaseId: number;
+  role: "member" | "creator" | "collaborator";
+};
+
 export function normalizeCommunityHandle(value: string | null | undefined): string {
   if (!value) return "";
   try {
@@ -48,6 +53,15 @@ export function isCommunityArticlePost(
     return members.some(({ databaseId }) => databaseId === post.authorDatabaseId);
   }
   return members.some(({ handle }) => communityHandlesMatch(handle, post.author.slug));
+}
+
+export function isCommunityArchiveAuthor(
+  member: CommunityArchiveAuthorCandidate,
+  publishedAuthorIds: ReadonlySet<number>,
+): boolean {
+  return member.role === "creator"
+    || member.role === "collaborator"
+    || publishedAuthorIds.has(member.databaseId);
 }
 
 export function resolvePublicCommunityMember<T extends CommunityProfileCandidate>(

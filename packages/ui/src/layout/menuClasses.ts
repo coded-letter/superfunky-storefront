@@ -10,6 +10,10 @@ export function hasMenuClass(
   return cssClasses?.includes(className) || false;
 }
 
+export function isMenuInitiallyExpanded(cssClasses: string[] | undefined): boolean {
+  return ["expanded", "open", "is-open"].some((className) => hasMenuClass(cssClasses, className));
+}
+
 export function getMegaMenuConfiguration(
   cssClasses: string[] | undefined,
   childCount: number,

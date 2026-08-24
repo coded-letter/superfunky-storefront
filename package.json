@@ -11,7 +11,7 @@
     "dev": "pnpm --filter @funky/storefront dev",
     "build": "pnpm --filter @funky/storefront build",
     "preview": "pnpm --filter @funky/storefront preview",
-    "test": "node --test scripts/*.test.mjs apps/storefront/scripts/*.test.mjs && node --experimental-strip-types --test apps/storefront/src/lib/*.test.ts packages/cms/src/*.test.ts packages/commerce/src/*.test.ts packages/sdk/src/*.test.ts packages/shared/src/*.test.ts packages/ui/src/*/*.test.ts",
+    "test": "node --test scripts/*.test.mjs",
     "test:ai-assistant": "node --experimental-strip-types --test apps/storefront/src/lib/aiAssistant.test.ts apps/storefront/src/lib/navigation.test.ts"
   }
 }

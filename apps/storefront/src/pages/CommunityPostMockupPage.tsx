@@ -11,6 +11,7 @@ import { CommentsSection } from "./CommentThread";
 import { useCreatorContent } from "../state/creatorContent";
 import { createReview } from "../lib/comments";
 import {
+  communityPostMediaForEditor,
   deleteCommunityPost,
   getCommunityPostByDatabaseId,
   getCommunityPostByUri,
@@ -55,7 +56,7 @@ export function CommunityPostMockupPage() {
     isLoading: isDirectPostLoading,
     error: directPostError,
   } = useIncrementalData(
-    `community-post:v5:${postId || pathname}:${postRevision}`,
+    `community-post:v6:${postId || pathname}:${postRevision}`,
     () => postId ? getCommunityPostByDatabaseId(postId) : getCommunityPostByUri(pathname),
   );
   const livePost = liveCommunity?.posts.find((candidate) => candidate.id === postId || String(candidate.databaseId) === postId);
@@ -78,6 +79,7 @@ export function CommunityPostMockupPage() {
   const [liked, setLiked] = useState(wordpressPost?.likedByViewer ?? false);
   const [likeError, setLikeError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const pendingTranslationPath = useRef<string | null>(null);
 
   useEffect(() => {
     setLikesCount(wordpressPost?.likes ?? fallbackPost?.likes ?? 0);
@@ -86,15 +88,26 @@ export function CommunityPostMockupPage() {
 
   useEffect(() => {
     if (!directPost) return;
-    const sourceLanguageCode = directPost.languageCode || "en";
+    if (pendingTranslationPath.current) {
+      if (pendingTranslationPath.current === pathname) {
+        pendingTranslationPath.current = null;
+      }
+      return;
+    }
+    const sourceLanguageCode = directPost.languageCode?.toLowerCase() || "";
+    if (!sourceLanguageCode) return;
     if (!hasLanguagePreference) {
       syncLanguageCode(sourceLanguageCode);
       return;
     }
     if (sourceLanguageCode.toLowerCase() === languageCode.toLowerCase()) return;
     const translation = (directPost.translations || []).find(({ languageCode: translatedLanguage }) => translatedLanguage.toLowerCase() === languageCode.toLowerCase());
-    if (translation) navigate(translation.uri || `/community/post/${translation.databaseId}`, { replace: true });
-  }, [directPost, hasLanguagePreference, languageCode, navigate, syncLanguageCode]);
+    if (translation) {
+      const targetPath = translation.uri || `/community/post/${translation.databaseId}`;
+      pendingTranslationPath.current = targetPath;
+      navigate(targetPath, { replace: true });
+    }
+  }, [directPost, hasLanguagePreference, languageCode, navigate, pathname, syncLanguageCode]);
 
   useEffect(() => {
     if (!contentRef.current || !wordpressPost?.contentHtml) return;
@@ -344,13 +357,8 @@ export function CommunityPostMockupPage() {
             title: directPost.post.title,
             description: directPost.post.description,
             tags: directPost.post.tags,
-            media: directPost.post.media.map((item) => ({
-              attachmentId: item.databaseId,
-              url: item.url,
-              mimeType: item.mimeType,
-              mediaType: item.mediaType,
-            })),
-            languageCode: directPost.languageCode || "en",
+            media: communityPostMediaForEditor(directPost.post.media),
+            languageCode: directPost.languageCode || languageCode,
             translationOfId: directPost.translations?.[0]?.databaseId,
           }}
           searchTranslationCandidates={(query, selectedLanguage) =>

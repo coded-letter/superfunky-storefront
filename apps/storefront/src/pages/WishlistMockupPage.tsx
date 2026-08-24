@@ -1,33 +1,18 @@
 import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ProductCard, savedListEntityId, useWishlist, type ProductCardVariant } from "@funky/ui";
+import { ProductCard, savedListEntityId, useLayoutPreferences, useWishlist } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useCommerceData } from "../state/commerceData";
 
-const CARD_STYLE_OPTIONS = [
-  { value: "default" as const, label: "Default" },
-  { value: "minimal" as const, label: "Minimal" },
-  { value: "editorial" as const, label: "Editorial" },
-  { value: "gallery" as const, label: "Mini gallery" },
-  { value: "variation" as const, label: "Swatches" },
-  { value: "simple" as const, label: "Simple" },
-  { value: "expandable" as const, label: "Expandable" },
-];
-
 export function WishlistMockupPage() {
-  useEmbeddedApplicationShortcode();
-  const config = useApplicationShortcode(["funkycommerce_wishlist"], { "card-variant": "default" });
+  const { wishlistCardVariant: cardStyle } = useLayoutPreferences();
   const shopPath = useStorefrontPath("shop", "/shop");
   const { ids, clear, syncError } = useWishlist();
   const { data: commerce, isLoading, error } = useCommerceData();
   const { cap, error: capError, isLoggedIn } = useSavedListCap("wishlist");
   const items = (commerce?.products || []).filter((product) => ids.includes(savedListEntityId(product)));
-  const configuredVariant = CARD_STYLE_OPTIONS.some(({ value }) => value === config["card-variant"]) ? config["card-variant"] as ProductCardVariant : "default";
-  const cardStyle = configuredVariant;
-
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-5 dark:border-zinc-800">

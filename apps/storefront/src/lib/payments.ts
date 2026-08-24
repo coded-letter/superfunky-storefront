@@ -205,6 +205,7 @@ export type CheckoutSubmissionOptions = {
   captureKey?: string;
   customerNote?: string;
   shippingAddress?: CheckoutBillingDetails;
+  digitalOrder?: boolean;
   cryptoAssetCode?: string;
   stripePaymentMethodId?: string;
   stripePaymentType?: string;

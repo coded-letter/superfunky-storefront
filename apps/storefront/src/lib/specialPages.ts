@@ -6,15 +6,21 @@ export async function resolveLocalizedSpecialPage(
   getPageByUri: (uri: string) => Promise<CmsPage | null>,
 ): Promise<CmsPage | null> {
   const normalizedLanguage = languageCode.toLowerCase();
-  const localizedPage = await getPageByUri(`/${normalizedLanguage}/${pageSlug}/`);
-  if (localizedPage?.languageCode === normalizedLanguage) return localizedPage;
+  const candidateSlugs = pageSlug === "404" ? ["404", "4o4"] : [pageSlug];
 
-  const defaultPage = await getPageByUri(`/${pageSlug}/`);
-  if (!defaultPage) return null;
-  if (defaultPage.languageCode === normalizedLanguage) return defaultPage;
+  for (const candidateSlug of candidateSlugs) {
+    const localizedPage = await getPageByUri(`/${normalizedLanguage}/${candidateSlug}/`);
+    if (localizedPage?.languageCode === normalizedLanguage) return localizedPage;
 
-  const translation = defaultPage.translations.find(
-    (candidate) => candidate.languageCode === normalizedLanguage,
-  );
-  return translation ? getPageByUri(translation.uri) : null;
+    const defaultPage = await getPageByUri(`/${candidateSlug}/`);
+    if (!defaultPage) continue;
+    if (defaultPage.languageCode === normalizedLanguage) return defaultPage;
+
+    const translation = defaultPage.translations.find(
+      (candidate) => candidate.languageCode === normalizedLanguage,
+    );
+    if (translation) return getPageByUri(translation.uri);
+  }
+
+  return null;
 }

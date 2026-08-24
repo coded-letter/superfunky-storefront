@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { normalizeManagedMediaUrl } from "./ResponsiveImage.urls";
 
 /** Performance-oriented image wrapper — the frontend half of the "100 Lighthouse
  * score" goal. Three concrete techniques, all with zero backend dependency:
@@ -7,10 +8,8 @@ import type { CSSProperties } from "react";
  *    majority of this project's imagery) it generates a handful of width variants via
  *    Unsplash's own `?w=` resize param so the browser downloads the smallest image
  *    that actually fills the slot, instead of one oversized master image everywhere.
- *    Any other URL (future WP media library uploads) is passed through untouched —
- *    once the backend serves its own responsive srcset (WordPress does this natively
- *    for `wp_get_attachment_image`), this component's manual srcset generation should
- *    be skipped in favor of the server-provided one.
+ *    WordPress media on managed Netlify storefronts uses the same width candidates
+ *    through Netlify Image CDN so oversized originals are not sent across origins.
  * 2. Explicit `width`/`height` (or an `aspectRatio` class) reserve the image's box
  *    before it loads — the #1 fix for Cumulative Layout Shift.
  * 3. `loading`/`fetchPriority`/`decoding` hints — lazy + async by default, with a
@@ -20,6 +19,7 @@ import type { CSSProperties } from "react";
 
 const UNSPLASH_HOST_PATTERN = /images\.unsplash\.com/;
 const UNSPLASH_WIDTHS = [320, 480, 640, 768, 1024, 1280, 1600];
+const RESPONSIVE_WIDTHS = [320, 480, 640, 768, 1024, 1280, 1600];
 
 function withUnsplashWidth(url: string, width: number): string {
   const optimized = new URL(url);
@@ -34,8 +34,43 @@ function withUnsplashWidth(url: string, width: number): string {
 }
 
 function buildSrcSet(url: string): string | undefined {
+  const netlifySrcSet = buildNetlifySrcSet(url);
+  if (netlifySrcSet) return netlifySrcSet;
   if (!UNSPLASH_HOST_PATTERN.test(url)) return undefined;
   return UNSPLASH_WIDTHS.map((width) => `${withUnsplashWidth(url, width)} ${width}w`).join(", ");
+}
+
+function netlifyImageUrl(source: string, width: number): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (!/(?:^|\.)superfunky\.pro$|\.netlify\.app$/i.test(window.location.hostname)) return undefined;
+  let mediaUrl: URL;
+  try {
+    mediaUrl = new URL(source);
+  } catch {
+    return undefined;
+  }
+  if (mediaUrl.protocol === "http:" && /(?:^|\.)superfunky\.pro$/i.test(mediaUrl.hostname)) {
+    mediaUrl.protocol = "https:";
+  }
+  if (
+    !/^(?:v[0-9]+|dev|blog|shop|sample)\.superfunky\.pro$/i.test(mediaUrl.hostname)
+    || !mediaUrl.pathname.startsWith("/wp-content/uploads/")
+    || !/\.(?:avif|jpe?g|png|webp)$/i.test(mediaUrl.pathname)
+  ) return undefined;
+  const parameters = new URLSearchParams({
+    url: mediaUrl.toString(),
+    w: String(Math.max(1, Math.min(1920, Math.round(width)))),
+    q: "75",
+  });
+  return `/.netlify/images?${parameters.toString()}`;
+}
+
+function buildNetlifySrcSet(url: string): string | undefined {
+  const candidates = RESPONSIVE_WIDTHS.flatMap((width) => {
+    const candidate = netlifyImageUrl(url, width);
+    return candidate ? [`${candidate} ${width}w`] : [];
+  });
+  return candidates.length ? candidates.join(", ") : undefined;
 }
 
 export type ResponsiveImageProps = {
@@ -47,7 +82,8 @@ export type ResponsiveImageProps = {
    * doesn't apply. */
   width?: number;
   height?: number;
-  /** Backend-provided responsive candidates. Preferred over provider-specific generation. */
+  /** Backend-provided responsive candidates. Used unless the managed edge CDN can
+   * generate same-origin candidates for an eligible WordPress media URL. */
   srcSet?: string;
   /** Sizes hint for the srcset — defaults to a common responsive-card guess.
    * Override for known layouts (e.g. a full-bleed hero should pass `"100vw"`). */
@@ -78,11 +114,15 @@ export function ResponsiveImage({
   draggable = true,
   "aria-hidden": ariaHidden,
 }: ResponsiveImageProps) {
-  const srcSet = providedSrcSet || buildSrcSet(src);
+  const resolvedSource = normalizeManagedMediaUrl(src);
+  const generatedSrcSet = buildSrcSet(resolvedSource);
+  const srcSet = generatedSrcSet || providedSrcSet;
+  const resolvedSrc = netlifyImageUrl(resolvedSource, width ?? (priority ? 1280 : 1024)) || resolvedSource;
+  const usesNetlifyOptimization = resolvedSrc !== resolvedSource;
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       srcSet={srcSet}
       sizes={srcSet ? sizes : undefined}
       alt={alt}
@@ -94,6 +134,13 @@ export function ResponsiveImage({
       {...({ fetchpriority: priority ? "high" : "auto" } as Record<string, string>)}
       draggable={draggable}
       aria-hidden={ariaHidden}
+      onError={usesNetlifyOptimization ? (event) => {
+        const image = event.currentTarget;
+        if (image.getAttribute("src") === resolvedSource) return;
+        image.removeAttribute("srcset");
+        image.removeAttribute("sizes");
+        image.src = resolvedSource;
+      } : undefined}
       style={style}
       className={["sf-responsive-image", className].filter(Boolean).join(" ")}
     />

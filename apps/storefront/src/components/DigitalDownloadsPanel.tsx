@@ -36,6 +36,8 @@ export function DigitalDownloadsPanel({
                 {available ? (
                   <a
                     href={download.url}
+                    data-funky-native-link=""
+                    rel="external"
                     className="inline-flex items-center gap-1.5 rounded-full bg-brand-gradient px-4 py-2 text-xs font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
                   >
                     <Download className="h-3.5 w-3.5" aria-hidden="true" />

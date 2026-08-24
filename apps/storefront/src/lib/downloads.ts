@@ -1,5 +1,6 @@
 import { normalizeBackendError } from "@funky/ui";
 import { BACKEND_ORIGIN } from "@funky/sdk";
+import { HttpRequestError } from "./requestRetry";
 
 export type OrderDownload = {
   id: string;
@@ -43,10 +44,11 @@ export async function getOrderDownloadAccess(input: {
   });
   const payload = (await response.json().catch(() => null)) as OrderDownloadsResponse | { message?: string } | null;
   if (!response.ok) {
-    throw new Error(
+    throw new HttpRequestError(
       payload && "message" in payload && typeof payload.message === "string"
         ? normalizeBackendError(payload.message)
         : `Download request failed with status ${response.status}.`,
+      response.status,
     );
   }
   const result = payload as OrderDownloadsResponse;

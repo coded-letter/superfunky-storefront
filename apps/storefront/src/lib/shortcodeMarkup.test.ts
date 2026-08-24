@@ -220,6 +220,17 @@ test("slots shortcode renderers without removing them from parent WordPress Colu
   );
 });
 
+test("marks full-width slots for every truthy shortcode attribute", () => {
+  for (const value of ["1", "true", "yes", "on", "True"]) {
+    const slotted = slotRenderableShortcodeMarkers(
+      '<div data-funkycommerce-shortcode="hero"></div>',
+      [`[hero fullwidth="${value}"]`],
+    );
+
+    assert.match(slotted.html, /data-funkycommerce-fullwidth="true"/);
+  }
+});
+
 test("normalizes every cart and checkout alias while preserving surrounding paragraphs", () => {
   const aliases = [
     "cart",

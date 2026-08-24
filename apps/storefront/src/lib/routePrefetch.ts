@@ -3,6 +3,7 @@ import { getProductByUriOrSlug } from "./commerce";
 import { prefetchIncrementalData } from "@funky/sdk/react";
 import { getPageByUri } from "./pages";
 import { getPostByUri } from "./posts";
+import { warmStorefrontDocument } from "./storefrontDocumentWarmup";
 
 export async function prefetchStorefrontRoute(
   to: string,
@@ -11,17 +12,24 @@ export async function prefetchStorefrontRoute(
   languageCodes: string[],
 ): Promise<void> {
   const url = new URL(to, window.location.origin);
+  const documentWarmup = warmStorefrontDocument(`${url.pathname}${url.search}`);
   const pathname = url.pathname;
   const uri = pathname === "/" ? "/" : `${pathname.replace(/\/+$/, "")}/`;
   const shopProduct = pathname.match(/^\/shop\/(?!category\/|tag\/|brand\/)([^/]+)\/?$/);
   if (shopProduct || /^\/product\//.test(pathname)) {
     const identifier = shopProduct?.[1] || pathname;
-    await prefetchIncrementalData(`product:${identifier}`, () => getProductByUriOrSlug(identifier));
+    await Promise.all([
+      documentWarmup,
+      prefetchIncrementalData(`product:${identifier}`, () => getProductByUriOrSlug(identifier)),
+    ]);
     return;
   }
 
   if (/^\/blog\/(?!category\/|tag\/|author\/)[^/]+\/?$/.test(pathname)) {
-    await prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri));
+    await Promise.all([
+      documentWarmup,
+      prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri)),
+    ]);
     return;
   }
 
@@ -30,10 +38,21 @@ export async function prefetchStorefrontRoute(
     prefetchIncrementalData(`content-node:v2:${uri}`, () => getContentNodeInfo(uri)),
   ]);
   if (node?.type === "Page" || page) {
-    await prefetchIncrementalData(`page:${uri}`, () => getPageByUri(uri));
+    await Promise.all([
+      documentWarmup,
+      prefetchIncrementalData(`page:${uri}`, () => getPageByUri(uri)),
+    ]);
   } else if (node?.type === "Post") {
-    await prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri));
+    await Promise.all([
+      documentWarmup,
+      prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri)),
+    ]);
   } else if (node?.type === "Product") {
-    await prefetchIncrementalData(`product:${pathname}`, () => getProductByUriOrSlug(pathname));
+    await Promise.all([
+      documentWarmup,
+      prefetchIncrementalData(`product:${pathname}`, () => getProductByUriOrSlug(pathname)),
+    ]);
+  } else {
+    await documentWarmup;
   }
 }

@@ -1,7 +1,7 @@
 /** Per-product price presentation resolution — deliberately dependency-free (only a
  *  type-only import, which is fully erased at build/runtime) so this pure logic can
  *  be exercised in isolation from the rest of the storefront's data-fetching layer. */
-import type { NoPriceBehavior } from "./navigation";
+import type { NoPriceBehavior } from "./navigation.ts";
 
 export type { NoPriceBehavior };
 

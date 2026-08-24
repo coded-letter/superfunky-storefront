@@ -6,6 +6,7 @@ import {
   artifactProxyRedirects,
   createShellManifest,
   publishShellManifest,
+  publishShellManifestForMode,
 } from "./artifact-publish.mjs";
 
 const html = '<!doctype html><html lang="en"><head><title>Test</title><meta name="description" content="Test"><link rel="stylesheet" href="/assets/app.css"></head><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>';
@@ -64,6 +65,17 @@ test("artifact configuration is fail-closed when enabled", () => {
   );
 });
 
+test("artifact configuration normalizes deployment secret whitespace like WordPress", () => {
+  const signingSecret = "a".repeat(32);
+  const config = artifactConfigFromEnvironment({
+    STOREFRONT_ARTIFACT_MODE: "shadow",
+    STOREFRONT_ARTIFACT_ORIGIN: "https://v3.superfunky.pro",
+    STOREFRONT_ARTIFACT_SITE_KEY: "flagship",
+    STOREFRONT_ARTIFACT_SIGNING_SECRET: `  ${signingSecret}\n`,
+  });
+  assert.equal(config.signingSecret, signingSecret);
+});
+
 test("shell publication signs the exact request body", async () => {
   const manifest = createShellManifest({
     html,
@@ -99,4 +111,40 @@ test("artifact redirects are route-specific and forced after successful registra
   assert.deepEqual(redirects, [
     "/shop  https://v3.superfunky.pro/wp-json/funkycommerce-artifacts/v1/artifact?route=%2Fshop&locale=en&shell=deploy-123  200!",
   ]);
+});
+
+test("shadow publication preserves static delivery while artifact mode remains fail-closed", async () => {
+  const manifest = createShellManifest({
+    html,
+    routes: [{ path: "/", lang: "en" }],
+    localeCodes: ["en"],
+    siteKey: "superfunky-pro",
+    artifactOrigin: "https://v3.superfunky.pro",
+    shellVersion: "deploy-123",
+  });
+  const rejectedFetch = async () => new Response(
+    '{"code":"artifact_invalid_signature"}',
+    { status: 401, headers: { "Content-Type": "application/json" } },
+  );
+  const shadowResult = await publishShellManifestForMode({
+    mode: "shadow",
+    manifest,
+    artifactOrigin: "https://v3.superfunky.pro",
+    signingSecret: "a".repeat(32),
+    fetchImpl: rejectedFetch,
+  });
+  assert.equal(shadowResult.published, false);
+  assert.equal(shadowResult.registration, null);
+  assert.match(shadowResult.error, /HTTP 401/);
+
+  await assert.rejects(
+    publishShellManifestForMode({
+      mode: "artifact",
+      manifest,
+      artifactOrigin: "https://v3.superfunky.pro",
+      signingSecret: "a".repeat(32),
+      fetchImpl: rejectedFetch,
+    }),
+    /HTTP 401/,
+  );
 });

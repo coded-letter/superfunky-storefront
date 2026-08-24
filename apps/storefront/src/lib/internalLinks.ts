@@ -48,12 +48,18 @@ export function normalizeContentHref(
   }
 }
 
-export function classifyAnchor(anchor: HTMLAnchorElement, environment: LinkEnvironment): LinkClassification {
+export function classifyAnchor(
+  anchor: HTMLAnchorElement,
+  environment: LinkEnvironment,
+  options: { allowNewContext?: boolean } = {},
+): LinkClassification {
   if (anchor.hasAttribute(NATIVE_LINK_ATTRIBUTE)) return { kind: "native", reason: "opt-out" };
   if (anchor.hasAttribute("download")) return { kind: "native", reason: "download" };
 
   const target = anchor.getAttribute("target")?.trim().toLowerCase();
-  if (target && target !== "_self") return { kind: "native", reason: "target" };
+  if (target && target !== "_self" && !options.allowNewContext) {
+    return { kind: "native", reason: "target" };
+  }
   if (anchor.rel.split(/\s+/).some((token) => token.toLowerCase() === "external")) {
     return { kind: "native", reason: "external-rel" };
   }
@@ -125,6 +131,7 @@ function isBackendContentUrl(url: URL): boolean {
   return (
     !NON_CONTENT_BACKEND_PATHS.some((pattern) => pattern.test(url.pathname))
     && !url.searchParams.has("rest_route")
+    && !url.searchParams.has("download_file")
   );
 }
 
@@ -158,12 +165,22 @@ export function mountSmartLinkNavigation({
   const queue: string[] = [];
   let active = 0;
   let disposed = false;
+  const isAuthoritativePrerenderAnchor = (anchor: HTMLAnchorElement) =>
+    Boolean(anchor.closest("#root.storefront-prerender-stage:not(.is-replaced)"));
 
   const normalizeAnchors = (root: ParentNode) => {
     const anchors = root instanceof window.HTMLAnchorElement
       ? [root]
       : [...root.querySelectorAll<HTMLAnchorElement>("a[href]")];
     for (const anchor of anchors) {
+      if (
+        isAuthoritativePrerenderAnchor(anchor)
+        || anchor.hasAttribute(NATIVE_LINK_ATTRIBUTE)
+        || anchor.hasAttribute("download")
+        || anchor.rel.split(/\s+/).some((token) => token.toLowerCase() === "external")
+      ) {
+        continue;
+      }
       const rawHref = anchor.getAttribute("href");
       if (!rawHref || rawHref.startsWith("#")) continue;
       const mapped = normalizeContentHref(rawHref, {
@@ -186,17 +203,20 @@ export function mountSmartLinkNavigation({
   });
   anchorObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-  const classifyEventTarget = (target: EventTarget | null): InternalLink | null => {
+  const classifyEventTarget = (
+    target: EventTarget | null,
+    allowNewContext = false,
+  ): InternalLink | null => {
     const element = target as Element | null;
     if (!element || typeof element.closest !== "function") return null;
     if (element.closest('[contenteditable]:not([contenteditable="false"])')) return null;
     const anchor = element.closest<HTMLAnchorElement>("a[href]");
-    if (!anchor) return null;
+    if (!anchor || isAuthoritativePrerenderAnchor(anchor)) return null;
     const classification = classifyAnchor(anchor, {
       currentUrl: window.location.href,
       storefrontOrigin: window.location.origin,
       backendOrigin,
-    });
+    }, { allowNewContext });
     if (classification.kind !== "internal") return null;
     const to = normalizeTo(classification.to);
     return to === classification.to
@@ -262,25 +282,30 @@ export function mountSmartLinkNavigation({
     navigate(link.to);
   };
   const onPointerOver = (event: PointerEvent) => {
-    const link = classifyEventTarget(event.target);
+    const link = classifyEventTarget(event.target, true);
     if (!link) return;
-    const previous = classifyEventTarget(event.relatedTarget);
+    const previous = classifyEventTarget(event.relatedTarget, true);
     if (previous?.to === link.to) return;
     requestPrefetch(link, intentDelay);
   };
   const onPointerOut = (event: PointerEvent) => {
-    const link = classifyEventTarget(event.target);
-    const next = classifyEventTarget(event.relatedTarget);
+    const link = classifyEventTarget(event.target, true);
+    const next = classifyEventTarget(event.relatedTarget, true);
     if (link?.to === next?.to) return;
     cancelScheduled(link);
   };
   const onFocusIn = (event: FocusEvent) => {
-    const link = classifyEventTarget(event.target);
+    const link = classifyEventTarget(event.target, true);
     if (link) requestPrefetch(link, intentDelay);
   };
-  const onFocusOut = (event: FocusEvent) => cancelScheduled(classifyEventTarget(event.target));
+  const onFocusOut = (event: FocusEvent) => cancelScheduled(classifyEventTarget(event.target, true));
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 1 && !event.metaKey && !event.ctrlKey && !event.shiftKey) return;
+    const link = classifyEventTarget(event.target, true);
+    if (link) requestPrefetch(link, 0);
+  };
   const onTouchStart = (event: TouchEvent) => {
-    const link = classifyEventTarget(event.target);
+    const link = classifyEventTarget(event.target, true);
     if (link) requestPrefetch(link, 0);
   };
 
@@ -289,6 +314,7 @@ export function mountSmartLinkNavigation({
   document.addEventListener("pointerout", onPointerOut);
   document.addEventListener("focusin", onFocusIn);
   document.addEventListener("focusout", onFocusOut);
+  document.addEventListener("pointerdown", onPointerDown);
   document.addEventListener("touchstart", onTouchStart, { passive: true });
 
   return () => {
@@ -302,6 +328,7 @@ export function mountSmartLinkNavigation({
     document.removeEventListener("pointerout", onPointerOut);
     document.removeEventListener("focusin", onFocusIn);
     document.removeEventListener("focusout", onFocusOut);
+    document.removeEventListener("pointerdown", onPointerDown);
     document.removeEventListener("touchstart", onTouchStart);
   };
 }

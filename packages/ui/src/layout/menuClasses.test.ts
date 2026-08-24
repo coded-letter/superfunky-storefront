@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getMegaMenuConfiguration,
   hasMenuClass,
+  isMenuInitiallyExpanded,
 } from "./menuClasses.ts";
 
 test("plain mega uses the first-level child count within the supported range", () => {
@@ -48,4 +49,11 @@ test("expanded is an exact, case-sensitive menu class", () => {
   assert.equal(hasMenuClass(["menu-item", "expanded"], "expanded"), true);
   assert.equal(hasMenuClass(["Expanded"], "expanded"), false);
   assert.equal(hasMenuClass(["expanded-menu"], "expanded"), false);
+});
+
+test("expanded, open, and is-open classes reveal nested menus initially", () => {
+  for (const className of ["expanded", "open", "is-open"]) {
+    assert.equal(isMenuInitiallyExpanded([className]), true);
+  }
+  assert.equal(isMenuInitiallyExpanded(["menu-item"]), false);
 });

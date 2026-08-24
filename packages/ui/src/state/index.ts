@@ -15,7 +15,14 @@ export {
   ReadArticlesProvider,
   useReadArticles,
 } from "./collections";
-export { CookieConsentProvider, useCookieConsent, type CookieCategory, type CookieConsent, type CookieConsentContextValue } from "./CookieConsentContext";
+export {
+  CookieConsentProvider,
+  useCookieConsent,
+  useOptionalCookieConsent,
+  type CookieCategory,
+  type CookieConsent,
+  type CookieConsentContextValue,
+} from "./CookieConsentContext";
 export {
   CartProvider,
   useCart,
@@ -36,6 +43,16 @@ export {
   type PostSharePosition,
   type PostAuthorLayout,
   type DiscussionLayout,
+  type HomeHeroLayout,
+  type AuthLayout,
+  type ReadingListLayout,
+  type CommunityFeedLayout,
+  type CommunityFeedLoadMode,
+  type CommunityFeedPageSize,
+  type CommunityFeedFilters,
+  type CartLayout,
+  type CartSummaryPosition,
+  type RelatedProductsColumns,
 } from "./LayoutPreferencesContext";
 export { normalizeProductPageLayout, type ProductPageLayout } from "./productPageLayout";
 export {

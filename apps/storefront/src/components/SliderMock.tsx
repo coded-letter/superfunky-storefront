@@ -23,16 +23,6 @@ function chunkItems<T>(items: T[], pageSize: number) {
   return pages;
 }
 
-// Warm the browser image cache for a URL without rendering anything — used to preload
-// upcoming slider pages so images are already decoded by the time a swipe/autoplay reveals them.
-const preloadedImageUrls = new Set<string>();
-function preloadImage(url?: string) {
-  if (!url || preloadedImageUrls.has(url)) return;
-  preloadedImageUrls.add(url);
-  const image = new Image();
-  image.src = url;
-}
-
 function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   useEffect(() => {
@@ -86,8 +76,8 @@ export type SliderMockProps<TItem> = {
   /** Enables automatic advancing every N ms. Paused on hover/focus/drag and disabled entirely
    * when the user prefers reduced motion. */
   autoplayMs?: number;
-  /** Returns the image URL(s) an item depends on, so adjacent pages can be preloaded ahead of
-   * the swipe/autoplay transition that reveals them. */
+  /** Retained for source compatibility. Responsive images now rely on browser loading hints
+   * instead of fetching original media separately from their optimized `srcset` candidates. */
   getImageUrls?: (item: TItem) => Array<string | undefined>;
   /** Gap between cards within a page — defaults to a cosier "gap-5", pass a larger value
    * (e.g. "gap-7") for tracks that need more breathing room between items. */
@@ -151,8 +141,10 @@ export function SliderMock<TItem>({
   const isMobileSlider = useIsMobileSlider();
   const effectivePageSize = isMobileSlider ? 1 : pageSize;
   const pages = useMemo(() => chunkItems(items, effectivePageSize), [items, effectivePageSize]);
+  const sliderRef = useRef<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [activePage, setActivePage] = useState(0);
+  const [isNearViewport, setIsNearViewport] = useState(false);
   const isScrollingProgrammatically = useRef(false);
   const prefersReducedMotion = usePrefersReducedMotion();
   const { playAction } = useSoundUX();
@@ -165,6 +157,17 @@ export function SliderMock<TItem>({
   // Autoplay pause state — paused on hover, keyboard focus, active drag, or a hidden tab.
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    const slider = sliderRef.current;
+    if (!slider) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsNearViewport(entry.isIntersecting),
+      { rootMargin: "200px 0px" },
+    );
+    observer.observe(slider);
+    return () => observer.disconnect();
+  }, []);
 
   // Re-clamp the active page and snap instantly to it whenever the page count changes
   // (e.g. crossing the mobile breakpoint re-chunks items into single-item pages).
@@ -200,23 +203,10 @@ export function SliderMock<TItem>({
     setActivePage(Math.max(0, Math.min(pages.length - 1, Math.round(scrollLeft / clientWidth))));
   };
 
-  // Preload the active page plus its immediate neighbours so images are already warmed in the
-  // cache before a swipe or autoplay transition scrolls them into view.
-  useEffect(() => {
-    if (!getImageUrls) return;
-    for (const pageIndex of [activePage - 1, activePage, activePage + 1]) {
-      const page = pages[pageIndex];
-      if (!page) continue;
-      for (const item of page) {
-        for (const url of getImageUrls(item)) preloadImage(url);
-      }
-    }
-  }, [activePage, pages, getImageUrls]);
-
   // Autoplay — advances on an interval, looping back to the first page, and pauses whenever the
-  // user is interacting (hover/focus/drag) or the tab isn't visible.
+  // user is interacting (hover/focus/drag), the tab is hidden, or the slider is offscreen.
   useEffect(() => {
-    if (!autoplayMs || pages.length <= 1 || prefersReducedMotion) return;
+    if (!autoplayMs || pages.length <= 1 || prefersReducedMotion || !isNearViewport) return;
     if (isHovered || isFocused || isDragging) return;
     if (typeof document !== "undefined" && document.hidden) return;
 
@@ -226,7 +216,7 @@ export function SliderMock<TItem>({
     }, autoplayMs);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoplayMs, pages.length, prefersReducedMotion, isHovered, isFocused, isDragging, activePage]);
+  }, [autoplayMs, pages.length, prefersReducedMotion, isHovered, isFocused, isDragging, activePage, isNearViewport]);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -298,6 +288,7 @@ export function SliderMock<TItem>({
 
   return (
     <article
+      ref={sliderRef}
       className={`sf-slider funky-slider grid min-w-0 gap-5 ${fullBleed ? "max-w-none overflow-visible" : "max-w-full overflow-hidden"} ${widthClassName(width)}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -366,7 +357,7 @@ export function SliderMock<TItem>({
               <div className={`grid h-full min-w-0 ${gap} ${gridClassName}`}>
                 {page.map((item, itemIndex) =>
                   renderItem(item, pageIndex * effectivePageSize + itemIndex, {
-                    isPriority: Math.abs(pageIndex - activePage) <= 1,
+                    isPriority: isNearViewport && pageIndex === activePage,
                     hasCustomHeight: Boolean(height),
                   }),
                 )}

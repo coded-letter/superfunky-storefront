@@ -76,8 +76,40 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "ja", label: "日本語", flagCode: getLanguageFlagCode("ja"), backendCode: "JA" },
 ];
 
+export function resolveInitialLanguage(
+  storedLanguage: string | null | undefined,
+  documentLanguage: string | null | undefined,
+  languageOptions: LanguageOption[],
+): { languageCode: string; hasLanguagePreference: boolean } {
+  const stored = storedLanguage?.toLowerCase();
+  if (stored && languageOptions.some(({ code }) => code === stored)) {
+    return { languageCode: stored, hasLanguagePreference: true };
+  }
+
+  const rendered = documentLanguage?.split("-")[0]?.toLowerCase();
+  if (rendered && languageOptions.some(({ code }) => code === rendered)) {
+    return { languageCode: rendered, hasLanguagePreference: false };
+  }
+
+  return { languageCode: languageOptions[0]?.code || LANGUAGE_OPTIONS[0].code, hasLanguagePreference: false };
+}
+
 export function shouldRenderLanguageSwitcher(languageOptions: readonly LanguageOption[]): boolean {
   return languageOptions.length >= 2;
+}
+
+export function resolveSyncedLanguageCode(
+  currentLanguageCode: string,
+  hasLanguagePreference: boolean,
+  languageOptions: readonly LanguageOption[],
+): string {
+  if (
+    hasLanguagePreference
+    && languageOptions.some(({ code }) => code === currentLanguageCode)
+  ) {
+    return currentLanguageCode;
+  }
+  return languageOptions[0]?.code || currentLanguageCode;
 }
 
 export type CurrencyOption = {
@@ -98,7 +130,7 @@ export const CURRENCY_OPTIONS: CurrencyOption[] = [
   { code: "CHF", label: "Swiss Franc", symbol: "CHF" },
   { code: "JPY", label: "Japanese Yen", symbol: "¥" },
   { code: "BTC", label: "Bitcoin", symbol: "₿" },
-  { code: "ETH", label: "Ethereum", symbol: "Ξ", icon: paymentIconSrc("eth") },
+  { code: "ETH", label: "Ethereum", symbol: "Ξ" },
 ];
 
 export type SocialLink = {

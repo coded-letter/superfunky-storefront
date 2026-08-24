@@ -10,19 +10,30 @@ import type {
 import type { CartTriggerVariant, HeaderLogoVariant, HeaderSearchVariant } from "../layout/HeaderMockup";
 import type { NewsletterPopupVariant } from "../layout/NewsletterSignupPopup";
 import type { ProfileHeaderLayout } from "../social/ProfileHeader";
+import type { ProductCardVariant } from "../catalog/ProductCard";
 import { applyBrandPalette, type BrandGradientStyle, type BrandPaletteId } from "./brandPalettes";
 import type { ProductPageLayout } from "./productPageLayout";
 
 /** Archive-page hero treatment shared by the product and post taxonomy archive pages. */
 export type ArchiveHeroLayout = "split" | "fullbleed" | "minimal";
 /** Where a journal post's table of contents renders relative to its content. */
-export type PostTocLayout = "current" | "hidden" | "above";
+export type PostTocLayout = "current" | "rail-left" | "rail-right" | "above";
 /** Where a journal post's share buttons render. */
 export type PostSharePosition = "above-toc" | "on-image" | "below-toc-right";
 /** How a journal post's author card renders. */
 export type PostAuthorLayout = "fullwidth" | "compact" | "editorial";
 /** Shared comments/reviews discussion-thread layout, used on posts, products, and community content. */
 export type DiscussionLayout = "stacked" | "split-left" | "split-right";
+export type HomeHeroLayout = "classic" | "cinematic" | "cinematic-slider";
+export type AuthLayout = "split" | "centered" | "image-bg";
+export type ReadingListLayout = "cards" | "editorial-2col";
+export type CommunityFeedLayout = "masonry" | "grid-3" | "grid-4" | "list" | "compact";
+export type CommunityFeedLoadMode = "manual" | "infinite";
+export type CommunityFeedPageSize = "6" | "12" | "24";
+export type CommunityFeedFilters = "show" | "hide";
+export type CartLayout = "classic" | "editorial";
+export type CartSummaryPosition = "sticky" | "static";
+export type RelatedProductsColumns = "2" | "3" | "4";
 
 /**
  * Site-wide chrome layout preferences (header search style, header icon visibility,
@@ -52,6 +63,7 @@ export type LayoutPreferencesState = {
   showHeaderReadingListLink: boolean;
   showHeaderWishlistLink: boolean;
   showHeaderCartIcon: boolean;
+  showHeaderPublishButton: boolean;
   /** `"drawer"` (default, current) opens the full slide-in side panel. `"dropdown"`
    * opens a compact popover anchored under the header's cart icon instead. */
   cartTriggerVariant: CartTriggerVariant;
@@ -111,6 +123,19 @@ export type LayoutPreferencesState = {
    * (`"flat"`) — a quick way to preview a calmer, single-tone visual identity. */
   brandGradientStyle: BrandGradientStyle;
   productPageLayout: ProductPageLayout;
+  relatedProductsColumns: RelatedProductsColumns;
+  showStudioRelatedProductsUnderMeta: boolean;
+  homeHeroLayout: HomeHeroLayout;
+  shopProductCardVariant: ProductCardVariant;
+  authLayout: AuthLayout;
+  readingListLayout: ReadingListLayout;
+  wishlistCardVariant: ProductCardVariant;
+  communityFeedLayout: CommunityFeedLayout;
+  communityFeedLoadMode: CommunityFeedLoadMode;
+  communityFeedPageSize: CommunityFeedPageSize;
+  communityFeedFilters: CommunityFeedFilters;
+  cartLayout: CartLayout;
+  cartSummaryPosition: CartSummaryPosition;
   checkoutStoreMode: "physical" | "digital";
   checkoutCouponPosition: "inline" | "top";
   checkoutPaymentPosition: "left" | "right";
@@ -131,6 +156,9 @@ export type LayoutPreferencesState = {
   productArchiveHeroLayout: ArchiveHeroLayout;
   /** Hero treatment on blog category/tag archive pages. `"split"` (default). */
   postArchiveHeroLayout: ArchiveHeroLayout;
+  /** Show a three-line taxonomy-description excerpt in archive heroes. Full content
+   * remains below the grid either way. `false` (default). */
+  showArchiveDescriptionInHero: boolean;
   /** Table-of-contents placement on a single journal post. `"current"` (default). */
   postTocLayout: PostTocLayout;
   /** Share-button placement on a single journal post. `"above-toc"` (default). */
@@ -157,6 +185,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   showHeaderReadingListLink: true,
   showHeaderWishlistLink: true,
   showHeaderCartIcon: true,
+  showHeaderPublishButton: true,
   cartTriggerVariant: "drawer",
   showCartDrawerPromotedProduct: true,
   showFooter: true,
@@ -185,6 +214,19 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   brandPalette: "violet",
   brandGradientStyle: "gradient",
   productPageLayout: "classic",
+  relatedProductsColumns: "4",
+  showStudioRelatedProductsUnderMeta: false,
+  homeHeroLayout: "classic",
+  shopProductCardVariant: "default",
+  authLayout: "split",
+  readingListLayout: "cards",
+  wishlistCardVariant: "default",
+  communityFeedLayout: "grid-3",
+  communityFeedLoadMode: "manual",
+  communityFeedPageSize: "6",
+  communityFeedFilters: "show",
+  cartLayout: "classic",
+  cartSummaryPosition: "sticky",
   checkoutStoreMode: "physical",
   checkoutCouponPosition: "inline",
   checkoutPaymentPosition: "left",
@@ -198,6 +240,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   authorProfileHeaderLayout: "card",
   productArchiveHeroLayout: "split",
   postArchiveHeroLayout: "split",
+  showArchiveDescriptionInHero: false,
   postTocLayout: "current",
   postSharePosition: "above-toc",
   postAuthorLayout: "fullwidth",
@@ -205,6 +248,8 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
 };
 
 type LayoutPreferencesContextValue = LayoutPreferencesState & {
+  isLayoutPreviewActive: boolean;
+  setLayoutPreviewActive: (value: boolean) => void;
   setShowAnnouncementBar: (value: boolean) => void;
   setAnnouncementBarScrollEffect: (value: boolean) => void;
   setHeaderSticky: (value: boolean) => void;
@@ -219,6 +264,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setShowHeaderReadingListLink: (value: boolean) => void;
   setShowHeaderWishlistLink: (value: boolean) => void;
   setShowHeaderCartIcon: (value: boolean) => void;
+  setShowHeaderPublishButton: (value: boolean) => void;
   setCartTriggerVariant: (value: CartTriggerVariant) => void;
   setShowCartDrawerPromotedProduct: (value: boolean) => void;
   setShowFooter: (value: boolean) => void;
@@ -254,7 +300,22 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setNewsletterPopupCooldownDays: (value: number) => void;
   setBrandPalette: (value: BrandPaletteId) => void;
   setBrandGradientStyle: (value: BrandGradientStyle) => void;
+  syncBrandPalette: (value: BrandPaletteId) => void;
+  syncBrandGradientStyle: (value: BrandGradientStyle) => void;
   setProductPageLayout: (value: ProductPageLayout) => void;
+  setRelatedProductsColumns: (value: RelatedProductsColumns) => void;
+  setShowStudioRelatedProductsUnderMeta: (value: boolean) => void;
+  setHomeHeroLayout: (value: HomeHeroLayout) => void;
+  setShopProductCardVariant: (value: ProductCardVariant) => void;
+  setAuthLayout: (value: AuthLayout) => void;
+  setReadingListLayout: (value: ReadingListLayout) => void;
+  setWishlistCardVariant: (value: ProductCardVariant) => void;
+  setCommunityFeedLayout: (value: CommunityFeedLayout) => void;
+  setCommunityFeedLoadMode: (value: CommunityFeedLoadMode) => void;
+  setCommunityFeedPageSize: (value: CommunityFeedPageSize) => void;
+  setCommunityFeedFilters: (value: CommunityFeedFilters) => void;
+  setCartLayout: (value: CartLayout) => void;
+  setCartSummaryPosition: (value: CartSummaryPosition) => void;
   setCheckoutStoreMode: (value: "physical" | "digital") => void;
   setCheckoutCouponPosition: (value: "inline" | "top") => void;
   setCheckoutPaymentPosition: (value: "left" | "right") => void;
@@ -268,6 +329,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setAuthorProfileHeaderLayout: (value: ProfileHeaderLayout) => void;
   setProductArchiveHeroLayout: (value: ArchiveHeroLayout) => void;
   setPostArchiveHeroLayout: (value: ArchiveHeroLayout) => void;
+  setShowArchiveDescriptionInHero: (value: boolean) => void;
   setPostTocLayout: (value: PostTocLayout) => void;
   setPostSharePosition: (value: PostSharePosition) => void;
   setPostAuthorLayout: (value: PostAuthorLayout) => void;
@@ -277,6 +339,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
 const LayoutPreferencesContext = createContext<LayoutPreferencesContextValue | null>(null);
 
 export function LayoutPreferencesProvider({ children }: { children: ReactNode }) {
+  const [isLayoutPreviewActive, setLayoutPreviewActive] = useState(false);
   const [showAnnouncementBar, setShowAnnouncementBar] = useState(DEFAULT_LAYOUT_PREFERENCES.showAnnouncementBar);
   const [announcementBarScrollEffect, setAnnouncementBarScrollEffect] = useState(
     DEFAULT_LAYOUT_PREFERENCES.announcementBarScrollEffect,
@@ -303,6 +366,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
     DEFAULT_LAYOUT_PREFERENCES.showHeaderWishlistLink,
   );
   const [showHeaderCartIcon, setShowHeaderCartIcon] = useState(DEFAULT_LAYOUT_PREFERENCES.showHeaderCartIcon);
+  const [showHeaderPublishButton, setShowHeaderPublishButton] = useState(DEFAULT_LAYOUT_PREFERENCES.showHeaderPublishButton);
   const [cartTriggerVariant, setCartTriggerVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.cartTriggerVariant);
   const [showCartDrawerPromotedProduct, setShowCartDrawerPromotedProduct] = useState(
     DEFAULT_LAYOUT_PREFERENCES.showCartDrawerPromotedProduct,
@@ -348,9 +412,26 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [newsletterPopupCooldownDays, setNewsletterPopupCooldownDays] = useState(
     DEFAULT_LAYOUT_PREFERENCES.newsletterPopupCooldownDays,
   );
-  const [brandPalette, setBrandPalette] = useState(DEFAULT_LAYOUT_PREFERENCES.brandPalette);
-  const [brandGradientStyle, setBrandGradientStyle] = useState(DEFAULT_LAYOUT_PREFERENCES.brandGradientStyle);
+  const [brandPalette, syncBrandPalette] = useState(DEFAULT_LAYOUT_PREFERENCES.brandPalette);
+  const [brandGradientStyle, syncBrandGradientStyle] = useState(DEFAULT_LAYOUT_PREFERENCES.brandGradientStyle);
   const [productPageLayout, setProductPageLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.productPageLayout);
+  const [relatedProductsColumns, setRelatedProductsColumns] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.relatedProductsColumns,
+  );
+  const [showStudioRelatedProductsUnderMeta, setShowStudioRelatedProductsUnderMeta] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.showStudioRelatedProductsUnderMeta,
+  );
+  const [homeHeroLayout, setHomeHeroLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.homeHeroLayout);
+  const [shopProductCardVariant, setShopProductCardVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.shopProductCardVariant);
+  const [authLayout, setAuthLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.authLayout);
+  const [readingListLayout, setReadingListLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.readingListLayout);
+  const [wishlistCardVariant, setWishlistCardVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.wishlistCardVariant);
+  const [communityFeedLayout, setCommunityFeedLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.communityFeedLayout);
+  const [communityFeedLoadMode, setCommunityFeedLoadMode] = useState(DEFAULT_LAYOUT_PREFERENCES.communityFeedLoadMode);
+  const [communityFeedPageSize, setCommunityFeedPageSize] = useState(DEFAULT_LAYOUT_PREFERENCES.communityFeedPageSize);
+  const [communityFeedFilters, setCommunityFeedFilters] = useState(DEFAULT_LAYOUT_PREFERENCES.communityFeedFilters);
+  const [cartLayout, setCartLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.cartLayout);
+  const [cartSummaryPosition, setCartSummaryPosition] = useState(DEFAULT_LAYOUT_PREFERENCES.cartSummaryPosition);
   const [checkoutStoreMode, setCheckoutStoreMode] = useState(DEFAULT_LAYOUT_PREFERENCES.checkoutStoreMode);
   const [checkoutCouponPosition, setCheckoutCouponPosition] = useState(DEFAULT_LAYOUT_PREFERENCES.checkoutCouponPosition);
   const [checkoutPaymentPosition, setCheckoutPaymentPosition] = useState(DEFAULT_LAYOUT_PREFERENCES.checkoutPaymentPosition);
@@ -370,17 +451,20 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
     DEFAULT_LAYOUT_PREFERENCES.productArchiveHeroLayout,
   );
   const [postArchiveHeroLayout, setPostArchiveHeroLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.postArchiveHeroLayout);
+  const [showArchiveDescriptionInHero, setShowArchiveDescriptionInHero] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.showArchiveDescriptionInHero,
+  );
   const [postTocLayout, setPostTocLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.postTocLayout);
   const [postSharePosition, setPostSharePosition] = useState(DEFAULT_LAYOUT_PREFERENCES.postSharePosition);
   const [postAuthorLayout, setPostAuthorLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.postAuthorLayout);
   const [discussionLayout, setDiscussionLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.discussionLayout);
   const [hasBrandPaletteOverride, setHasBrandPaletteOverride] = useState(false);
   const chooseBrandPalette = useCallback((value: BrandPaletteId) => {
-    setBrandPalette(value);
+    syncBrandPalette(value);
     setHasBrandPaletteOverride(true);
   }, []);
   const chooseBrandGradientStyle = useCallback((value: BrandGradientStyle) => {
-    setBrandGradientStyle(value);
+    syncBrandGradientStyle(value);
     setHasBrandPaletteOverride(true);
   }, []);
 
@@ -407,6 +491,8 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
 
   const value = useMemo<LayoutPreferencesContextValue>(
     () => ({
+      isLayoutPreviewActive,
+      setLayoutPreviewActive,
       showAnnouncementBar,
       announcementBarScrollEffect,
       headerSticky,
@@ -421,6 +507,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       showHeaderReadingListLink,
       showHeaderWishlistLink,
       showHeaderCartIcon,
+      showHeaderPublishButton,
       cartTriggerVariant,
       showCartDrawerPromotedProduct,
       showFooter,
@@ -449,6 +536,19 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       brandPalette,
       brandGradientStyle,
       productPageLayout,
+      relatedProductsColumns,
+      showStudioRelatedProductsUnderMeta,
+      homeHeroLayout,
+      shopProductCardVariant,
+      authLayout,
+      readingListLayout,
+      wishlistCardVariant,
+      communityFeedLayout,
+      communityFeedLoadMode,
+      communityFeedPageSize,
+      communityFeedFilters,
+      cartLayout,
+      cartSummaryPosition,
       checkoutStoreMode,
       checkoutCouponPosition,
       checkoutPaymentPosition,
@@ -462,6 +562,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       authorProfileHeaderLayout,
       productArchiveHeroLayout,
       postArchiveHeroLayout,
+      showArchiveDescriptionInHero,
       postTocLayout,
       postSharePosition,
       postAuthorLayout,
@@ -480,6 +581,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setShowHeaderReadingListLink,
       setShowHeaderWishlistLink,
       setShowHeaderCartIcon,
+      setShowHeaderPublishButton,
       setCartTriggerVariant,
       setShowCartDrawerPromotedProduct,
       setShowFooter,
@@ -509,7 +611,22 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setNewsletterPopupCooldownDays,
       setBrandPalette: chooseBrandPalette,
       setBrandGradientStyle: chooseBrandGradientStyle,
+      syncBrandPalette,
+      syncBrandGradientStyle,
       setProductPageLayout,
+      setRelatedProductsColumns,
+      setShowStudioRelatedProductsUnderMeta,
+      setHomeHeroLayout,
+      setShopProductCardVariant,
+      setAuthLayout,
+      setReadingListLayout,
+      setWishlistCardVariant,
+      setCommunityFeedLayout,
+      setCommunityFeedLoadMode,
+      setCommunityFeedPageSize,
+      setCommunityFeedFilters,
+      setCartLayout,
+      setCartSummaryPosition,
       setCheckoutStoreMode,
       setCheckoutCouponPosition,
       setCheckoutPaymentPosition,
@@ -523,12 +640,14 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setAuthorProfileHeaderLayout,
       setProductArchiveHeroLayout,
       setPostArchiveHeroLayout,
+      setShowArchiveDescriptionInHero,
       setPostTocLayout,
       setPostSharePosition,
       setPostAuthorLayout,
       setDiscussionLayout,
     }),
     [
+      isLayoutPreviewActive,
       showAnnouncementBar,
       announcementBarScrollEffect,
       headerSticky,
@@ -543,6 +662,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       showHeaderReadingListLink,
       showHeaderWishlistLink,
       showHeaderCartIcon,
+      showHeaderPublishButton,
       cartTriggerVariant,
       showCartDrawerPromotedProduct,
       showFooter,
@@ -571,6 +691,19 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       brandPalette,
       brandGradientStyle,
       productPageLayout,
+      relatedProductsColumns,
+      showStudioRelatedProductsUnderMeta,
+      homeHeroLayout,
+      shopProductCardVariant,
+      authLayout,
+      readingListLayout,
+      wishlistCardVariant,
+      communityFeedLayout,
+      communityFeedLoadMode,
+      communityFeedPageSize,
+      communityFeedFilters,
+      cartLayout,
+      cartSummaryPosition,
       checkoutStoreMode,
       checkoutCouponPosition,
       checkoutPaymentPosition,
@@ -584,12 +717,15 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       authorProfileHeaderLayout,
       productArchiveHeroLayout,
       postArchiveHeroLayout,
+      showArchiveDescriptionInHero,
       postTocLayout,
       postSharePosition,
       postAuthorLayout,
       discussionLayout,
       chooseBrandGradientStyle,
       chooseBrandPalette,
+      syncBrandGradientStyle,
+      syncBrandPalette,
     ],
   );
 

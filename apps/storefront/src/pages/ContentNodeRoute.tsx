@@ -4,7 +4,11 @@ import { useLanguage } from "@funky/ui";
 import { getContentNodeInfo } from "../lib/contentNodes";
 import { useIncrementalData } from "@funky/sdk/react";
 import { getPageByUri } from "../lib/pages";
-import { getStorefrontRouteRegistry, matchStorefrontRoute } from "../lib/storefrontPaths";
+import {
+  getStorefrontRouteRegistry,
+  matchStorefrontRoute,
+  ROUTE_REGISTRY_CACHE_KEY,
+} from "../lib/storefrontPaths";
 import { PageMockupPage } from "./PageMockupPage";
 import { PostCategoryMockupPage } from "./PostCategoryMockupPage";
 import { PostMockupPage } from "./PostMockupPage";
@@ -20,7 +24,7 @@ import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage"
 import { resolveContentLanguageFallback } from "../lib/contentLanguageFallback";
 import { resolveRouteLanguageSync } from "../lib/contentRouteLanguageSync";
 import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
-import { shouldPreferCoreGraphqlQueries } from "../lib/profileGraphqlCompatibility";
+import { shouldPreferCoreContentQueries } from "../lib/profileGraphqlCompatibility";
 
 export function ContentNodeRoute() {
   const { pathname } = useLocation();
@@ -31,14 +35,14 @@ export function ContentNodeRoute() {
     languageSelectionRevision,
     setLanguageCodeFromRoute,
   } = useLanguage();
-  const handledSelectionRevision = useRef(languageSelectionRevision);
+  const handledSelectionRevision = useRef(0);
   const pendingSelectionPath = useRef<string | null>(null);
   const uri = pathname.endsWith("/") ? pathname : `${pathname}/`;
-  const useRouteRegistry = !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
+  const useRouteRegistry = !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE);
   const loadConcurrentPage = useRouteRegistry || uri.split("/").filter(Boolean).length !== 1;
   const { data: routeRegistry, isLoading: isLoadingRouteRegistry } = useIncrementalData(
-    "storefront-route-registry:v4",
-    getStorefrontRouteRegistry,
+    `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || "default"}`,
+    () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
     useRouteRegistry,
   );
   const {
@@ -60,6 +64,7 @@ export function ContentNodeRoute() {
     pathname,
     !isLoadingPage && !isRevalidatingPage,
     !isLoadingRouteRegistry && !matchedRoute,
+    page?.uri,
   );
   const languageSelectionChanged = handledSelectionRevision.current !== languageSelectionRevision;
   const languageSelectionPending = languageSelectionChanged || pendingSelectionPath.current === pathname;

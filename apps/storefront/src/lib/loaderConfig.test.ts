@@ -6,6 +6,7 @@ import {
   loaderSpeedMultiplier,
   normalizeLoaderConfiguration,
   resolveLoaderPresentation,
+  resolveThemeAwareLoaderConfiguration,
 } from "./loaderConfig.ts";
 
 test("normalizeLoaderConfiguration falls back to defaults for missing/malformed input", () => {
@@ -74,6 +75,36 @@ test("loaderSpeedMultiplier is relative to the backend's default duration", () =
   assert.equal(loaderSpeedMultiplier(2800), 0.5);
   assert.equal(loaderSpeedMultiplier(0), 1);
   assert.equal(loaderSpeedMultiplier(Number.NaN), 1);
+});
+
+test("resolveThemeAwareLoaderConfiguration picks the active storefront brand colors", () => {
+  const originalDocument = globalThis.document;
+  const originalGetComputedStyle = globalThis.getComputedStyle;
+
+  Object.defineProperty(globalThis, "document", {
+    value: { documentElement: {} },
+    configurable: true,
+  });
+  globalThis.getComputedStyle = () => ({
+    getPropertyValue: (name: string) => ({
+      "--brand-500": "12 34 56",
+      "--brand-600": "18 52 90",
+      "--wp--preset--color--primary": "27 72 201",
+    }[name] ?? ""),
+  }) as CSSStyleDeclaration;
+
+  try {
+    const result = resolveThemeAwareLoaderConfiguration();
+    assert.equal(result.primaryColor, "#0c2238");
+    assert.equal(result.glowColor, "#12345a");
+  } finally {
+    if (originalDocument === undefined) {
+      delete (globalThis as { document?: Document }).document;
+    } else {
+      Object.defineProperty(globalThis, "document", { value: originalDocument, configurable: true });
+    }
+    globalThis.getComputedStyle = originalGetComputedStyle;
+  }
 });
 
 test("resolveLoaderPresentation hides the loader when disabled", () => {

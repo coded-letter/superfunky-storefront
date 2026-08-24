@@ -93,7 +93,7 @@ test("labels digital delivery without inventing a shipping charge", () => {
   assert.equal(confirmation.totals.discount, undefined);
 });
 
-test("allows only a matching guest order during the 24-hour access window", () => {
+test("allows only a matching guest order during the seven-day access window", () => {
   const now = Date.parse("2026-08-03T12:00:00.000Z");
   const confirmation = {
     ...createOrderConfirmation({
@@ -117,21 +117,33 @@ test("allows only a matching guest order during the 24-hour access window", () =
   assert.equal(orderConfirmationFromNavigationState({ confirmation }, 9999, now), null);
 });
 
-test("removes an expired guest confirmation from session storage", () => {
-  const values = new Map<string, string>();
-  let removals = 0;
+test("retains confirmations in local storage and removes expired access", () => {
+  const localValues = new Map<string, string>();
+  const sessionValues = new Map<string, string>();
+  let localRemovals = 0;
+  let sessionRemovals = 0;
   const originalWindow = globalThis.window;
+  const localStorage = {
+    getItem: (key: string) => localValues.get(key) ?? null,
+    setItem: (key: string, value: string) => localValues.set(key, value),
+    removeItem: (key: string) => {
+      localRemovals += 1;
+      localValues.delete(key);
+    },
+  };
+  const sessionStorage = {
+    getItem: (key: string) => sessionValues.get(key) ?? null,
+    setItem: (key: string, value: string) => sessionValues.set(key, value),
+    removeItem: (key: string) => {
+      sessionRemovals += 1;
+      sessionValues.delete(key);
+    },
+  };
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
-      sessionStorage: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => values.set(key, value),
-        removeItem: (key: string) => {
-          removals += 1;
-          values.delete(key);
-        },
-      },
+      localStorage,
+      sessionStorage,
     },
   });
 
@@ -155,9 +167,11 @@ test("removes an expired guest confirmation from session storage", () => {
       capturedAt: new Date(now - ORDER_CONFIRMATION_TTL_MS).toISOString(),
     };
     saveOrderConfirmation(confirmation);
+    assert.ok(localValues.has("funkycommerce-order-confirmation-v1"));
 
     assert.equal(loadOrderConfirmation(1042, now), null);
-    assert.equal(removals, 1);
+    assert.equal(localRemovals, 1);
+    assert.equal(sessionRemovals, 2);
   } finally {
     if (originalWindow === undefined) {
       Reflect.deleteProperty(globalThis, "window");

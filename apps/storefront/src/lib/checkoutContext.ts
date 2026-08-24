@@ -65,13 +65,41 @@ function toStoreApiAddress(details: CheckoutBillingDetails): StoreApiAddress {
   };
 }
 
+const DIGITAL_ADDRESS_FALLBACK = {
+  addressLine1: "Digital delivery",
+  city: "Digital order",
+  postcode: "00000",
+} as const;
+
+export function withDigitalCheckoutAddress(
+  details: CheckoutBillingDetails,
+): CheckoutBillingDetails {
+  return {
+    ...details,
+    addressLine1: details.addressLine1.trim() || DIGITAL_ADDRESS_FALLBACK.addressLine1,
+    city: details.city.trim() || DIGITAL_ADDRESS_FALLBACK.city,
+    postcode: details.postcode.trim() || DIGITAL_ADDRESS_FALLBACK.postcode,
+  };
+}
+
+export function withDigitalStoreApiAddress(address: StoreApiAddress): StoreApiAddress {
+  return {
+    ...address,
+    address_1: address.address_1.trim() || DIGITAL_ADDRESS_FALLBACK.addressLine1,
+    city: address.city.trim() || DIGITAL_ADDRESS_FALLBACK.city,
+    postcode: address.postcode.trim() || DIGITAL_ADDRESS_FALLBACK.postcode,
+  };
+}
+
 export function buildStoreCheckoutPayload(
   billing: CheckoutBillingDetails,
   paymentMethod: StoreApiCheckoutPayload["payment_method"],
   options?: CheckoutSubmissionOptions,
   stripePaymentData?: StoreApiCheckoutPayload["payment_data"],
 ): StoreApiCheckoutPayload {
-  const billingAddress = toStoreApiAddress(billing);
+  const billingAddress = toStoreApiAddress(
+    options?.digitalOrder ? withDigitalCheckoutAddress(billing) : billing,
+  );
   return {
     billing_address: billingAddress,
     shipping_address: options?.shippingAddress

@@ -74,6 +74,9 @@ test("prerender authenticates route discovery by origin and refuses a partial CM
   const prerender = await readFile(new URL("scripts/prerender.mjs", appRoot), "utf8");
 
   assert.match(prerender, /\{ Origin: graphqlRequestOrigin \}/);
+  assert.match(prerender, /Optional route SEO discovery unavailable/);
+  assert.match(prerender, /Optional public robots discovery unavailable; using core route metadata/);
+  assert.match(prerender, /\{ attempts: 5, timeoutMs: 60_000 \}/);
   assert.match(prerender, /CMS route discovery failed; refusing to generate a partial sitemap/);
   assert.match(prerender, /Community route discovery failed; refusing to generate a partial sitemap/);
   assert.match(prerender, /endCursor === cursors\[cursorName\]/);

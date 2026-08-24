@@ -31,6 +31,7 @@ const PRODUCT_OPTIONAL_FIELD_COMPATIBILITY_FIELDS = [
   "buttonText",
   "currencyPrices",
   "priceBehavior",
+  "funkycommercePublicRobots",
 ] as const;
 
 const PRODUCT_SCHEMA_COMPATIBILITY_TYPES = [
@@ -64,11 +65,16 @@ export function createCompatibleProductDetailQuery(query: string, seoFields: str
       "",
     )
     .replace(`\n      seo { ${seoFields} }`, "")
-    .replace("\n        buttonText", "");
+    .replace("\n        buttonText", "")
+    .replace("\n      funkycommercePublicRobots { noindex nofollow }", "");
 }
 
 export function createCoreProductDetailQuery(query: string): string {
-  return ["language", "translations", "seo"].reduce(removeGraphqlFieldSelections, query);
+  return ["language", "translations", "seo", "funkycommercePublicRobots"].reduce(removeGraphqlFieldSelections, query);
+}
+
+export function createProductQueryWithoutBrands(query: string): string {
+  return removeGraphqlFieldSelections(query, "productBrands");
 }
 
 function isMissingProductRootFieldError(message: string): boolean {
@@ -80,6 +86,42 @@ function isMissingProductRootFieldError(message: string): boolean {
       || normalizedMessage.includes(`field "${normalizedFieldName}" is not defined by type "rootquery"`)
     );
   });
+}
+
+function isMissingProductBrandRootFieldError(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+  return ["productbrand", "productbrands"].some((fieldName) => (
+    normalizedMessage.includes(`cannot query field "${fieldName}" on type "rootquery"`)
+    || normalizedMessage.includes(`field "${fieldName}" is not defined by type "rootquery"`)
+  ));
+}
+
+function isMissingProductBrandTypeError(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+  return normalizedMessage.includes('unknown type "productbrand"')
+    || normalizedMessage.includes('unknown type "productbrandidtype"');
+}
+
+function isMissingProductBrandWhereFieldError(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+  return /(?:field "productbrand" is not defined by type|cannot query field "productbrand" on type) "rootquerytoproduct(?:union)?connectionwhereargs"/.test(
+    normalizedMessage,
+  );
+}
+
+export function isMissingProductBrandSchemaError(errors: { message: string }[] | undefined): boolean {
+  return Boolean(
+    errors?.length
+    && errors.some(({ message }) => isMissingProductBrandRootFieldError(message))
+    && errors.every(({ message }) => (
+      isMissingProductBrandRootFieldError(message)
+      || isMissingProductBrandTypeError(message)
+      || isMissingProductBrandWhereFieldError(message)
+      || /cannot query field "productbrands" on type "(?:product|simpleproduct|variableproduct|externalproduct|groupproduct)"/i.test(message)
+      || isDanglingProductLanguageTypeError(message)
+      || hasOnlyMissingGraphqlFields([{ message }], PRODUCT_OPTIONAL_FIELD_COMPATIBILITY_FIELDS)
+    )),
+  );
 }
 
 function isMissingProductSchemaTypeError(message: string): boolean {
@@ -102,6 +144,7 @@ function isDanglingProductLanguageTypeError(message: string): boolean {
 }
 
 export function isMissingProductRootSchemaError(errors: { message: string }[] | undefined): boolean {
+  if (isMissingProductBrandSchemaError(errors)) return true;
   return Boolean(
     errors?.length
     && errors.some(({ message }) => isMissingProductRootFieldError(message))
@@ -115,10 +158,11 @@ export function isMissingProductRootSchemaError(errors: { message: string }[] | 
 }
 
 export function isMissingProductOptionalFieldSchemaError(errors: { message: string }[] | undefined): boolean {
-  return Boolean(errors?.length) && errors.every(({ message }) => (
+  return Boolean(errors?.length) && Boolean(errors?.every(({ message }) => (
     isDanglingProductLanguageTypeError(message)
+    || /cannot query field "productbrands" on type "(?:product|simpleproduct|variableproduct|externalproduct|groupproduct)"/i.test(message)
     || hasOnlyMissingGraphqlFields([{ message }], PRODUCT_OPTIONAL_FIELD_COMPATIBILITY_FIELDS)
-  ));
+  )));
 }
 
 export function assertNoCommerceGraphqlErrors(errors: { message: string }[] | undefined): void {
@@ -147,14 +191,31 @@ export async function requestCommerceWithFallback<T>(
   shouldRetry: (errors: { message: string }[] | undefined) => boolean,
   preferCompatible = false,
 ): Promise<T | null> {
-  let response = await request<T>(preferCompatible ? compatibleQuery : primaryQuery, variables);
-  if (isMissingProductRootSchemaError(response.errors)) return null;
-  if (!preferCompatible && shouldRetry(response.errors)) {
-    response = await request<T>(compatibleQuery, variables);
+  return requestCommerceWithFallbackChain(
+    request,
+    preferCompatible ? [compatibleQuery] : [primaryQuery, compatibleQuery],
+    variables,
+    shouldRetry,
+  );
+}
+
+export async function requestCommerceWithFallbackChain<T>(
+  request: CommerceGraphqlRequester,
+  queries: readonly string[],
+  variables: Record<string, unknown>,
+  shouldRetry: (errors: { message: string }[] | undefined) => boolean,
+): Promise<T | null> {
+  if (!queries.length) throw new Error("At least one GraphQL query is required");
+
+  let response: CommerceGraphqlResponse<T> | undefined;
+  for (const [index, query] of queries.entries()) {
+    response = await request<T>(query, variables);
+    if (isMissingProductRootSchemaError(response.errors)) return null;
+    if (!shouldRetry(response.errors) || index === queries.length - 1) break;
   }
-  if (isMissingProductRootSchemaError(response.errors)) return null;
-  assertNoCommerceGraphqlErrors(response.errors);
-  if (!response.data) throw new Error("The GraphQL query returned no data");
+
+  assertNoCommerceGraphqlErrors(response?.errors);
+  if (!response?.data) throw new Error("The GraphQL query returned no data");
   return response.data;
 }
 
@@ -171,7 +232,7 @@ export async function requestCompatibleCatalog<T extends Record<string, unknown>
       || (
         String(field) === "reviews"
         && Boolean(response.errors?.length)
-        && response.errors.every(({ message }) => (
+        && response.errors?.every(({ message }) => (
           isMissingProductContentTypeError(message)
           || isMissingProductSchemaTypeError(message)
         ))
@@ -197,6 +258,7 @@ export async function requestCatalogWithFallback<T extends Record<string, unknow
   compatibleOperations: readonly { field: keyof T; query: string }[],
   shouldRetry: (errors: { message: string }[] | undefined) => boolean,
   preferCompatible = false,
+  scopedCompatibleQuery?: string,
 ): Promise<{ data: T; usesCompatibilityFallback: boolean }> {
   if (preferCompatible) {
     return {
@@ -204,7 +266,10 @@ export async function requestCatalogWithFallback<T extends Record<string, unknow
       usesCompatibilityFallback: true,
     };
   }
-  const response = await request<T>(primaryQuery, variables);
+  let response = await request<T>(primaryQuery, variables);
+  if (scopedCompatibleQuery && shouldRetry(response.errors)) {
+    response = await request<T>(scopedCompatibleQuery, variables);
+  }
   if (isMissingProductRootSchemaError(response.errors) || shouldRetry(response.errors)) {
     return {
       data: await requestCompatibleCatalog<T>(request, compatibleOperations),

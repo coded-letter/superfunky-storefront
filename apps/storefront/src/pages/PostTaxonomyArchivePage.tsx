@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { PaginablePostGrid, Seo, useLayoutPreferences } from "@funky/ui";
+import { PaginablePostGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { HeroMock } from "../components/HeroMock";
@@ -47,16 +47,21 @@ function PostTaxonomyArchiveLoader({
   pathname: string;
 }) {
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const { languageCode } = useLanguage();
+  const lastResolvedArchive = useRef<CmsPostArchive | null>(null);
   const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
-    `post-${taxonomy}-archive:${idType}:${identifier}`,
-    () => getPostTaxonomyArchive(taxonomy, identifier, idType),
+    `post-${taxonomy}-archive:${idType}:${identifier}:${languageCode}`,
+    () => getPostTaxonomyArchive(taxonomy, identifier, idType, languageCode),
   );
+  if (archive) lastResolvedArchive.current = archive;
 
   useCanonicalContentLanguage(
-    archive?.languageCode,
-    archive?.translations || [],
+    archive?.languageCode || lastResolvedArchive.current?.languageCode,
+    archive?.translations || lastResolvedArchive.current?.translations || [],
     pathname,
     !isLoading && !isRevalidating,
+    true,
+    archive?.uri || lastResolvedArchive.current?.uri,
   );
 
   useEffect(() => {
@@ -89,7 +94,8 @@ function PostTaxonomyArchive({
   archive: CmsPostArchive;
   descriptionRef: RefObject<HTMLDivElement>;
 }) {
-  const { postArchiveHeroLayout: heroVariant } = useLayoutPreferences();
+  const { postArchiveHeroLayout: heroVariant, showArchiveDescriptionInHero } = useLayoutPreferences();
+  const isFullBleed = heroVariant === "fullbleed";
   const blogPath = useStorefrontPath("blog", "/blog");
   const isTag = archive.taxonomy === "tag";
   const displayTitle = isTag ? `#${archive.name}` : archive.name;
@@ -102,7 +108,7 @@ function PostTaxonomyArchive({
   const heroImage = archive.posts.find(({ imageUrl }) => imageUrl)?.imageUrl;
 
   return (
-    <div className="grid gap-8">
+    <div className={`grid gap-8 ${isFullBleed ? "relative" : ""}`}>
       <Seo
         title={archive.seo.title || displayTitle}
         description={archive.seo.description || descriptionText}
@@ -125,7 +131,9 @@ function PostTaxonomyArchive({
         }))}
       />
 
-      <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
+      <div className={isFullBleed ? "absolute left-0 top-4 z-20 text-white [&_a]:text-white/80 [&_span]:text-white/70" : ""}>
+        <Breadcrumbs items={breadcrumbs} includeStructuredData={false} />
+      </div>
 
       <div className="grid gap-3">
         <HeroMock
@@ -133,8 +141,9 @@ function PostTaxonomyArchive({
           headingLevel="h1"
           kicker={capitalize(archive.taxonomy)}
           title={displayTitle}
-          description={descriptionText}
+          description={showArchiveDescriptionInHero ? descriptionText : undefined}
           image={heroImage}
+          fullWidth={isFullBleed}
           secondaryCta={{ label: "All posts", href: blogPath }}
         />
       </div>
@@ -176,7 +185,7 @@ function PostTaxonomyArchive({
 
       {archive.hasMorePosts ? (
         <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
-          This archive contains more than 100 posts. Showing the latest 100 available posts.
+          This archive contains more posts than this page currently shows.
         </p>
       ) : null}
 

@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { JSDOM } from "jsdom";
 import type { ViteDevServer } from "vite";
-import type { mapBlogPost as MapBlogPost, RawBlogPost } from "./postArchives.ts";
+import type {
+  mapBlogPost as MapBlogPost,
+  RawBlogPost,
+  taxonomySlugFromUri as TaxonomySlugFromUri,
+} from "./postArchives.ts";
 
 // postArchives.ts (transitively, via graphqlClient.ts/env.ts) reads `import.meta.env`
 // and expects a `window`, both of which only exist under Vite. We load it through
@@ -12,6 +16,7 @@ import type { mapBlogPost as MapBlogPost, RawBlogPost } from "./postArchives.ts"
 let dom: JSDOM;
 let server: ViteDevServer;
 let mapBlogPost: typeof MapBlogPost;
+let taxonomySlugFromUri: typeof TaxonomySlugFromUri;
 
 const developerTipsPayload = JSON.parse(
   readFileSync(new URL("../../../../packages/cms/src/fixtures/developerTipsFeaturedImage.json", import.meta.url), "utf8"),
@@ -27,7 +32,7 @@ before(async () => {
     server: { middlewareMode: true },
     optimizeDeps: { noDiscovery: true },
   });
-  ({ mapBlogPost } = await server.ssrLoadModule("/src/lib/postArchives.ts"));
+  ({ mapBlogPost, taxonomySlugFromUri } = await server.ssrLoadModule("/src/lib/postArchives.ts"));
 });
 
 after(async () => {
@@ -102,4 +107,21 @@ test("mapBlogPost leaves imageUrl undefined when neither featuredImage nor schem
   const mapped = mapBlogPost(post);
 
   assert.equal(mapped.imageUrl, undefined);
+});
+
+test("mapBlogPost removes entity-escaped WordPress block markup from excerpts", () => {
+  const post = buildRawPost({
+    excerpt: "&lt;!– wp:image {“sizeSlug”:”large”} –&gt;&lt;figure class=”wp-block-image”&gt;&lt;img src=”image.jpg”/&gt;&lt;/figure&gt;&lt;!– wp:paragraph –&gt;&lt;p&gt;Spokojnie czytaj ocean.&lt;/p&gt;&lt;!– /wp:paragraph –&gt;",
+  });
+
+  assert.equal(mapBlogPost(post).excerpt, "Spokojnie czytaj ocean.");
+});
+
+test("extracts decoded Japanese taxonomy slugs from localized URIs", () => {
+  assert.equal(
+    taxonomySlugFromUri("/ja/category/%E3%82%AA%E3%83%BC%E3%82%B7%E3%83%A3%E3%83%B3%EF%BC%86%E3%82%AE%E3%82%A2/"),
+    "オーシャン＆ギア",
+  );
+  assert.equal(taxonomySlugFromUri("/ja/category/"), "category");
+  assert.equal(taxonomySlugFromUri("/"), null);
 });

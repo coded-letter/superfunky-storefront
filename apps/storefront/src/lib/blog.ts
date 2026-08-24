@@ -1,21 +1,24 @@
 import type { PostCardData } from "@funky/ui";
 import {
+  BACKEND_ORIGIN,
   graphqlRequest,
   STOREFRONT_BACKEND_PROFILE,
   type GraphqlResponse,
 } from "@funky/sdk";
-import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
-import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
+import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility.ts";
 import {
   BLOG_POST_CARD_FIELDS,
   mapBlogPost,
   type RawBlogPost,
   type RawBlogTerm,
-} from "./postArchives";
+} from "./postArchives.ts";
 import {
   createCoreBlogQuery,
   shouldPreferCoreGraphqlQueries,
-} from "./profileGraphqlCompatibility";
+} from "./profileGraphqlCompatibility.ts";
+import { filterLocalizedBlogNodes } from "./blogLocalization.ts";
+import { htmlToPlainText } from "./htmlText.ts";
 
 export type CmsBlogTerm = {
   id: string;
@@ -60,6 +63,15 @@ type RawBlogListingTerm = RawBlogTerm & {
   description: string | null;
 };
 
+type RestBlogListingTerm = {
+  id: number;
+  name: string;
+  slug: string;
+  link: string;
+  count: number;
+  description: { rendered?: string } | string;
+};
+
 type BlogDataResult = {
   posts: {
     nodes: RawBlogPost[];
@@ -84,6 +96,8 @@ type BlogDataResult = {
     }[];
   } | null;
 };
+
+type BlogSummaryDataResult = Pick<BlogDataResult, "posts">;
 
 type BlogAuthorDirectoryResult = {
   posts: {
@@ -159,6 +173,85 @@ const BLOG_DATA_QUERY = /* GraphQL */ `
   }
 `;
 
+const BLOG_SUMMARY_QUERY = /* GraphQL */ `
+  query StorefrontBlogSummary($language: LanguageCodeFilterEnum!) {
+    posts(first: 20, where: { language: $language }) {
+      nodes {
+        id
+        databaseId
+        slug
+        uri
+        title
+        excerpt(format: RENDERED)
+        date
+        modified
+        language {
+          code
+        }
+        translations {
+          id
+          databaseId
+          language {
+            code
+          }
+        }
+        author {
+          node {
+            id
+            databaseId
+            name
+            slug
+            uri
+            description
+            avatar(size: 96) {
+              url
+            }
+          }
+        }
+        featuredImage {
+          node {
+            sourceUrl(size: LARGE)
+            altText
+            srcSet(size: LARGE)
+            mediaDetails {
+              width
+              height
+            }
+          }
+        }
+        categories {
+          nodes {
+            id
+            name
+            slug
+            uri
+            language {
+              code
+            }
+          }
+        }
+        tags {
+          nodes {
+            id
+            name
+            slug
+            uri
+            language {
+              code
+            }
+          }
+        }
+        seo {
+          readingTime
+        }
+      }
+      pageInfo {
+        hasNextPage
+      }
+    }
+  }
+`;
+
 const BLOG_AUTHOR_DIRECTORY_QUERY = /* GraphQL */ `
   query StorefrontBlogAuthorDirectory($language: LanguageCodeFilterEnum!, $after: String) {
     posts(first: 100, after: $after, where: { language: $language }) {
@@ -184,15 +277,27 @@ const BLOG_AUTHOR_DIRECTORY_QUERY = /* GraphQL */ `
 `;
 
 export async function getBlogData(languageCode: string, backendLanguageCode: string): Promise<CmsBlogData> {
-  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
-    ? createCoreBlogQuery(BLOG_DATA_QUERY)
-    : BLOG_DATA_QUERY;
-  const { data, errors } = await requestGraphqlWithCompatibility<BlogDataResult>(
-    graphqlRequest,
-    query,
-    { language: backendLanguageCode },
-    BLOG_DATA_COMPATIBILITY_RULES,
-  );
+  const usesBlogRestTerms = STOREFRONT_BACKEND_PROFILE === "blog";
+  const query = usesBlogRestTerms
+    ? createCoreBlogQuery(BLOG_SUMMARY_QUERY)
+    : shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+      ? createCoreBlogQuery(BLOG_DATA_QUERY)
+      : BLOG_DATA_QUERY;
+  const [response, restTerms] = await Promise.all([
+    requestGraphqlWithCompatibility<BlogDataResult>(
+      graphqlRequest,
+      query,
+      { language: backendLanguageCode },
+      BLOG_DATA_COMPATIBILITY_RULES,
+    ),
+    usesBlogRestTerms
+      ? Promise.all([
+          getRestListingTerms("categories", languageCode),
+          getRestListingTerms("tags", languageCode),
+        ])
+      : Promise.resolve(null),
+  ]);
+  const { data, errors } = response;
 
   if (errors?.length) {
     throw new Error(errors.map(({ message }) => message).join("; "));
@@ -202,12 +307,14 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
     throw new Error("The blog data query returned no data");
   }
 
-  const posts = data.posts?.nodes.map(mapBlogPost) || [];
+  const posts = filterLocalizedBlogNodes(data.posts?.nodes || [], languageCode).map(mapBlogPost);
   return {
     posts,
-    categories: mapListingTerms(data.categories?.nodes),
-    tags: mapListingTerms(data.tags?.nodes),
-    authors: mapAuthors(data.posts?.nodes),
+    categories: restTerms?.[0]
+      || mapListingTerms(filterLocalizedBlogNodes(data.categories?.nodes || [], languageCode)),
+    tags: restTerms?.[1]
+      || mapListingTerms(filterLocalizedBlogNodes(data.tags?.nodes || [], languageCode)),
+    authors: mapAuthors(filterLocalizedBlogNodes(data.posts?.nodes || [], languageCode)),
     comments:
       data.comments?.nodes.flatMap((comment) => {
         const post = comment.commentedOn?.node;
@@ -222,13 +329,44 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
         return [{
           id: comment.id,
           author: comment.author?.node?.name?.trim() || "Anonymous",
-          content: htmlToText(comment.content || ""),
+          content: htmlToPlainText(comment.content || ""),
           date: comment.date || "",
           rating: comment.rating && comment.rating >= 1 && comment.rating <= 5 ? comment.rating : undefined,
           postTitle: post.title,
           postUri: post.uri,
         }];
       }).slice(0, 4) || [],
+    hasMorePosts: data.posts?.pageInfo.hasNextPage || false,
+  };
+}
+
+export async function getBlogSummaryData(
+  languageCode: string,
+  backendLanguageCode: string,
+): Promise<CmsBlogData> {
+  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+    ? createCoreBlogQuery(BLOG_SUMMARY_QUERY)
+    : BLOG_SUMMARY_QUERY;
+  const { data, errors } = await requestGraphqlWithCompatibility<BlogSummaryDataResult>(
+    graphqlRequest,
+    query,
+    { language: backendLanguageCode },
+    BLOG_DATA_COMPATIBILITY_RULES,
+  );
+
+  if (errors?.length) {
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
+  if (!data) {
+    throw new Error("The blog summary query returned no data");
+  }
+
+  return {
+    posts: filterLocalizedBlogNodes(data.posts?.nodes || [], languageCode).map(mapBlogPost),
+    categories: [],
+    tags: [],
+    authors: [],
+    comments: [],
     hasMorePosts: data.posts?.pageInfo.hasNextPage || false,
   };
 }
@@ -260,7 +398,7 @@ export async function getBlogAuthorDirectory(languageCode: string): Promise<CmsB
     after = pageData.posts.pageInfo.endCursor;
   } while (after);
 
-  return mapAuthors(posts);
+  return mapAuthors(filterLocalizedBlogNodes(posts, languageCode));
 }
 
 function mapListingTerms(terms: RawBlogListingTerm[] | undefined): CmsBlogTerm[] {
@@ -273,7 +411,7 @@ function mapListingTerms(terms: RawBlogListingTerm[] | undefined): CmsBlogTerm[]
       slug: term.slug,
       uri: term.uri,
       count: term.count || 0,
-      description: htmlToText(term.description || ""),
+      description: htmlToPlainText(term.description || ""),
     });
   });
   return [...mapped.values()];
@@ -302,6 +440,39 @@ function mapAuthors(posts: RawBlogPost[] | undefined): CmsBlogAuthor[] {
   return [...authors.values()].sort((left, right) => right.postCount - left.postCount);
 }
 
-function htmlToText(html: string): string {
-  return new DOMParser().parseFromString(html, "text/html").body.textContent?.replace(/\s+/g, " ").trim() || "";
+async function getRestListingTerms(
+  resource: "categories" | "tags",
+  languageCode: string,
+): Promise<CmsBlogTerm[]> {
+  if (!BACKEND_ORIGIN) {
+    throw new Error("The blog taxonomy endpoint is unavailable because no backend origin is configured");
+  }
+  const url = new URL(`/wp-json/wp/v2/${resource}`, BACKEND_ORIGIN);
+  url.searchParams.set("per_page", "100");
+  url.searchParams.set("hide_empty", "true");
+  url.searchParams.set("lang", languageCode);
+  url.searchParams.set("_fields", "id,name,slug,link,count,description");
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`The blog ${resource} query failed with status ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error(`The blog ${resource} query returned an invalid payload`);
+  }
+
+  return payload.flatMap((term: RestBlogListingTerm) => {
+    if (!Number.isInteger(term?.id) || !term.name || !term.slug || !term.link) return [];
+    const description = typeof term.description === "string"
+      ? term.description
+      : term.description?.rendered || "";
+    return [{
+      id: String(term.id),
+      name: htmlToPlainText(term.name),
+      slug: term.slug,
+      uri: new URL(term.link, BACKEND_ORIGIN).pathname,
+      count: Number.isFinite(term.count) ? term.count : 0,
+      description: htmlToPlainText(description),
+    }];
+  });
 }

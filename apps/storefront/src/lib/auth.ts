@@ -8,8 +8,9 @@
  * isn't configured, so pages can call these unconditionally without special-casing the
  * mockup environment. */
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { graphqlRequest, isBackendConfigured } from "@funky/sdk";
+import { omitUnsupportedLoginPayloadFields } from "./authGraphqlCompatibility.ts";
 
 const STORAGE_KEY = "funkycommerce-auth";
 
@@ -91,23 +92,27 @@ export const authStore = {
   },
 };
 
-const isDev = import.meta.env.DEV;
+const isDev = import.meta.env?.DEV === true;
 const devLog = (...args: unknown[]) => {
   if (isDev) console.log("[auth]", ...args);
 };
 
-const LOGIN_FIELDS = /* GraphQL */ `
+const CORE_LOGIN_FIELDS = /* GraphQL */ `
   authToken
   refreshToken
   authTokenExpiration
   refreshTokenExpiration
-  sessionToken
-  cartToken
   user {
     databaseId
     email
     name
   }
+`;
+
+const LOGIN_FIELDS = /* GraphQL */ `
+  ${CORE_LOGIN_FIELDS}
+  sessionToken
+  cartToken
   customer {
     databaseId
     email
@@ -148,15 +153,30 @@ type LoginPayload = {
   refreshToken: string | null;
   authTokenExpiration: string | number | null;
   refreshTokenExpiration: string | number | null;
-  sessionToken: string | null;
-  cartToken: string | null;
+  sessionToken?: string | null;
+  cartToken?: string | null;
   user: { databaseId: number; email: string | null; name: string | null } | null;
-  customer: { databaseId: number; email: string | null; displayName: string | null } | null;
+  customer?: { databaseId: number; email: string | null; displayName: string | null } | null;
 };
 
 type LoginResult = {
   login: LoginPayload | null;
 };
+
+async function requestCompatibleLogin(
+  mutation: string,
+  variables: Record<string, unknown>,
+): Promise<LoginPayload> {
+  let response = await graphqlRequest<LoginResult>(mutation, variables);
+  const compatibleMutation = omitUnsupportedLoginPayloadFields(mutation, response.errors);
+  if (compatibleMutation) {
+    response = await graphqlRequest<LoginResult>(compatibleMutation, variables);
+  }
+  if (response.errors?.length || !response.data?.login) {
+    throw new Error(response.errors?.map(({ message }) => message).join("; ") || "Login failed");
+  }
+  return response.data.login;
+}
 
 function saveLoginPayload(payload: LoginPayload, persistent = true): StoredAuth {
   if (!payload.authToken || !payload.refreshToken) throw new Error("The login response did not include authentication tokens");
@@ -221,18 +241,22 @@ export function useLoginClients(): { clients: LoginClient[]; isLoading: boolean;
 /** Logs in with the Password provider configured by Headless Login for WPGraphQL. */
 export async function login(username: string, password: string, rememberMe = false): Promise<StoredAuth> {
   if (!isBackendConfigured) throw new Error("The authentication backend is not configured");
-  const { data, errors } = await graphqlRequest<LoginResult>(PASSWORD_LOGIN_MUTATION, { username, password });
-  if (errors?.length || !data?.login) throw new Error(errors?.map(({ message }) => message).join("; ") || "Login failed");
-  return saveLoginPayload(data.login, rememberMe);
+  const payload = await requestCompatibleLogin(
+    PASSWORD_LOGIN_MUTATION,
+    { username, password },
+  );
+  return saveLoginPayload(payload, rememberMe);
 }
 
 export async function loginWithProvider(provider: LoginProvider, code: string, state?: string): Promise<StoredAuth> {
   if (provider === "PASSWORD") throw new Error("Password login requires credentials");
   if (provider === "SITETOKEN") throw new Error("Site Token login must be exchanged by a trusted server-side identity provider");
   if (!code) throw new Error("The provider did not return an authorization code");
-  const { data, errors } = await graphqlRequest<LoginResult>(PROVIDER_LOGIN_MUTATION, { provider, code, state: state || null });
-  if (errors?.length || !data?.login) throw new Error(errors?.map(({ message }) => message).join("; ") || "Provider login failed");
-  return saveLoginPayload(data.login);
+  const payload = await requestCompatibleLogin(
+    PROVIDER_LOGIN_MUTATION,
+    { provider, code, state: state || null },
+  );
+  return saveLoginPayload(payload);
 }
 
 export async function registerCustomer(input: {
@@ -376,7 +400,7 @@ export function isUserLoggedIn(): boolean {
 }
 
 export function useIsUserLoggedIn(): boolean {
-  return useSyncExternalStore(authStore.subscribe, isUserLoggedIn, () => false);
+  return useBackgroundAuthSnapshot((auth) => Boolean(auth?.authToken), false);
 }
 
 function accountIdFromAuth(auth: StoredAuth | null): string | null {
@@ -400,7 +424,38 @@ function accountIdFromAuth(auth: StoredAuth | null): string | null {
 
 /** A stable account key for state that must never cross logout/account switches. */
 export function useAuthenticatedAccountId(): string | null {
-  return useSyncExternalStore(authStore.subscribe, () => accountIdFromAuth(authStore.load()), () => null);
+  return useBackgroundAuthSnapshot(accountIdFromAuth, null);
+}
+
+function useBackgroundAuthSnapshot<T>(select: (auth: StoredAuth | null) => T, initialValue: T): T {
+  const [value, setValue] = useState<T>(initialValue);
+  const selectRef = useRef(select);
+  selectRef.current = select;
+
+  useEffect(() => {
+    let active = true;
+    const loadSnapshot = () => {
+      if (active) setValue(selectRef.current(authStore.load()));
+    };
+    const cancelInitialLoad = "requestIdleCallback" in window
+      ? (() => {
+          const handle = window.requestIdleCallback(loadSnapshot, { timeout: 1_000 });
+          return () => window.cancelIdleCallback(handle);
+        })()
+      : (() => {
+          const handle = window.setTimeout(loadSnapshot, 0);
+          return () => window.clearTimeout(handle);
+        })();
+    const unsubscribe = authStore.subscribe(loadSnapshot);
+
+    return () => {
+      active = false;
+      cancelInitialLoad();
+      unsubscribe();
+    };
+  }, []);
+
+  return value;
 }
 
 export function logOut(): void {
@@ -435,15 +490,27 @@ export function useAuthHeartbeat(): void {
     if (typeof window === "undefined") return undefined;
     devLog("heartbeat mounted");
 
-    const interval = window.setInterval(() => {
+    const refreshIfNeeded = () => {
       const auth = authStore.load();
       if (!auth?.authTokenExpiration || !auth?.authToken || !auth?.refreshToken) return;
 
       const now = Math.floor(Date.now() / 1000);
       const shouldRefresh = now >= auth.authTokenExpiration - REFRESH_BUFFER_SECONDS;
       if (shouldRefresh) void performRefresh();
-    }, HEARTBEAT_INTERVAL_MS);
+    };
+    // Session restoration is an enhancement, never a content prerequisite. Start the
+    // network check after the current paint and never await it from the application shell.
+    const initialCheck = window.setTimeout(refreshIfNeeded, 0);
+    const interval = window.setInterval(refreshIfNeeded, HEARTBEAT_INTERVAL_MS);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") window.setTimeout(refreshIfNeeded, 0);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 }

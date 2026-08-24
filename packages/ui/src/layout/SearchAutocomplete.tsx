@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, FileText, FolderTree, LayoutTemplate, MessageSquare, Package, Search, Tags, UserRound } from "lucide-react";
-import { useT } from "../locale";
+import { useLanguage, useT } from "../locale";
 import {
   groupSearchResults,
   type SearchResultGroup,
@@ -62,6 +62,8 @@ export type SearchAutocompleteProps = {
   fullWidth?: boolean;
   /** Called after a result is picked (e.g. to close the mobile drawer on navigation). */
   onNavigate?: () => void;
+  /** Moves focus into the field when an expandable search control opens. */
+  autoFocus?: boolean;
   search?: (query: string) => Promise<SearchResultItem[]>;
 };
 
@@ -70,9 +72,11 @@ export function SearchAutocomplete({
   placeholder,
   fullWidth = false,
   onNavigate,
+  autoFocus = false,
   search,
 }: SearchAutocompleteProps) {
   const t = useT();
+  const { languageBackendCode, languageCode } = useLanguage();
   const resultsId = useId();
   const resolvedPlaceholder = placeholder || t("search.placeholder");
   const [query, setQuery] = useState("");
@@ -81,6 +85,59 @@ export function SearchAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef(search);
+  const translateRef = useRef(t);
+  const searchTimeoutRef = useRef<number | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
+  const scheduleSearchRef = useRef<(value: string) => void>(() => undefined);
+  searchRef.current = search;
+  translateRef.current = t;
+  const hasRemoteSearch = Boolean(search);
+  const searchContextRef = useRef(`${Number(hasRemoteSearch)}:${languageCode}:${languageBackendCode}`);
+  scheduleSearchRef.current = (value) => {
+    if (searchTimeoutRef.current !== null) window.clearTimeout(searchTimeoutRef.current);
+    searchControllerRef.current?.abort();
+    searchTimeoutRef.current = null;
+    searchControllerRef.current = null;
+
+    const normalizedQuery = value.trim();
+    const runSearch = searchRef.current;
+    if (!runSearch || normalizedQuery.length < 2) {
+      setRemoteResults([]);
+      setIsLoading(false);
+      setError("");
+      return;
+    }
+
+    searchTimeoutRef.current = window.setTimeout(() => {
+      const controller = new AbortController();
+      searchControllerRef.current = controller;
+      searchTimeoutRef.current = null;
+      setIsLoading(true);
+      setError("");
+      runSearch(normalizedQuery)
+        .then((results) => {
+          if (!controller.signal.aborted) setRemoteResults(results);
+        })
+        .catch((searchError: unknown) => {
+          if (!controller.signal.aborted) {
+            setRemoteResults([]);
+            setError(searchError instanceof Error ? searchError.message : translateRef.current("search.unavailable"));
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            searchControllerRef.current = null;
+            setIsLoading(false);
+          }
+        });
+    }, 250);
+  };
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -100,35 +157,23 @@ export function SearchAutocomplete({
   }, []);
 
   useEffect(() => {
-    if (!search || query.trim().length < 2) {
-      setRemoteResults([]);
-      setIsLoading(false);
-      setError("");
-      return;
-    }
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      setIsLoading(true);
-      setError("");
-      search(query.trim())
-        .then((results) => {
-          if (!controller.signal.aborted) setRemoteResults(results);
-        })
-        .catch((searchError: unknown) => {
-          if (!controller.signal.aborted) {
-            setRemoteResults([]);
-            setError(searchError instanceof Error ? searchError.message : t("search.unavailable"));
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setIsLoading(false);
-        });
-    }, 250);
+    const nextContext = `${Number(hasRemoteSearch)}:${languageCode}:${languageBackendCode}`;
+    if (searchContextRef.current === nextContext) return;
+    searchContextRef.current = nextContext;
+    setRemoteResults([]);
+    setError("");
+    scheduleSearchRef.current(query);
+    // Query changes schedule directly from the input event; this effect refreshes
+    // only when the active locale or remote-search availability changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRemoteSearch, languageBackendCode, languageCode]);
+
+  useEffect(() => {
     return () => {
-      controller.abort();
-      window.clearTimeout(timeout);
+      if (searchTimeoutRef.current !== null) window.clearTimeout(searchTimeoutRef.current);
+      searchControllerRef.current?.abort();
     };
-  }, [query, search, t]);
+  }, []);
 
   const results = search ? remoteResults : matchResults(query);
   const isOpen = isFocused && query.trim().length > 0;
@@ -139,9 +184,14 @@ export function SearchAutocomplete({
         <span className="sr-only">{resolvedPlaceholder}</span>
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" aria-hidden="true" />
         <input
+          ref={inputRef}
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            scheduleSearchRef.current(nextQuery);
+          }}
           onFocus={() => setIsFocused(true)}
           placeholder={resolvedPlaceholder}
           role="combobox"

@@ -39,16 +39,19 @@ import {
   deleteCollaboratorPost,
   followCommunityProfile,
   getCommunityProfile,
+  getCommunityProfileMember,
   getCommunityProfileConnection,
   getCollaboratorPostForEditing,
   getMarketplaceProductForEditing,
   searchTranslationCandidateCommunityPosts,
   searchTranslationCandidatePosts,
+  toggleCommunityPostLike,
   unfollowCommunityProfile,
   updateCollaboratorPost,
   updateMarketplaceProduct,
   type CommunityProfileConnection,
   type CommunityProfileData,
+  type CommunityMember,
 } from "../lib/community";
 import { useCommunityData } from "../state/communityData";
 import { useBlogData } from "../state/blogData";
@@ -79,18 +82,39 @@ export function CommunityProfileMockupPage() {
   const fallbackUser = isBackendConfigured ? null : getSocialUserByHandle(handle);
   const { data: liveBlog } = useBlogData();
   const { communityProfileHeaderLayout: headerLayout } = useLayoutPreferences();
-  const { languageCode } = useLanguage();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const filterByLanguage = configuredLanguageCodes.length > 1;
   const { baseCurrency, convertSelectedToBase } = useCurrency();
   const [profileData, setProfileData] = useState<CommunityProfileData | null>(null);
+  const [profileMember, setProfileMember] = useState<CommunityMember | null>(null);
   const [profileError, setProfileError] = useState<Error | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(isBackendConfigured);
   useEffect(() => {
     if (!isBackendConfigured) return;
     let active = true;
-    setProfileData(null);
+    setProfileMember((current) =>
+      current && communityHandlesMatch(handle, current.handle) ? current : null,
+    );
+    getCommunityProfileMember(handle)
+      .then((member) => {
+        if (active) setProfileMember(member);
+      })
+      .catch(() => {
+        if (active) setProfileMember(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [handle, viewer?.databaseId, liveCommunity]);
+  useEffect(() => {
+    if (!isBackendConfigured) return;
+    let active = true;
+    setProfileData((current) =>
+      current && communityHandlesMatch(handle, current.member.handle) ? current : null,
+    );
     setIsProfileLoading(true);
     setProfileError(null);
-    getCommunityProfile(handle)
+    getCommunityProfile(handle, languageCode)
       .then((profile) => {
         if (active) setProfileData(profile);
       })
@@ -106,9 +130,11 @@ export function CommunityProfileMockupPage() {
     return () => {
       active = false;
     };
-  }, [handle, viewer?.databaseId, liveCommunity]);
+  }, [handle, languageCode, viewer?.databaseId, liveCommunity]);
   const currentProfileData = profileData && communityHandlesMatch(handle, profileData.member.handle) ? profileData : null;
-  const liveMember = currentProfileData?.member || (liveCommunity
+  const authoritativeMember = currentProfileData?.member
+    || (profileMember && communityHandlesMatch(handle, profileMember.handle) ? profileMember : null);
+  const liveMember = authoritativeMember || (liveCommunity
     ? resolvePublicCommunityMember(
         liveCommunity.members,
         handle,
@@ -116,9 +142,12 @@ export function CommunityProfileMockupPage() {
         liveCommunity.profilesPublicEnabled,
       )
     : null);
+  const resolvedLiveMember = liveMember && !authoritativeMember && isProfileLoading
+    ? { ...liveMember, coverUrl: undefined }
+    : liveMember;
   const followersEnabled = liveCommunity?.followersEnabled !== false;
-  const user = liveMember
-    ? liveMember
+  const user = resolvedLiveMember
+    ? resolvedLiveMember
     : fallbackUser
       ? {
           ...fallbackUser,
@@ -135,18 +164,18 @@ export function CommunityProfileMockupPage() {
 
   // Optimistic follow state — starts from live backend value, toggled locally on mutation.
   const [followState, setFollowState] = useState<{ relationshipState: "none" | "pending" | "accepted" | "owner"; followerCount: number } | null>(null);
-  useEffect(() => setFollowState(null), [handle, liveMember?.databaseId]);
+  useEffect(() => setFollowState(null), [handle, resolvedLiveMember?.databaseId]);
   const effectiveRelationship = followState?.relationshipState || user?.relationshipState || "none";
   const effectiveFollowerCount = followState !== null ? followState.followerCount : (user?.followerCount ?? 0);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
   const handleFollowToggle = async () => {
-    if (!liveMember || isFollowLoading) return;
+    if (!resolvedLiveMember || isFollowLoading) return;
     setIsFollowLoading(true);
     try {
       const result = effectiveRelationship === "pending" || effectiveRelationship === "accepted"
-        ? await unfollowCommunityProfile(liveMember.databaseId)
-        : await followCommunityProfile(liveMember.databaseId);
+        ? await unfollowCommunityProfile(resolvedLiveMember.databaseId)
+        : await followCommunityProfile(resolvedLiveMember.databaseId);
       setFollowState(result);
       refresh();
     } catch (err) {
@@ -194,8 +223,17 @@ export function CommunityProfileMockupPage() {
 
   const feedPosts = useMemo<SocialPostCardData[]>(() => {
     if (!user) return [];
-    if (currentProfileData) return currentProfileData.posts;
-    if (liveCommunity) return liveCommunity.posts.filter((post) => communityHandlesMatch(post.author.handle, user.handle));
+    if (currentProfileData) {
+      return currentProfileData.posts.filter((post) =>
+        !filterByLanguage || !post.languageCode || post.languageCode.toLowerCase() === languageCode
+      );
+    }
+    if (liveCommunity) {
+      return liveCommunity.posts.filter((post) =>
+        communityHandlesMatch(post.author.handle, user.handle)
+        && (!filterByLanguage || !post.languageCode || post.languageCode.toLowerCase() === languageCode)
+      );
+    }
     return getPostsByHandle(user.handle, creatorContent.posts).map((post) => ({
       id: post.id,
       image: post.image,
@@ -210,7 +248,7 @@ export function CommunityProfileMockupPage() {
       createdAt: post.createdAt,
       author: { handle: user.handle, displayName: user.displayName, avatarUrl: user.avatarUrl },
     }));
-  }, [user, creatorContent.posts, liveCommunity, currentProfileData]);
+  }, [user, creatorContent.posts, liveCommunity, currentProfileData, filterByLanguage, languageCode]);
 
   const ownProducts = useMemo(
     () => (user ? creatorContent.products.filter((product) => product.vendorHandle === user.handle) : []),
@@ -231,10 +269,11 @@ export function CommunityProfileMockupPage() {
   const creatorArticles = useMemo(
     () => user
       ? liveMember && liveBlog
-        ? currentProfileData?.articles || liveBlog.posts.filter((post) => post.authorDatabaseId === user.databaseId)
+        ? (currentProfileData?.articles || liveBlog.posts.filter((post) => post.authorDatabaseId === user.databaseId))
+            .filter((post) => !filterByLanguage || post.languageCode?.toLowerCase() === languageCode)
         : getCreatorArticles(user.handle, ownArticles)
       : [],
-    [user, ownArticles, liveBlog, liveMember, currentProfileData],
+    [user, ownArticles, liveBlog, liveMember, currentProfileData, filterByLanguage, languageCode],
   );
   const hasPublishingTabs = isCollaborator
     || creatorProducts.length > 0
@@ -477,7 +516,13 @@ export function CommunityProfileMockupPage() {
             onLoadMore={() => loadMoreProfiles("following")}
           />
           {currentProfileData?.followingFeed.length ? (
-            <SocialFeedGrid title="Posts from followed profiles" posts={currentProfileData.followingFeed} pageSize={12} defaultLayout="grid-3" />
+            <SocialFeedGrid
+              title="Posts from followed profiles"
+              posts={currentProfileData.followingFeed}
+              pageSize={12}
+              defaultLayout="grid-3"
+              onToggleLike={(post) => toggleCommunityPostLike(Number(post.id))}
+            />
           ) : <EmptyTabNotice text="No posts from followed profiles yet." />}
         </div>
       ) : hasPublishingTabs && activeTab === "shop" ? (
@@ -595,7 +640,13 @@ export function CommunityProfileMockupPage() {
           )}
         </div>
       ) : feedPosts.length ? (
-        <SocialFeedGrid title={`${user.displayName}'s posts`} posts={feedPosts} pageSize={12} defaultLayout="grid-3" />
+        <SocialFeedGrid
+          title={`${user.displayName}'s posts`}
+          posts={feedPosts}
+          pageSize={12}
+          defaultLayout="grid-3"
+          onToggleLike={(post) => toggleCommunityPostLike(Number(post.id))}
+        />
       ) : (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
           No posts yet.

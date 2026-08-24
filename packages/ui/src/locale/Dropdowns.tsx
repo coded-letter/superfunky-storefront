@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { CurrencyMark } from "./CurrencyMark";
 import { flagIconSrc, type LanguageOption } from "./options";
 import { useCurrency } from "./CurrencyContext";
 import { useLanguage } from "./LanguageContext";
@@ -79,7 +80,7 @@ export function LanguageSwitcher({ className = "", fullWidth = false }: Language
         aria-expanded={isOpen}
         className={`${getTriggerClass(fullWidth)} ${fullWidth ? "w-full justify-center" : ""}`}
       >
-        <img src={flagIconSrc(selected.flagCode)} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" aria-hidden="true" />
+        <img src={flagIconSrc(selected.flagCode)} alt="" width={20} height={14} className="h-3.5 w-5 rounded-[2px] object-cover" aria-hidden="true" />
         {selected.code.toUpperCase()}
         <ChevronDown className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
       </button>
@@ -100,7 +101,7 @@ export function LanguageSwitcher({ className = "", fullWidth = false }: Language
                 }}
                 className={`${optionClass} ${language.code === selected.code ? "bg-zinc-100 dark:bg-zinc-800/70" : ""}`}
               >
-                <img src={flagIconSrc(language.flagCode)} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" aria-hidden="true" />
+                <img src={flagIconSrc(language.flagCode)} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" aria-hidden="true" />
                 <span className="font-semibold uppercase tracking-wide">{language.code}</span>
               </button>
             </li>
@@ -125,12 +126,17 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
     <div ref={containerRef} className={`sf-currency-switcher relative ${fullWidth ? "flex-1" : ""} ${className}`}>
       <button
         type="button"
+        data-storefront-control="currency"
         onClick={() => setIsOpen((previous) => !previous)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         className={`${getTriggerClass(fullWidth)} ${fullWidth ? "w-full justify-center" : ""}`}
       >
-        {selected.icon ? <img src={selected.icon} alt="" className="h-4 w-4 object-contain" aria-hidden="true" /> : selected.symbol} {selected.code}
+        {isCryptoCurrency(selected.code)
+          ? <CurrencyMark code={selected.code} size={10} />
+          : selected.icon
+            ? <img src={selected.icon} alt="" width={16} height={16} className="h-4 w-4 bg-transparent object-contain" aria-hidden="true" />
+            : selected.symbol} {selected.code}
         <ChevronDown className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
       </button>
 
@@ -151,7 +157,11 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
                 className={`${optionClass} ${currency.code === selected.code ? "bg-zinc-100 dark:bg-zinc-800/70" : ""}`}
               >
                 <span className="w-5 shrink-0 text-center text-zinc-400" aria-hidden="true">
-                  {currency.icon ? <img src={currency.icon} alt="" className="mx-auto h-4 w-4 object-contain" /> : currency.symbol}
+                  {isCryptoCurrency(currency.code)
+                    ? <CurrencyMark code={currency.code} size={10} className="mx-auto" />
+                    : currency.icon
+                      ? <img src={currency.icon} alt="" width={16} height={16} className="mx-auto h-4 w-4 bg-transparent object-contain" />
+                      : currency.symbol}
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-wide">{currency.code}</span>
               </button>
@@ -161,4 +171,8 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
       ) : null}
     </div>
   );
+}
+
+function isCryptoCurrency(code: string): boolean {
+  return code === "BTC" || code === "ETH";
 }

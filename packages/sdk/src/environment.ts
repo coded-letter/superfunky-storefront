@@ -30,6 +30,25 @@ export const STOREFRONT_BACKEND_PROFILE: StorefrontBackendProfile = isStorefront
   ? configuredBackendProfile
   : "full";
 
+export const STOREFRONT_DEFAULT_LANGUAGE = (
+  IMPORT_META_ENV.VITE_DEFAULT_LANGUAGE
+  || NODE_ENV?.VITE_DEFAULT_LANGUAGE
+  || "en"
+).trim().toLowerCase();
+
+export const STOREFRONT_EXPECTED_LOCALES = [
+  ...new Set(
+    (
+      IMPORT_META_ENV.STOREFRONT_EXPECTED_LOCALES
+      || NODE_ENV?.STOREFRONT_EXPECTED_LOCALES
+      || STOREFRONT_DEFAULT_LANGUAGE
+    )
+      .split(",")
+      .map((locale) => locale.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+];
+
 /** The WordPress site's origin (scheme + host, no path) derived from the GraphQL
  * endpoint — e.g. `https://v1.superfunky.pro/graphql` → `https://v1.superfunky.pro`.
  * REST routes (WooCommerce Store API, the abandoned-cart tracker, the sitemap, etc.)

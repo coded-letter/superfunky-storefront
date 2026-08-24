@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { mapBackendLanguages } from "./languageMapping.ts";
-import { shouldRenderLanguageSwitcher } from "../../../../packages/ui/src/locale/options.ts";
+import {
+  resolveSyncedLanguageCode,
+  shouldRenderLanguageSwitcher,
+} from "../../../../packages/ui/src/locale/options.ts";
 import {
   languageHomePath,
   resolveCanonicalLanguageRoute,
   normalizeLanguagePath,
   resolveCanonicalLanguagePath,
   resolveLanguageUrlAction,
+  resolveLocalizedPageUri,
+  resolvePathLanguageCode,
 } from "../../../../packages/ui/src/locale/urlPaths.ts";
 import { parseSpotifyReference } from "../../../../packages/ui/src/layout/spotifyEmbed.ts";
 import {
@@ -15,6 +21,8 @@ import {
   resolveContentLanguageFallback,
 } from "./contentLanguageFallback.ts";
 import { resolveRouteLanguageSync } from "./contentRouteLanguageSync.ts";
+
+const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
 test("maps backend EN and JA records without deriving enum values from slugs", () => {
   assert.deepEqual(
@@ -28,6 +36,28 @@ test("maps backend EN and JA records without deriving enum values from slugs", (
     ],
   );
   assert.equal(languageHomePath("ja", ["en", "ja"]), "/ja");
+});
+
+test("orders the backend default first and adopts it without a visitor preference", () => {
+  const options = mapBackendLanguages([
+    { code: "EN", name: "English", slug: "en" },
+    { code: "PL", name: "Polski", slug: "pl", isDefault: true },
+    { code: "JA", name: "日本語", slug: "ja" },
+  ]).map((language) => ({ ...language, flagCode: language.code }));
+
+  assert.deepEqual(options.map(({ code }) => code), ["pl", "en", "ja"]);
+  assert.equal(resolveSyncedLanguageCode("en", false, options), "pl");
+  assert.equal(resolveSyncedLanguageCode("en", true, options), "en");
+  assert.equal(languageHomePath("pl", ["pl", "en", "ja"]), "/");
+  assert.equal(languageHomePath("en", ["pl", "en", "ja"]), "/en");
+});
+
+test("infers route languages from configured URI prefixes and preserves the default locale", () => {
+  assert.equal(resolvePathLanguageCode("/ja/blog/", ["pl", "en", "ja"], "pl"), "ja");
+  assert.equal(resolvePathLanguageCode("/en/blog/", ["pl", "en", "ja"], "pl"), "en");
+  assert.equal(resolvePathLanguageCode("/blog/", ["pl", "en", "ja"], "pl"), "pl");
+  assert.equal(resolvePathLanguageCode("/ja/blog/", ["pl"], "pl", true), "ja");
+  assert.equal(resolvePathLanguageCode("/it/", ["pl"], "pl"), "pl");
 });
 
 test("route language synchronization stays suspended until a selected-language navigation completes", () => {
@@ -65,16 +95,17 @@ test("zero and one configured language keep every storefront surface unprefixed"
   assert.equal(languageHomePath("en", ["en"]), "/");
 });
 
-test("two configured languages prefix generated routes without stripping legitimate slugs", () => {
+test("multiple configured languages leave the backend default unprefixed", () => {
   assert.equal(normalizeLanguagePath("/", "ja", ["en", "ja"]), "/ja");
-  assert.equal(normalizeLanguagePath("/cart/", "en", ["en", "ja"]), "/en/cart/");
+  assert.equal(normalizeLanguagePath("/cart/", "en", ["en", "ja"]), "/cart/");
   assert.equal(normalizeLanguagePath("/checkout/", "ja", ["en", "ja"]), "/ja/checkout/");
   assert.equal(normalizeLanguagePath("/pro-category/plugins/", "ja", ["en", "ja"]), "/ja/pro-category/plugins/");
-  assert.equal(normalizeLanguagePath("/pro-tag/sale/", "en", ["en", "ja"]), "/en/pro-tag/sale/");
+  assert.equal(normalizeLanguagePath("/pro-tag/sale/", "en", ["en", "ja"]), "/pro-tag/sale/");
   assert.equal(normalizeLanguagePath("/de/about/", "en", ["en"]), "/de/about/");
   assert.equal(normalizeLanguagePath("/enigma/docs/", "en", ["en"]), "/enigma/docs/");
-  assert.equal(normalizeLanguagePath("/order/1042", "pl", ["en", "pl"]), "/pl/order/1042");
+  assert.equal(normalizeLanguagePath("/order/1042", "pl", ["pl", "en"]), "/order/1042");
   assert.equal(normalizeLanguagePath("/order/1042", "en", ["en"]), "/order/1042");
+  assert.equal(normalizeLanguagePath("/pl/category/aktualnosci/", "pl", ["pl", "en", "ja"]), "/category/aktualnosci/");
 });
 
 test("keeps admin tools language-independent and removes stale language prefixes", () => {
@@ -90,8 +121,34 @@ test("keeps admin tools language-independent and removes stale language prefixes
 
 test("a language selection replaces the old URL prefix instead of reverting the selection", () => {
   assert.deepEqual(
-    resolveLanguageUrlAction("/en/cart/?coupon=summer#totals", "pl", ["en", "pl"], true),
-    { type: "navigate", to: "/pl/cart/?coupon=summer#totals" },
+    resolveLanguageUrlAction("/en/cart/?coupon=summer#totals", "pl", ["pl", "en"], true),
+    { type: "navigate", to: "/cart/?coupon=summer#totals" },
+  );
+  assert.deepEqual(
+    resolveLanguageUrlAction("/en/", "pl", ["pl", "en"], true),
+    { type: "navigate", to: "/" },
+  );
+});
+
+test("canonical language selection keeps its marker until navigation arrives", () => {
+  assert.match(
+    appSource,
+    /pendingSelection\.current = \{ sourceUrl: currentUrl, targetUrl \};\s+navigate\(targetUrl, \{ replace: true \}\)/,
+  );
+  assert.match(
+    appSource,
+    /pendingSelection\.current\?\.targetUrl === currentUrl[\s\S]*pendingSelection\.current = null;\s+return;/,
+  );
+  assert.match(
+    appSource,
+    /pendingSelection\.current\?\.sourceUrl === currentUrl\s+&& pendingSelection\.current\.targetUrl\s+\) \{\s+return;/,
+  );
+});
+
+test("fallback language selection also preserves its pending destination", () => {
+  assert.match(
+    appSource,
+    /pendingSelection\.current = \{ sourceUrl: currentUrl, targetUrl: action\.to \};\s+navigate\(action\.to, \{ replace: true \}\)/,
   );
 });
 
@@ -107,11 +164,34 @@ test("URL navigation changes language while admin tools remain unprefixed", () =
   assert.equal(resolveLanguageUrlAction("/layout-studio", "pl", ["en", "pl"], true), null);
 });
 
-test("does not rewrite unprefixed canonical CMS routes outside a language selection", () => {
-  assert.equal(resolveLanguageUrlAction("/koszyk/", "pl", ["en", "pl"], false), null);
+test("unprefixed canonical CMS routes select the backend default language", () => {
   assert.deepEqual(
-    resolveLanguageUrlAction("/", "pl", ["en", "pl"], false),
-    { type: "navigate", to: "/pl" },
+    resolveLanguageUrlAction("/koszyk/", "pl", ["en", "pl"], false),
+    { type: "set-language", languageCode: "en" },
+  );
+  assert.deepEqual(
+    resolveLanguageUrlAction("/", "en", ["pl", "en", "ja"], false),
+    { type: "set-language", languageCode: "pl" },
+  );
+  assert.deepEqual(
+    resolveLanguageUrlAction("/category/aktualnosci/", "en", ["pl", "en", "ja"], false),
+    { type: "set-language", languageCode: "pl" },
+  );
+});
+
+test("default-language prefixes are removed from canonical URLs", () => {
+  assert.deepEqual(
+    resolveLanguageUrlAction("/pl/", "pl", ["pl", "en", "ja"], false),
+    { type: "navigate", to: "/" },
+  );
+  assert.deepEqual(
+    resolveLanguageUrlAction(
+      "/pl/category/aktualnosci/?page=2#posts",
+      "pl",
+      ["pl", "en", "ja"],
+      false,
+    ),
+    { type: "navigate", to: "/category/aktualnosci/?page=2#posts" },
   );
 });
 
@@ -124,7 +204,7 @@ test("uses exact canonical CMS translation URIs and namespaces only shared home 
   ];
   assert.equal(resolveCanonicalLanguagePath(registry, "cart", "en", ["en", "pl"], "/cart"), "/en/cart");
   assert.equal(resolveCanonicalLanguagePath(registry, "cart", "pl", ["en", "pl"], "/cart"), "/koszyk");
-  assert.equal(resolveCanonicalLanguagePath(registry, "home", "en", ["en", "pl"], "/"), "/en");
+  assert.equal(resolveCanonicalLanguagePath(registry, "home", "en", ["en", "pl"], "/"), "/");
   assert.equal(resolveCanonicalLanguagePath(registry, "home", "pl", ["en", "pl"], "/"), "/pl");
   assert.equal(resolveCanonicalLanguagePath([], "cart", "pl", ["en", "pl"], "/cart"), "/pl/cart");
 });
@@ -143,6 +223,59 @@ test("resolves a language switch only from one unambiguous canonical route", () 
   assert.equal(
     resolveCanonicalLanguageRoute(registry, "/en/test/", "pl", ["en", "pl"]),
     null,
+  );
+});
+
+test("matches percent-encoded canonical translation paths", () => {
+  const registry = [
+    { key: "blog", uri: "/blog/", languageCode: "pl" },
+    { key: "blog", uri: "/en/blog-2/", languageCode: "en" },
+    { key: "blog", uri: "/ja/ジャーナル/", languageCode: "ja" },
+  ];
+
+  assert.deepEqual(
+    resolveCanonicalLanguageRoute(
+      registry,
+      "/ja/%E3%82%B8%E3%83%A3%E3%83%BC%E3%83%8A%E3%83%AB/",
+      "pl",
+      ["pl", "en", "ja"],
+    ),
+    { key: "blog", targetPath: "/blog/" },
+  );
+});
+
+test("localizes a translated posts page when WordPress omits its URI", () => {
+  const polishBlogUri = resolveLocalizedPageUri("/blog-pl/", "blog-pl", "pl", ["pl", "en"]);
+  const englishBlogUri = resolveLocalizedPageUri(null, "blog", "en", ["pl", "en"]);
+  const registry = [
+    { key: "blog", uri: polishBlogUri!, languageCode: "pl" },
+    { key: "blog", uri: englishBlogUri!, languageCode: "en" },
+  ];
+
+  assert.equal(polishBlogUri, "/blog-pl/");
+  assert.equal(englishBlogUri, "/en/blog/");
+  assert.deepEqual(
+    resolveCanonicalLanguageRoute(registry, "/blog-pl/", "en", ["pl", "en"]),
+    { key: "blog", targetPath: "/en/blog/" },
+  );
+  assert.deepEqual(
+    resolveCanonicalLanguageRoute(registry, "/en/blog/", "pl", ["pl", "en"]),
+    { key: "blog", targetPath: "/blog-pl/" },
+  );
+});
+
+test("canonicalizes language prefixes on existing WordPress page URIs", () => {
+  assert.equal(
+    resolveLocalizedPageUri("/pl/blog/", "blog", "pl", ["pl", "en"]),
+    "/blog/",
+  );
+  assert.equal(
+    resolveLocalizedPageUri("/pl/blog/", "blog", "en", ["pl", "en"]),
+    "/en/blog/",
+  );
+  assert.equal(
+    resolveLocalizedPageUri("/en/blog/", "blog", "pl", ["pl", "en"]),
+    "/blog/",
   );
 });
 

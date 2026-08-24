@@ -8,6 +8,8 @@ export {
   isBackendConfigured,
   restUrl,
   STOREFRONT_BACKEND_PROFILE,
+  STOREFRONT_DEFAULT_LANGUAGE,
+  STOREFRONT_EXPECTED_LOCALES,
   type StorefrontBackendProfile,
 } from "./environment.ts";
 export {

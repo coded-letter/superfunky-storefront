@@ -1,0 +1,45 @@
+name: Open monorepo sync pull request
+
+on:
+  push:
+    branches:
+      - automation/monorepo-sync
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: open-monorepo-sync-pr
+  cancel-in-progress: true
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or locate the synchronization pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_COMMIT: ${{ github.sha }}
+        run: |
+          pr_url="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head automation/monorepo-sync \
+            --state open \
+            --json url \
+            --jq '.[0].url')"
+
+          if [ -z "$pr_url" ]; then
+            source_commit="$(gh api \
+              "repos/$GITHUB_REPOSITORY/commits/$SYNC_COMMIT" \
+              --jq '.commit.message | split("\n") | map(select(startswith("Source: "))) | first // "Source: monorepo main"')"
+            pr_url="$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head automation/monorepo-sync \
+              --title "storefront: sync changes from monorepo" \
+              --body "Automated public extraction. $source_commit. The source and exported repository passed extraction safety, standalone boundary tests, and the production build.")"
+          fi
+
+          echo "Synchronization pull request: $pr_url" >> "$GITHUB_STEP_SUMMARY"

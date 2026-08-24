@@ -74,7 +74,10 @@ test("mountCmsScripts executes editor code, preserves attributes, and does not r
 test("service worker caches a clone before returning the network response", () => {
   assert.match(serviceWorkerSource, /const cacheCopy = response\.clone\(\)/);
   assert.match(serviceWorkerSource, /await cache\.put\(request, cacheCopy\)/);
-  assert.match(serviceWorkerSource, /event\.waitUntil\(network/);
+  assert.equal(serviceWorkerSource.match(/event\.respondWith\(/g)?.length, 2);
+  assert.match(serviceWorkerSource, /const safeNetwork = network\.catch\(\(\) => null\)/);
+  assert.match(serviceWorkerSource, /event\.waitUntil\(safeNetwork\.then/);
+  assert.match(serviceWorkerSource, /cached \?\? await safeNetwork \?\? Response\.error\(\)/);
   assert.doesNotMatch(serviceWorkerSource, /cache\.put\(request, response\.clone\(\)\)\.catch/);
 });
 
@@ -87,7 +90,6 @@ test("mountEnqueuedScripts accepts reviewed bundled behaviors and warns once for
     const scripts = [
       cmsScript("wc-add-to-cart"),
       cmsScript("woocommerce"),
-      cmsScript("funkycommerce-google-maps-locations"),
       cmsScript("unreviewed-integration"),
       cmsScript("unreviewed-integration"),
     ];

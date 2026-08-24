@@ -144,8 +144,18 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
   for (const entry of result.value.entries) {
     const compatible = entry.cacheKey.startsWith("artifact-route:v1:")
       || entry.cacheKey.startsWith("artifact-navigation:v1:")
+      || entry.cacheKey.startsWith("navigation-data:v13:")
+      || entry.cacheKey.startsWith("navigation-assistant:v1:")
+      || entry.cacheKey.startsWith("storefront-route-registry:v6:")
+      || entry.cacheKey.startsWith("commerce-data:v4:")
+      || entry.cacheKey.startsWith("blog-data:v4:")
+      || entry.cacheKey.startsWith("blog-data:summary:v1:")
+      || entry.cacheKey.startsWith("community:v9:")
+      || entry.cacheKey.startsWith("community:feed:v1:")
       || entry.cacheKey.startsWith("page:/")
       || entry.cacheKey.startsWith("content-page-by-uri:v1:/")
+      || entry.cacheKey.startsWith("content-node:v2:/")
+      || entry.cacheKey.startsWith("home-page:v1:")
       || entry.cacheKey === "wordpress-theme-styles:v5";
     if (!compatible) continue;
     const storageKey = storageKeyFor(entry.cacheKey);
@@ -172,7 +182,9 @@ type KeyedIncrementalDataState<T> = IncrementalDataState<T> & {
 function initialState<T>(storageKey: string): KeyedIncrementalDataState<T> {
   const data = readCache<T>(storageKey);
   const metadata = data === null ? null : readArtifactMetadata(storageKey);
-  const trustedAndCurrent = metadata !== null && Date.parse(metadata.expiresAt) > Date.now();
+  const trustedAndCurrent = metadata !== null
+    && metadata.contentRevision > 0
+    && Date.parse(metadata.expiresAt) > Date.now();
   return {
     storageKey,
     data,
@@ -211,6 +223,7 @@ async function latestContentRevision() {
 }
 
 async function shouldRefreshArtifactSeed(storageKey: string, metadata: ArtifactSeedMetadata): Promise<boolean> {
+  if (metadata.contentRevision <= 0) return true;
   if (Date.parse(metadata.expiresAt) <= Date.now()) return true;
   const latest = await latestContentRevision();
   if (!latest || latest.revision <= metadata.contentRevision) return false;
@@ -225,6 +238,27 @@ async function shouldRefreshArtifactSeed(storageKey: string, metadata: ArtifactS
     return false;
   }
   return true;
+}
+
+function waitForStorefrontIdle(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const schedule = () => {
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(() => resolve(), { timeout: 2_000 });
+      } else {
+        window.setTimeout(resolve, 0);
+      }
+    };
+
+    if (document.documentElement.dataset.storefrontReady === "true"
+      || document.querySelector('[data-storefront-ready="true"]')) {
+      schedule();
+      return;
+    }
+    window.addEventListener("funky:storefront-ready", schedule, { once: true });
+  });
 }
 
 /** @param cacheKey Stable, unique key for this query (e.g. `product:${slug}`) —
@@ -256,7 +290,9 @@ export function useIncrementalData<T>(
       };
     }
     const metadata = cached === null ? null : readArtifactMetadata(storageKey);
-    const trustedAndCurrent = metadata !== null && Date.parse(metadata.expiresAt) > Date.now();
+    const trustedAndCurrent = metadata !== null
+      && metadata.contentRevision > 0
+      && Date.parse(metadata.expiresAt) > Date.now();
     setState({
       storageKey,
       data: cached,
@@ -266,8 +302,9 @@ export function useIncrementalData<T>(
     });
 
     const refresh = async () => {
-      if (cached !== null && metadata && !(await shouldRefreshArtifactSeed(storageKey, metadata))) {
-        return cached;
+      if (cached !== null && metadata) {
+        await waitForStorefrontIdle();
+        if (!(await shouldRefreshArtifactSeed(storageKey, metadata))) return cached;
       }
       return preloadIncrementalData(cacheKey, fetcherRef.current);
     };

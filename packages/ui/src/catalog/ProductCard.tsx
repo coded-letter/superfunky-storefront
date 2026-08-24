@@ -7,6 +7,8 @@ import { savedListEntityId } from "../state/savedListSync";
 import { calculateDiscountPercent, useCurrency } from "../locale";
 import { ProductQuickViewModal } from "./ProductQuickViewModal";
 import { hasProductCardPrice } from "./productCardPrice";
+import { resolveVariationSwatchColor } from "./variationSwatch";
+export { resolveVariationSwatchColor } from "./variationSwatch";
 
 export type ProductCardVariant = "default" | "minimal" | "editorial" | "gallery" | "simple" | "variation" | "expandable";
 
@@ -29,19 +31,6 @@ export type ProductCardVariationValue = {
    * should switch the preview to when picked — lets a colour swatch "swap the photo". */
   imageIndex?: number;
 };
-
-const COLOR_ATTRIBUTE_PATTERN = /(^|[\s_-])(colou?r|swatch)([\s_-]|$)/i;
-
-export function resolveVariationSwatchColor(optionLabel: string, value: string, explicitColor?: string): string | undefined {
-  const candidate = (explicitColor || (COLOR_ATTRIBUTE_PATTERN.test(optionLabel) ? value : "")).trim();
-  if (!candidate) return undefined;
-  if (typeof CSS !== "undefined" && typeof CSS.supports === "function") {
-    return CSS.supports("color", candidate) ? candidate : undefined;
-  }
-  return /^(#[\da-f]{3,8}|(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)\(.+\)|[a-z]+)$/i.test(candidate)
-    ? candidate
-    : undefined;
-}
 
 export type ProductCardVariationOption = {
   label: string;
@@ -202,7 +191,11 @@ export function ProductCard({
     product.productType !== "external" &&
     product.productType !== "grouped" &&
     !(product.productType === "variable" && !product.variations?.length);
-  const showLearnMore = usesAddToCartAction && !hasPrice;
+  // A variable product that's entirely out of stock (every variation unavailable) has
+  // nothing purchasable to add to cart — send shoppers to the product page instead of a
+  // dead-end "Add to cart"/"Choose options" action that only ever shows a toast.
+  const isOutOfStockVariable = product.productType === "variable" && product.inStock === false;
+  const showLearnMore = usesAddToCartAction && (!hasPrice || isOutOfStockVariable);
 
   const discountPercent = convertedRangeLabel && !selectedVariation
     ? null
@@ -419,7 +412,10 @@ export function ProductCard({
       </div>
 
       {isGallery && previewImages.length > 1 ? (
-        <div className="flex gap-1.5">
+        <div
+          className="flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 pb-1 pt-0.5"
+          aria-label={`${product.name} gallery thumbnails`}
+        >
           {previewImages.map((_, index) => (
             <button
               key={index}
@@ -427,12 +423,12 @@ export function ProductCard({
               onClick={() => setActiveImageIndex(index)}
               aria-label={`Show photo ${index + 1}`}
               aria-current={index === activeImageIndex}
-              className={`grid aspect-square flex-1 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-200 text-[0.6rem] font-medium text-zinc-400 transition dark:from-zinc-800 dark:to-zinc-900 dark:text-zinc-500 ${
+              className={`grid h-12 w-12 shrink-0 snap-start place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-200 text-[0.6rem] font-medium text-zinc-400 transition dark:from-zinc-800 dark:to-zinc-900 dark:text-zinc-500 ${
                 index === activeImageIndex ? "ring-2 ring-brand-500" : "opacity-70 hover:opacity-100"
               }`}
             >
               {previewImages[index] ? (
-                <ResponsiveImage src={previewImages[index]} alt="" sizes="2.25rem" className="block h-full w-full object-cover" aria-hidden="true" />
+                <ResponsiveImage src={previewImages[index]} alt="" sizes="3rem" className="block !h-full !w-full object-cover" aria-hidden="true" />
               ) : (
                 <span className="grid h-full w-full place-items-center">{index + 1}</span>
               )}

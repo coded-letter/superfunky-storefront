@@ -48,6 +48,8 @@ export type SocialFeedGridProps = {
   defaultLoadMode?: SocialFeedLoadMode;
   emptyMessage?: string;
   toolbarEnd?: ReactNode;
+  /** Forwarded to each `SocialPostCard` — see its docs for behavior. */
+  onToggleLike?: (post: SocialPostCardData) => Promise<{ liked: boolean; likesCount: number }>;
 };
 
 /**
@@ -69,6 +71,7 @@ export function SocialFeedGrid({
   defaultLoadMode = "manual",
   emptyMessage = "No posts yet — be the first to share something here.",
   toolbarEnd,
+  onToggleLike,
 }: SocialFeedGridProps) {
   const [layout, setLayout] = useState<SocialFeedLayout>(defaultLayout);
   const [loadMode, setLoadMode] = useState<SocialFeedLoadMode>(defaultLoadMode);
@@ -235,10 +238,10 @@ export function SocialFeedGrid({
             {visiblePosts.map((post, index) => (
               <div
                 key={post.id}
-                className={layout === "masonry" ? "mb-4 break-inside-avoid" : "animate-rise-in"}
+                className={layout === "masonry" ? "mb-4 break-inside-avoid" : "animate-rise-in flex h-full w-full items-stretch justify-center"}
                 style={layout === "masonry" ? undefined : { animationDelay: `${index * 30}ms`, animationFillMode: "backwards" }}
               >
-                <SocialPostCard post={post} layout={layout} imageLoading={index < 4 ? "eager" : "lazy"} />
+                <SocialPostCard post={post} layout={layout} imageLoading={index < 4 ? "eager" : "lazy"} onToggleLike={onToggleLike} />
               </div>
             ))}
           </div>
