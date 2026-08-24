@@ -268,6 +268,20 @@ const STATIC_RECENT_ORDERS_QUERY = `
         itemCount
         intervalSeconds
         quietSeconds
+        openLinksInNewTab
+      }
+    }
+  }
+`;
+
+const STATIC_RECENT_ORDERS_CADENCE_QUERY = `
+  query StorefrontStaticRecentOrdersCadence($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      recentOrders {
+        enabled
+        itemCount
+        intervalSeconds
+        quietSeconds
       }
     }
   }
@@ -374,6 +388,7 @@ const DEFAULT_STATIC_CHROME = {
     itemCount: 5,
     intervalSeconds: 10,
     quietSeconds: 8,
+    openLinksInNewTab: true,
   },
   paymentGatewayCache: {
     gateways: [],
@@ -710,18 +725,30 @@ async function discoverStaticChrome() {
   } catch (error) {
     try {
       recentOrders = await requestGraphql(
-        STATIC_RECENT_ORDERS_LEGACY_QUERY,
+        STATIC_RECENT_ORDERS_CADENCE_QUERY,
         { language: defaultLanguage },
-        "legacy storefront recent-order controls",
+        "storefront recent-order cadence controls",
         { attempts: 1 },
       );
       console.warn(
-        `Recent-order quiet-time controls are unavailable on this backend; using the default quiet interval: ${error instanceof Error ? error.message : String(error)}`,
+        `Recent-order link-target controls are unavailable on this backend; using the safe new-tab default: ${error instanceof Error ? error.message : String(error)}`,
       );
-    } catch (legacyError) {
-      console.warn(
-        `Recent-order controls unavailable; keeping notifications disabled: ${legacyError instanceof Error ? legacyError.message : String(legacyError)}`,
-      );
+    } catch (cadenceError) {
+      try {
+        recentOrders = await requestGraphql(
+          STATIC_RECENT_ORDERS_LEGACY_QUERY,
+          { language: defaultLanguage },
+          "legacy storefront recent-order controls",
+          { attempts: 1 },
+        );
+        console.warn(
+          `Recent-order quiet-time controls are unavailable on this backend; using the default quiet interval: ${cadenceError instanceof Error ? cadenceError.message : String(cadenceError)}`,
+        );
+      } catch (legacyError) {
+        console.warn(
+          `Recent-order controls unavailable; keeping notifications disabled: ${legacyError instanceof Error ? legacyError.message : String(legacyError)}`,
+        );
+      }
     }
   }
   const decorationBranding = decoration?.data?.storefrontConfig?.branding;
@@ -770,6 +797,7 @@ async function discoverStaticChrome() {
       itemCount: Math.max(1, Math.min(10, Number(recentOrdersConfig?.itemCount) || 5)),
       intervalSeconds: Math.max(3, Math.min(300, Number(recentOrdersConfig?.intervalSeconds) || 10)),
       quietSeconds: Math.max(2, Math.min(300, Number(recentOrdersConfig?.quietSeconds) || 8)),
+      openLinksInNewTab: recentOrdersConfig?.openLinksInNewTab !== false,
     },
     paymentGatewayCache: {
       gateways: Array.isArray(gatewayNodes) ? gatewayNodes : [],
@@ -1464,7 +1492,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${staticChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -1688,7 +1716,14 @@ function renderStaticFooter(route) {
   const footerItems = routeFooterItems.length
     ? routeFooterItems
     : staticChromeConfig.navigationItems.slice(0, 4);
-  if (!footerItems.length) return "";
+  if (!footerItems.length) {
+    footerItems.push({
+      id: "home",
+      label: route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home",
+      href: normalizeLanguageRoutePath("/", route.lang, configuredLanguageCodes),
+      children: [],
+    });
+  }
   const columns = footerItems.map((item) => {
     const children = item.children || [];
     return `<div class="storefront-static-footer-column">

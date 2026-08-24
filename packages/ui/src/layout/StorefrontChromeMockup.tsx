@@ -19,6 +19,7 @@ export type StorefrontChromeMockupProps = {
   primaryNavigation?: HeaderNavItem[];
   mobileNavigation?: HeaderNavItem[];
   footerColumns?: FooterColumn[];
+  hideNavigation?: boolean;
   search?: SearchAutocompleteProps["search"];
   onNewsletterSubscribe?: (email: string, source?: "newsletter-popup" | "newsletter-footer") => Promise<void>;
   onPushToggle?: () => void;
@@ -116,6 +117,7 @@ function StorefrontChromeShell({
   primaryNavigation,
   mobileNavigation,
   footerColumns,
+  hideNavigation,
   search,
   onNewsletterSubscribe,
   onPushToggle,
@@ -208,6 +210,7 @@ function StorefrontChromeShell({
       <HeaderMockup
         primaryNavigation={primaryNavigation}
         mobileNavigation={mobileNavigation}
+        hideNavigation={hideNavigation}
         homePath={homePath}
         announcementHtml={storefrontConfig?.branding.promoHtml ?? ""}
         projectName={storefrontConfig?.branding.storeName}

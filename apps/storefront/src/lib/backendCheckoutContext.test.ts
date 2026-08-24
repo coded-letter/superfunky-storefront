@@ -7,6 +7,7 @@ const checkoutContextPath = new URL(
   import.meta.url,
 );
 const checkoutContext = readFileSync(checkoutContextPath, "utf8");
+const checkoutPage = readFileSync(new URL("../pages/CheckoutMockupPage.tsx", import.meta.url), "utf8");
 
 test("checkout registration recognizes encoded Store API rest_route URLs", () => {
   assert.match(
@@ -14,6 +15,10 @@ test("checkout registration recognizes encoded Store API rest_route URLs", () =>
     /rawurldecode\(\s*wp_unslash\(\s*\$_SERVER\['REQUEST_URI'\]/,
   );
   assert.match(checkoutContext, /woocommerce_checkout_registration_enabled/);
+  assert.match(checkoutContext, /woocommerce_checkout_registration_required/);
+  assert.match(checkoutContext, /option_woocommerce_enable_guest_checkout/);
+  assert.match(checkoutContext, /array\( 'guest', 'optional', 'required' \)/);
+  assert.match(checkoutContext, /\$request->set_param\( 'create_account', \$create_account \)/);
 });
 
 test("Woo Stripe order reconciliation is CORS-enabled for the headless storefront", () => {
@@ -34,6 +39,21 @@ test("checkout-created customers are linked to their order", () => {
   assert.match(checkoutContext, /claim-customer/);
   assert.match(checkoutContext, /funkycommerce_can_claim_checkout_order/);
   assert.match(checkoutContext, /funkycommerce_order_already_claimed/);
+  assert.match(checkoutContext, /wp_new_user_notification\( \$customer_id, null, 'user' \)/);
+  assert.match(checkoutContext, /woocommerce_email_enabled_customer_new_account/);
+  assert.match(checkoutContext, /woocommerce_created_customer/);
+  assert.match(checkoutContext, /_funkycommerce_checkout_account_notification_sent/);
+});
+
+test("the storefront follows the backend account mode and retries automatic login after checkout errors", () => {
+  assert.match(checkoutPage, /checkoutPresentation\?\.accountMode/);
+  assert.match(checkoutPage, /accountMode === "guest"/);
+  assert.match(checkoutPage, /accountMode === "optional"/);
+  assert.match(checkoutPage, /accountMode === "required"/);
+  assert.match(
+    checkoutPage,
+    /if \(shouldCreateAccount\) \{[\s\S]*?const auth = await login\(normalizedUsername, accountPassword\);[\s\S]*?if \(result\.order\)/,
+  );
 });
 
 test("BLIK reconciliation verifies Stripe and uses Woo Stripe's webhook handler", () => {

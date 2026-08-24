@@ -323,9 +323,11 @@ test("does not treat direct LOCATION resolver errors as schema compatibility fai
 
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
-test("keeps the built-in storefront mock menu as fallback when the backend has no menus", () => {
-  assert.match(appSource, /const headerNavigation = Array\.isArray\(data\?\.header\) && data\.header\.length \? data\.header : undefined;/);
-  assert.match(appSource, /const footerColumns = Array\.isArray\(data\?\.footer\) && data\.footer\.length \? data\.footer : undefined;/);
+test("uses a localized Home-only fallback when a configured backend has no menus", () => {
+  assert.match(appSource, /const homeNavigation = \[\{ label: t\("nav\.home"\), href: homePath \}\];/);
+  assert.match(appSource, /isBackendConfigured\s*\?\s*homeNavigation\s*:\s*undefined/);
+  assert.match(appSource, /isBackendConfigured\s*\?\s*\[\{ title: t\("nav\.home"\), links: homeNavigation \}\]\s*:\s*undefined/);
+  assert.match(appSource, /hideNavigation=\{hideCheckoutNavigation\}/);
 });
 
 function buildRawItem(
