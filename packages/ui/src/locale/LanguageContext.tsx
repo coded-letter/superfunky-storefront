@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  LANGUAGE_OPTIONS,
+  resolveBootstrapLanguageOptions,
   resolveInitialLanguage,
   resolveSyncedLanguageCode,
   shouldRenderLanguageSwitcher,
@@ -26,14 +26,17 @@ const STORAGE_KEY = "funkycommerce-language";
 const BACKEND_OPTIONS_STORAGE_KEY = "funkycommerce-language-options";
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-function getInitialLanguage(languageOptions: LanguageOption[]): { languageCode: string; hasLanguagePreference: boolean } {
+function getInitialLanguage(
+  languageOptions: LanguageOption[],
+  readStoredPreference = true,
+): { languageCode: string; hasLanguagePreference: boolean } {
   if (typeof window === "undefined") {
     return resolveInitialLanguage(null, null, languageOptions);
   }
 
   try {
     return resolveInitialLanguage(
-      window.localStorage.getItem(STORAGE_KEY),
+      readStoredPreference ? window.localStorage.getItem(STORAGE_KEY) : null,
       document.documentElement.lang,
       languageOptions,
     );
@@ -75,8 +78,16 @@ export function persistBackendLanguageOptions(options: LanguageOption[]): void {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [initialBackendOptions] = useState(readPersistedBackendLanguageOptions);
-  const initialLanguageOptions = initialBackendOptions?.length ? initialBackendOptions : LANGUAGE_OPTIONS;
-  const [language, setLanguage] = useState(() => getInitialLanguage(initialLanguageOptions));
+  const [renderedDocumentLanguage] = useState(() =>
+    typeof document === "undefined" ? null : document.documentElement.lang
+  );
+  const initialLanguageOptions = resolveBootstrapLanguageOptions(
+    initialBackendOptions,
+    renderedDocumentLanguage,
+  );
+  const [language, setLanguage] = useState(() =>
+    getInitialLanguage(initialLanguageOptions, initialBackendOptions?.length !== 0)
+  );
   const [languageOptions, setLanguageOptions] = useState(initialLanguageOptions);
   const [hasBackendLanguageOptions, setHasBackendLanguageOptions] = useState(initialBackendOptions !== null);
   const [backendLanguageOptions, setBackendLanguageOptions] = useState(initialBackendOptions || []);
@@ -120,8 +131,18 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     });
   }, [languageOptions]);
   const syncLanguageOptions = useCallback((options: LanguageOption[]) => {
-    const resolvedOptions = options.length ? options : [LANGUAGE_OPTIONS[0]];
+    const resolvedOptions = resolveBootstrapLanguageOptions(
+      options,
+      renderedDocumentLanguage,
+    );
     persistBackendLanguageOptions(options);
+    if (!options.length) {
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // A stale preference remains harmless while the cached backend options are empty.
+      }
+    }
     setLanguageOptions(resolvedOptions);
     setBackendLanguageOptions(options);
     setHasBackendLanguageOptions(true);
@@ -132,11 +153,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         resolvedOptions,
       );
       currentLanguageCode.current = languageCode;
+      const hasLanguagePreference =
+        options.length > 0
+        && current.hasLanguagePreference
+        && languageCode === current.languageCode;
       return languageCode === current.languageCode
+        && hasLanguagePreference === current.hasLanguagePreference
         ? current
-        : { languageCode, hasLanguagePreference: false };
+        : { languageCode, hasLanguagePreference };
     });
-  }, []);
+  }, [renderedDocumentLanguage]);
 
   useEffect(() => {
     document.documentElement.lang = language.languageCode;
