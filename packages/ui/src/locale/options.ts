@@ -76,6 +76,20 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { code: "ja", label: "日本語", flagCode: getLanguageFlagCode("ja"), backendCode: "JA" },
 ];
 
+export function resolveBootstrapLanguageOptions(
+  persistedBackendOptions: LanguageOption[] | null,
+  documentLanguage: string | null | undefined,
+): LanguageOption[] {
+  if (persistedBackendOptions === null) return LANGUAGE_OPTIONS;
+  if (persistedBackendOptions.length) return persistedBackendOptions;
+
+  const renderedLanguage = documentLanguage?.split("-")[0]?.toLowerCase();
+  return [
+    LANGUAGE_OPTIONS.find(({ code }) => code === renderedLanguage)
+      ?? LANGUAGE_OPTIONS[0],
+  ];
+}
+
 export function resolveInitialLanguage(
   storedLanguage: string | null | undefined,
   documentLanguage: string | null | undefined,
