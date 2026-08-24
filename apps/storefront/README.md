@@ -99,8 +99,7 @@ The generated class set is a build artifact, so publishing or changing a CMS-aut
 utility requires a storefront rebuild. Keep the site's Netlify `WordPress` build hook
 configured in Control Center; public-content saves already trigger that hook after the
 existing one-minute debounce. Hook URLs stay in WordPress and Netlify and must not be
-committed. If an internal preview site is not managed by `sites.json`, configure its
-credential-free `VITE_GRAPHQL_ENDPOINT` directly in Netlify.
+committed. Configure its credential-free `VITE_GRAPHQL_ENDPOINT` directly in Netlify.
 
 ## CMS code and bundled behaviors
 
@@ -186,33 +185,10 @@ and newsletter UI, and visiting a CMS documentation page. Violations raised insi
 Spotify, or other cross-origin iframe documents belong to that framed origin and cannot be
 controlled by the parent storefront CSP.
 
-## Managed Netlify sites
+## Standalone Netlify deployments
 
-The controlled Frontend-as-a-Service fleet is declared in
-[`sites.json`](/workspace/frontend/sites.json). Each entry uses this same storefront
-release and supplies only its public backend connection values. From the
-[`workspace/frontend`](/workspace/frontend) workspace:
-
-```bash
-pnpm sites:check
-NETLIFY_AUTH_TOKEN=... pnpm sites:plan
-NETLIFY_AUTH_TOKEN=... pnpm sites:apply
-```
-
-`sites:check` uses public GraphQL operations rather than schema introspection. Every
-backend must expose standard page/post content; `shop` profiles additionally require a
-WooCommerce catalog and cart-token CORS. Polylang and SEO are detected but optional, and
-the `shell`, `blog`, and `shop` profiles document the dependency combinations covered by
-the compatibility suite. `sites:plan` is read-only and reports Netlify
-drift. Run `sites:apply` only after the readiness check, a local build, and a Netlify
-draft deploy have passed QA. The sync is idempotent: existing sites are
-looked up by ID or name, build settings and allowlisted environment variables are
-reconciled, and one CMS build hook is ensured per site. Build-hook URLs remain in
-Netlify and the WordPress Control Center; they are never stored in this repository.
-
-To add a client, copy a matching `shell`, `blog`, or `shop` entry, choose a unique key and
-Netlify site name, set the HTTPS GraphQL endpoint and optional custom domain, then run the plan.
-Do not add backend credentials or secret Stripe keys to the manifest.
+Configure the public `VITE_GRAPHQL_ENDPOINT` directly in Netlify. Build-hook URLs
+and provider credentials belong in WordPress or Netlify and must never be committed.
 
 The production generator also consumes the Control Center's public static-generation
 configuration. It creates or removes the sitemap, custom robots file, `llms.txt`,

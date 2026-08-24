@@ -42,6 +42,7 @@ import {
   createShellManifest,
   publishShellManifestForMode,
 } from "./artifact-publish.mjs";
+
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
   "utf8",
