@@ -3,13 +3,21 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { filterCommunityPostsByLanguage, withoutCommunityLocalizationFields } from "./community.ts";
+import {
+  communityPostSlugFromUri,
+  filterCommunityPostsByLanguage,
+  withoutCommunityLocalizationFields,
+} from "./community.ts";
 
 const communitySource = readFileSync(fileURLToPath(new URL("./community.ts", import.meta.url)), "utf8");
 const authorSource = readFileSync(fileURLToPath(new URL("./authors.ts", import.meta.url)), "utf8");
 const authorPageSource = readFileSync(fileURLToPath(new URL("../pages/AuthorMockupPage.tsx", import.meta.url)), "utf8");
 const communityBackendSource = readFileSync(
   fileURLToPath(new URL("../../../../../backend/wordpress/themes/free/funkycommerce-headless/inc/community.php", import.meta.url)),
+  "utf8",
+);
+const multilingualBackendSource = readFileSync(
+  fileURLToPath(new URL("../../../../../backend/wordpress/themes/free/funkycommerce-headless/inc/multilingual-content.php", import.meta.url)),
   "utf8",
 );
 
@@ -22,6 +30,35 @@ test("community collections retain only posts for the selected language", () => 
 
   assert.deepEqual(filterCommunityPostsByLanguage(posts, "pl"), [posts[0]]);
   assert.deepEqual(filterCommunityPostsByLanguage(posts, "EN"), [posts[1]]);
+});
+
+test("community post routes resolve localized unicode slugs without nodeByUri", () => {
+  assert.equal(communityPostSlugFromUri("/en/community_post/surfboards/"), "surfboards");
+  assert.equal(
+    communityPostSlugFromUri("/ja/community_post/%E3%82%B5%E3%83%BC%E3%83%95%E3%83%9C%E3%83%BC%E3%83%89/"),
+    "サーフボード",
+  );
+  assert.match(communitySource, /communityPost\(id: \$slug, idType: SLUG\)/);
+  assert.doesNotMatch(communitySource, /nodeByUri\(uri:/);
+});
+
+test("community post queries use the theme's safe multilingual fields", () => {
+  assert.match(communitySource, /language: funkycommerceLanguage \{/);
+  assert.match(communitySource, /translations: funkycommerceTranslations \{/);
+  assert.doesNotMatch(communitySource, /communityPosts\(first: 100, where: \{ language:/);
+  assert.match(multilingualBackendSource, /'funkycommerceTranslations'/);
+  assert.match(communitySource, /while \(pageInfo\.hasNextPage\)/);
+  assert.match(communitySource, /loadRemainingCommunityPosts\(data\.communityPosts/);
+  assert.match(
+    communitySource,
+    /while \(pageInfo\.hasNextPage && filterRawNodesByLanguage\(posts, languageCode\)\.length < 12\)/,
+  );
+  assert.match(communitySource, /COMMUNITY_FEED_PAGE_QUERY/);
+  assert.ok(
+    communitySource.indexOf("translationsFieldUnavailable") <
+      communitySource.indexOf("withoutCommunityLocalizationFields(compatibleQuery)"),
+    "the rolling-backend retry should remove translations before removing the supported language field",
+  );
 });
 
 test("community archives derive tags and authors only from localized posts", () => {
@@ -141,4 +178,6 @@ test("the community post detail fragment's translations block is fully removed b
   const stripped = withoutCommunityLocalizationFields(fragmentMatch[1]);
   assert.doesNotMatch(stripped, /language\s*\{/);
   assert.doesNotMatch(stripped, /translations\s*\{/);
+  assert.doesNotMatch(stripped, /funkycommerceLanguage/);
+  assert.doesNotMatch(stripped, /funkycommerceTranslations/);
 });

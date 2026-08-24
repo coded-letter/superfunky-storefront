@@ -128,6 +128,7 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
       enabled: true,
       itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
       intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
+      quietSeconds: Number(prerenderedChrome.dataset.recentOrdersQuiet),
       endpoint,
     })
     .catch((error) => {

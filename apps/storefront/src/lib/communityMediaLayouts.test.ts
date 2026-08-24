@@ -28,6 +28,8 @@ test("community grid cards cover their locked aspect while compact thumbnails re
   assert.match(card, /fit="cover"[\s\S]*lockAspect=\{layout !== "masonry"\}/);
   assert.match(gallery, /object-contain object-right/);
   assert.match(gallery, /object-cover/);
+  assert.match(gallery, /block !h-full !w-full max-w-none object-cover/);
+  assert.match(gallery, /block !h-full !w-full max-w-none bg-black object-center/);
   assert.match(gallery, /style=\{lockAspect \? undefined : \{ aspectRatio: activeAspect \}\}/);
   assert.match(gallery, /relative h-full w-full min-h-0 min-w-0/);
 });

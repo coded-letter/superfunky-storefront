@@ -1969,7 +1969,9 @@ function getCryptoCoinDetails(coin: string, assets: CryptoAsset[]) {
       ticker: configuredAsset.code.toUpperCase(),
       network: configuredAsset.network,
       address: configuredAsset.wallet,
-      usdRate: configuredAsset.fiatRate > 0 ? configuredAsset.fiatRate : 1,
+      usdRate: typeof configuredAsset.fiatRate === "number" && configuredAsset.fiatRate > 0
+        ? configuredAsset.fiatRate
+        : 1,
       qrUrl: configuredAsset.qrUrl ?? undefined,
     };
   }
