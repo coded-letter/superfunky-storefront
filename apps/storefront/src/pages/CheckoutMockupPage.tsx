@@ -21,7 +21,10 @@ import {
   type CryptoAsset,
   type PaymentSubmissionResult,
 } from "../lib/payments";
-import { withDigitalStoreApiAddress } from "../lib/checkoutContext";
+import {
+  withDigitalCheckoutAddress,
+  withDigitalStoreApiAddress,
+} from "../lib/checkoutContext";
 import { login, useIsUserLoggedIn } from "../lib/auth";
 import { getStorefrontAccount } from "../lib/account";
 import { claimCheckoutOrder } from "../lib/checkoutAccount";
@@ -681,6 +684,9 @@ export function CheckoutMockupPage() {
       email: billingEmail,
       phone: billingPhone,
     };
+    const paymentBilling = shouldHideShipping
+      ? withDigitalCheckoutAddress(billing)
+      : billing;
     const shippingDetails: CheckoutBillingDetails | undefined =
       shipToDifferentAddress && !shouldHideShipping
         ? {
@@ -717,7 +723,7 @@ export function CheckoutMockupPage() {
         return;
       }
       try {
-        const preparedPayment = await controller.createPaymentMethod(billing);
+        const preparedPayment = await controller.createPaymentMethod(paymentBilling);
         stripePaymentMethodId = preparedPayment.paymentMethodId;
         stripePaymentType = preparedPayment.selectedPaymentType;
       } catch (error) {
@@ -726,7 +732,7 @@ export function CheckoutMockupPage() {
         return;
       }
     } else if (paymentMethod === "blik") {
-      const preparedPayment = await createBlikPaymentMethod(billing);
+      const preparedPayment = await createBlikPaymentMethod(paymentBilling);
       if (!preparedPayment.ok) {
         setOrderSubmitting(false);
         setOrderError(preparedPayment.error);
@@ -741,7 +747,7 @@ export function CheckoutMockupPage() {
       : paymentMethod === "crypto"
         ? "funkycommerce_crypto"
         : paymentMethod;
-    let result: PaymentSubmissionResult = await submitCheckoutWithAccount(billing, gateway, {
+    let result: PaymentSubmissionResult = await submitCheckoutWithAccount(paymentBilling, gateway, {
       createAccount: shouldCreateAccount,
       accountUsername: shouldCreateAccount ? normalizedUsername : undefined,
       customerPassword: shouldCreateAccount ? accountPassword : undefined,
