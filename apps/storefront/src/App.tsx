@@ -564,27 +564,6 @@ function LayoutStudioSessionControls() {
   );
 }
 
-/** Gates a route to authenticated WordPress administrators. Checks the
- *  server-backed `viewer.capabilities` (from `useCommunityData()`, sourced via
- *  an authenticated GraphQL query) for the `manage_options` capability — never
- *  local storage or client-only state — so non-admins (including anonymous
- *  visitors) always resolve to the normal not-found surface, both for direct
- *  navigation and for nav-link visibility (see `AccountMockupPage`'s
- *  `canManageLayouts`). */
-function AdminCapabilityRoute({ children }: { children: ReactNode }) {
-  const { viewer, isViewerLoading } = useCommunityData();
-
-  if (isViewerLoading) {
-    return <main aria-busy="true" className="mx-auto min-h-[45vh] w-full max-w-7xl px-4 py-16" />;
-  }
-
-  if (!viewer?.capabilities.includes("manage_options")) {
-    return <NotFoundMockupPage />;
-  }
-
-  return children;
-}
-
 function HiddenPresentationRoute({ title, children }: { title: string; children: ReactNode }) {
   return (
     <>

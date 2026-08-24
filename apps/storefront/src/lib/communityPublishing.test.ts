@@ -86,7 +86,7 @@ test("community MP4 media is visible in native feeds and WordPress admin", () =>
 test("headless community feeds invalidate legacy media caches", () => {
   const fullQuery = communitySource.match(/const COMMUNITY_QUERY[\s\S]*?`;/)?.[0] || "";
   const feedQuery = communitySource.match(/const COMMUNITY_FEED_QUERY[\s\S]*?`;/)?.[0] || "";
-  assert.match(communityDataSource, /"feed:v1" : "v10"/);
+  assert.match(communityDataSource, /"feed:v1" : "v11"/);
   assert.match(communityDataSource, /getCommunityFeedData/);
   assert.match(communityDataSource, /feedOnly/);
   assert.match(communitySource, /query StorefrontCommunityFeed/);

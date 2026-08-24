@@ -146,7 +146,7 @@ test("localized commerce queries scope categories and brands with core-schema fa
   );
   assert.match(
     commerceSource,
-    /localizedProducts:\s*products\(first:\s*24,\s*where:\s*\{\s*\$\{productFilter\}:\s*\$taxonomySlug,\s*language:\s*\$language\s*\}\)/,
+    /localizedProducts:\s*products\(first:\s*\$first,\s*after:\s*\$after,\s*where:\s*\{\s*\$\{productFilter\}:\s*\$taxonomySlug,\s*language:\s*\$language\s*\}\)/,
   );
   assert.match(
     commerceSource,
@@ -259,7 +259,7 @@ test("brand archive term fallback preserves language-scoped products before core
   assert.deepEqual(queries, ["localized terms", "localized products"]);
   assert.match(
     commerceSource,
-    /compatibleLocalizedBrandArchiveQuery[\s\S]*?localizedProducts:\s*products\(first:\s*24,\s*where:\s*\{\s*productBrand:\s*\$brandSlug,\s*language:\s*\$language\s*\}\)/,
+    /compatibleLocalizedBrandArchiveQuery[\s\S]*?localizedProducts:\s*products\(first:\s*\$first,\s*after:\s*\$after,\s*where:\s*\{\s*productBrand:\s*\$brandSlug,\s*language:\s*\$language\s*\}\)/,
   );
 });
 

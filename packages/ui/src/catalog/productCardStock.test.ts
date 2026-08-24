@@ -4,7 +4,7 @@ import test from "node:test";
 
 const card = readFileSync(new URL("./ProductCard.tsx", import.meta.url), "utf8");
 
-test("a fully out-of-stock variable product's CTA reads Learn more and links to the product page", () => {
+test("a fully out-of-stock variable product uses the Learn more CTA and product link", () => {
   // Every variation being unavailable leaves nothing purchasable — the card must offer
   // navigation to the full product page instead of an "Add to cart"/"Choose options"
   // action whose only effect is a "Variation unavailable" toast.
@@ -20,7 +20,7 @@ test("a fully out-of-stock variable product's CTA reads Learn more and links to 
   // The CTA render branch already resolves "Learn more" + a real <Link> to the product
   // page whenever `showLearnMore` is true, so feeding the out-of-stock case into that
   // same flag is enough to fix both the label and the navigation behavior.
-  assert.match(card, /showLearnMore\s*\?\s*"Learn more"/);
+  assert.match(card, /showLearnMore\s*\?\s*t\("product\.cta\.learn_more"\)/);
   const ctaMarkup = card.slice(card.indexOf("{!isSimple ? ("), card.indexOf("{quickViewEnabled && isQuickViewOpen"));
   assert.match(
     ctaMarkup,

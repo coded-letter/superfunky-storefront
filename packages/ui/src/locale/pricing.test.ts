@@ -31,7 +31,7 @@ test("includes Bitcoin and Ethereum in the fallback currency catalog", () => {
       .map(({ code, label, symbol }) => ({ code, label, symbol })),
     [
       { code: "BTC", label: "Bitcoin", symbol: "₿" },
-      { code: "ETH", label: "Ethereum", symbol: "⟠" },
+      { code: "ETH", label: "Ethereum", symbol: "Ξ" },
     ],
   );
 });
