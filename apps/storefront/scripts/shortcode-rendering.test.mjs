@@ -124,7 +124,7 @@ test("fullbleed hero fills its height and aligns copy to the theme gutter", asyn
   // same theme radius as every other hero variant.
   assert.match(fullbleed, /fullWidth \? breakoutClassName : ""/);
   assert.match(hero, /borderRadius: fullWidth \? 0 : "var\(--theme-radius\)"/);
-  assert.match(fullbleed, /absolute inset-0 !h-full !w-full max-w-none !rounded-none object-cover/);
+  assert.match(fullbleed, /absolute inset-0 block !h-full !w-full max-w-none !rounded-none object-cover object-center/);
   assert.match(fullbleed, /mx-auto w-full px-4 sm:px-6 lg:px-8/);
   assert.match(fullbleed, /relative grid max-w-xl gap-4 py-8 sm:py-12/);
   assert.doesNotMatch(fullbleed, /line-clamp-3 max-w-lg/);
@@ -166,8 +166,19 @@ test("hero supports compact editor aliases and strip background images", async (
   assert.match(shortcodes, /toInteger\(attributes\["page-size"\]/);
   assert.match(shortcodes, /description=\{attributes\.p \|\| attributes\.description/);
   assert.match(shortcodes, /resolveShortcodeImage\(attributes\.bgimg \|\| attributes\["bg-image"\] \|\| attributes\.image \|\| attributes\["background-image"\]/);
-  assert.match(strip, /className="absolute inset-0 h-full w-full object-cover"/);
+  assert.match(strip, /className="absolute inset-0 block !h-full !w-full max-w-none object-cover object-center"/);
   assert.match(strip, /bg-zinc-950\/65/);
+});
+
+test("hero background media always fills and centers its mobile frame", async () => {
+  const [hero, styles] = await Promise.all([
+    readFile(new URL("src/components/HeroMock.tsx", appRoot), "utf8"),
+    readFile(new URL("src/styles.css", appRoot), "utf8"),
+  ]);
+
+  assert.match(hero, /pointer-events-none absolute inset-0 block !h-full !w-full max-w-none scale-105 object-cover object-center/);
+  assert.match(hero, /block !h-full !w-full max-w-none object-cover object-center/);
+  assert.match(styles, /\.shortcode-prerender-hero__image \{[\s\S]*object-fit: cover !important;[\s\S]*object-position: center !important;/);
 });
 
 test("slider product cards keep equal heights and crop media independently of source aspect", async () => {

@@ -18,24 +18,24 @@ export function WishlistMockupPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-5 dark:border-zinc-800">
         <div className="grid gap-1">
-          <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Wishlist</h1>
+          <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t("nav.wishlist")}</h1>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            {ids.length} saved {ids.length === 1 ? "product" : "products"}
-            {cap ? ` of ${cap}` : ""} · {isLoggedIn ? "synced to your account" : "persisted locally in this browser"}.
+            {t("wishlist.count", { count: ids.length, item: ids.length === 1 ? t("wishlist.item_singular") : t("wishlist.item_plural") })}
+            {cap ? ` ${t("wishlist.cap_suffix", { cap })}` : ""} · {isLoggedIn ? t("wishlist.sync_synced") : t("wishlist.sync_local")}.
           </p>
-          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">Sign in</Link> to sync your wishlist across devices.</p> : null}
+          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">{t("auth.login.cta")}</Link> {t("wishlist.sign_in_suffix")}</p> : null}
         </div>
       </div>
-      {syncError ? <SavedCollectionStatus message={`Your wishlist could not be synced: ${syncError}`} /> : null}
-      {capError ? <SavedCollectionStatus message={`Your wishlist limit could not be loaded: ${capError}`} /> : null}
+      {syncError ? <SavedCollectionStatus message={t("wishlist.sync_error", { error: syncError })} /> : null}
+      {capError ? <SavedCollectionStatus message={t("wishlist.cap_error", { error: capError })} /> : null}
       {ids.length > 0 && isLoading ? <ContentLoadingState compact label={t("wishlist.loading")} /> : null}
       {ids.length > 0 && error ? (
-        <SavedCollectionStatus message={`Your saved products could not be loaded: ${error.message}`} />
+        <SavedCollectionStatus message={t("wishlist.load_error", { message: error.message })} />
       ) : null}
       {!isLoading && !error && ids.length > 0 && items.length === 0 ? (
         <SavedCollectionStatus
-          message="These saved products are no longer available in the current catalog."
-          actionLabel="Clear unavailable products"
+          message={t("wishlist.unavailable_message")}
+          actionLabel={t("wishlist.clear_unavailable")}
           onAction={clear}
         />
       ) : null}
@@ -47,14 +47,14 @@ export function WishlistMockupPage() {
           <div className="grid gap-1">
             <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("wishlist.empty")}</h2>
             <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-              Tap the heart icon on any product card to save it here for later — it stays saved across visits.
+              {t("wishlist.empty_hint")}
             </p>
           </div>
           <Link
             to={shopPath}
             className="rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
           >
-            Browse the shop
+            {t("wishlist.browse_shop")}
           </Link>
         </div>
       ) : !isLoading && !error && items.length > 0 ? (

@@ -32,7 +32,7 @@ function buildShareLinks(title: string, pageUrl: string) {
  * "copy link" action with inline confirmation. */
 export function ShareButtonsRow({
   title,
-  label = "Share",
+  label,
   variant = "default",
 }: {
   title: string;
@@ -42,6 +42,7 @@ export function ShareButtonsRow({
   variant?: "default" | "on-image";
 }) {
   const t = useT();
+  const resolvedLabel = label ?? t("share.label");
   const [isCopied, setIsCopied] = useState(false);
   const pageUrl = window.location.href;
   const links = buildShareLinks(title, pageUrl);
@@ -52,16 +53,16 @@ export function ShareButtonsRow({
       : "inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400";
 
   const brandTargets: { key: keyof typeof links; label: string }[] = [
-    { key: "x", label: "Share on X" },
-    { key: "facebook", label: "Share on Facebook" },
-    { key: "linkedin", label: "Share on LinkedIn" },
-    { key: "tiktok", label: "Share on TikTok" },
+    { key: "x", label: t("share.on.x") },
+    { key: "facebook", label: t("share.on.facebook") },
+    { key: "linkedin", label: t("share.on.linkedin") },
+    { key: "tiktok", label: t("share.on.tiktok") },
   ];
 
   const lucideTargets: { key: keyof typeof links; label: string; Icon: typeof Send; external: boolean }[] = [
-    { key: "telegram", label: "Share on Telegram", Icon: Send, external: true },
-    { key: "whatsapp", label: "Share on WhatsApp", Icon: MessageCircle, external: true },
-    { key: "email", label: "Share via email", Icon: Mail, external: false },
+    { key: "telegram", label: t("share.on.telegram"), Icon: Send, external: true },
+    { key: "whatsapp", label: t("share.on.whatsapp"), Icon: MessageCircle, external: true },
+    { key: "email", label: t("share.via_email"), Icon: Mail, external: false },
   ];
 
   const handleCopyLink = async () => {
@@ -77,7 +78,7 @@ export function ShareButtonsRow({
   return (
     <div className="grid gap-2">
       <span className={labelClass}>
-        <Share2 className="h-3.5 w-3.5" aria-hidden="true" /> {label}
+        <Share2 className="h-3.5 w-3.5" aria-hidden="true" /> {resolvedLabel}
       </span>
       <div className="flex flex-wrap items-center gap-2">
         {brandTargets.map((target) => (
@@ -125,7 +126,7 @@ export function ShareButtonsRow({
           )}
         </button>
         {isCopied ? (
-          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Link copied!</span>
+          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{t("share.link_copied")}</span>
         ) : null}
       </div>
     </div>

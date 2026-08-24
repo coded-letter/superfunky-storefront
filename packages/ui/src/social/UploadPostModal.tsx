@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Film, ImagePlus, Languages, Trash2, Upload, X } from "lucide-react";
+import { useT } from "../locale";
 import { useToast } from "../state";
 
 const SUPPORTED_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4"]);
@@ -61,6 +62,7 @@ export function UploadPostModal({
   defaultLanguageCode = "en",
   searchTranslationCandidates,
 }: UploadPostModalProps) {
+  const t = useT();
   const { showToast } = useToast();
   const [title, setTitle] = useState(initialValues?.title || "");
   const [description, setDescription] = useState(initialValues?.description || "");
@@ -124,7 +126,7 @@ export function UploadPostModal({
       const additions = await Promise.all(files.map(readMediaFile));
       setMedia((current) => [...current, ...additions].slice(0, MAX_MEDIA_COUNT));
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The selected media could not be read.");
+      setSubmitError(error instanceof Error ? error.message : t("community.media.read_error"));
     }
   };
 
@@ -161,7 +163,7 @@ export function UploadPostModal({
         .catch((error) => {
           if (!cancelled) {
             setTranslationCandidates([]);
-            setTranslationSearchError(error instanceof Error ? error.message : "Translation search failed.");
+            setTranslationSearchError(error instanceof Error ? error.message : t("community.translation.search_error"));
           }
         })
         .finally(() => {
@@ -188,8 +190,8 @@ export function UploadPostModal({
         translationOfId,
       });
       showToast({
-        title: isEditing ? "Post updated" : "Post published",
-        description: isEditing ? "Your changes are now live." : "Your community post is now live.",
+        title: isEditing ? t("community.post.updated") : t("community.post.published"),
+        description: isEditing ? t("community.changes_live") : t("community.post.live"),
         tone: "success",
       });
       onClose();
@@ -218,7 +220,7 @@ export function UploadPostModal({
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          aria-label="Close"
+          aria-label={t("community.modal.close")}
           className="absolute right-4 top-4 inline-grid h-9 w-9 place-items-center rounded-full bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -226,7 +228,7 @@ export function UploadPostModal({
 
         <div className="grid gap-1 pr-8">
           <h2 id="community-post-modal-title" className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
-            {isEditing ? "Edit community post" : "Share a new post"}
+            {isEditing ? t("community.post.edit_title") : t("community.post.create_title")}
           </h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
             Add a title and up to five ordered images or MP4 videos. The site's upload rules are checked again when you save.
@@ -274,7 +276,7 @@ export function UploadPostModal({
             <label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 p-6 text-center transition hover:border-brand-300 dark:border-zinc-700 dark:bg-zinc-950">
               <span className="grid place-items-center gap-2 text-zinc-400 dark:text-zinc-500">
                 <ImagePlus className="h-8 w-8" aria-hidden="true" />
-                <span className="text-sm font-semibold">{media.length ? "Add more media" : "Choose images or MP4 videos"}</span>
+                <span className="text-sm font-semibold">{media.length ? t("community.media.add_more") : t("community.media.choose")}</span>
                 <span className="text-xs">JPG, PNG, GIF, WebP, or MP4 · {MAX_MEDIA_COUNT - media.length} remaining</span>
               </span>
               <input type="file" multiple accept="image/jpeg,image/png,image/gif,image/webp,video/mp4" onChange={handleMediaChange} className="sr-only" />
@@ -283,31 +285,31 @@ export function UploadPostModal({
         </div>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Title</span>
+          <span>{t("community.field.title")}</span>
           <input
             type="text"
             required
             maxLength={200}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Give your post a clear title"
+            placeholder={t("community.post.title_placeholder")}
             className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-500 dark:focus:ring-brand-950"
           />
         </label>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Description <span className="font-normal text-zinc-400">(optional)</span></span>
+          <span>{t("community.field.description")} <span className="font-normal text-zinc-400">{t("checkout.field.optional")}</span></span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Add context, details, or a story"
+            placeholder={t("community.post.description_placeholder")}
             rows={4}
             className="resize-y rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-brand-500 dark:focus:ring-brand-950"
           />
         </label>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Tags</span>
+          <span>{t("community.field.tags")}</span>
           <input
             type="text"
             value={tagsInput}
@@ -377,7 +379,7 @@ export function UploadPostModal({
           className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
         >
           <Upload className="h-4 w-4" aria-hidden="true" />
-          {isSubmitting ? (isEditing ? "Saving…" : "Publishing…") : (isEditing ? "Save changes" : "Post")}
+          {isSubmitting ? (isEditing ? t("community.saving") : t("community.publishing")) : (isEditing ? t("community.save_changes") : t("community.post.submit"))}
         </button>
       </div>
     </div>,

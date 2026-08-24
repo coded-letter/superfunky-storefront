@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Download, FileArchive } from "lucide-react";
+import { useT } from "@funky/ui";
 import {
   fetchOrderDownloadFile,
   isOrderDownloadAvailable,
@@ -10,13 +11,15 @@ export function DigitalDownloadsPanel({
   downloads,
   isLoading = false,
   error,
-  emptyMessage = "This order does not include any downloadable files.",
+  emptyMessage,
 }: {
   downloads: OrderDownload[];
   isLoading?: boolean;
   error?: string | null;
   emptyMessage?: string;
 }) {
+  const t = useT();
+  const resolvedEmptyMessage = emptyMessage ?? t("order_success.download.empty");
   const [activeDownload, setActiveDownload] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -39,7 +42,7 @@ export function DigitalDownloadsPanel({
       setDownloadError(
         requestError instanceof Error
           ? requestError.message
-          : "File download failed. Please try again or contact support.",
+          : t("order_success.download.error"),
       );
     } finally {
       setActiveDownload(null);
@@ -50,13 +53,13 @@ export function DigitalDownloadsPanel({
     <section className="sf-downloads grid gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-brand-50 p-5 dark:border-emerald-500/20 dark:from-emerald-500/10 dark:to-brand-500/5">
       <h2 className="m-0 flex items-center gap-2 font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
         <FileArchive className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-        Your downloads
+        {t("order_success.downloads")}
       </h2>
-      {isLoading ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Loading secure download links…</p> : null}
+      {isLoading ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("order_success.download.loading")}</p> : null}
       {error ? <p className="m-0 text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
       {downloadError ? <p className="m-0 text-sm text-rose-600 dark:text-rose-400">{downloadError}</p> : null}
       {!isLoading && !error && downloads.length === 0 ? (
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{emptyMessage}</p>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{resolvedEmptyMessage}</p>
       ) : null}
       <div className="grid gap-3">
         {downloads.map((download) => {
@@ -77,19 +80,19 @@ export function DigitalDownloadsPanel({
                   >
                     <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     {activeDownload === `${download.orderId}-${download.productId}-${download.id}`
-                      ? "Downloading…"
-                      : "Download"}
+                      ? t("order_success.download.downloading")
+                      : t("order_success.download.cta")}
                   </button>
                 ) : (
                   <span className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                    Unavailable
+                    {t("order_success.download.unavailable")}
                   </span>
                 )}
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-100 pt-2 text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
-                <span>Order #{download.orderId}</span>
-                <span>Downloads remaining: {download.remaining === null ? "Unlimited" : download.remaining}</span>
-                <span>Expires: {formatDownloadExpiry(download.expiresAt)}</span>
+                <span>{t("order_success.order_label", { number: download.orderId })}</span>
+                <span>{t("order_success.download.remaining")} {download.remaining === null ? t("order_success.download.unlimited") : download.remaining}</span>
+                <span>{t("order_success.download.expires")} {formatDownloadExpiry(download.expiresAt, t)}</span>
               </div>
             </article>
           );
@@ -99,8 +102,8 @@ export function DigitalDownloadsPanel({
   );
 }
 
-function formatDownloadExpiry(value: string): string {
-  if (!value) return "Never";
+function formatDownloadExpiry(value: string, t: (key: string) => string): string {
+  if (!value) return t("order_success.download.never");
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp)
     ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(timestamp)

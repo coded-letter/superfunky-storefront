@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { ProductGalleryImage } from "./ProductGallery";
 import { ResponsiveImage } from "../media";
+import { useT } from "../locale";
 
 const DEFAULT_ACCENT = "from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900";
 
@@ -24,6 +25,7 @@ export type ProductImageLightboxProps = {
  * (zoom/pan/swipe/keyboard) is written against a plain element and doesn't care.
  */
 export function ProductImageLightbox({ images, startIndex, onClose, onIndexChange }: ProductImageLightboxProps) {
+  const t = useT();
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -146,14 +148,14 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
       className="sf-product-lightbox funky-product-image-lightbox fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/90 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Image viewer"
+      aria-label={t("image.viewer_aria")}
       onClick={onClose}
     >
       <div className="relative flex w-full max-w-5xl flex-col items-center" onClick={(event) => event.stopPropagation()}>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close image viewer"
+          aria-label={t("image.close")}
           className="absolute right-0 top-0 z-10 inline-grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
         >
           <X className="h-5 w-5" aria-hidden="true" />
@@ -164,7 +166,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
             <button
               type="button"
               onClick={prevImage}
-              aria-label="Previous image"
+              aria-label={t("image.prev")}
               className="absolute left-0 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-black/50 p-3 text-white shadow-lg transition hover:bg-black/70 sm:left-4 sm:flex sm:p-4"
             >
               <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -172,7 +174,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
             <button
               type="button"
               onClick={nextImage}
-              aria-label="Next image"
+              aria-label={t("image.next")}
               className="absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-black/50 p-3 text-white shadow-lg transition hover:bg-black/70 sm:right-4 sm:flex sm:p-4"
             >
               <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -221,7 +223,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
             <button
               type="button"
               onClick={prevImage}
-              aria-label="Previous image"
+              aria-label={t("image.prev")}
               className="inline-grid h-11 w-11 place-items-center rounded-full bg-black/50 text-white shadow-lg transition hover:bg-black/70"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -229,7 +231,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
             <button
               type="button"
               onClick={nextImage}
-              aria-label="Next image"
+              aria-label={t("image.next")}
               className="inline-grid h-11 w-11 place-items-center rounded-full bg-black/50 text-white shadow-lg transition hover:bg-black/70"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
@@ -246,7 +248,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
                   key={image.id}
                   type="button"
                   onClick={() => goTo(index)}
-                  aria-label={`Show ${image.label}`}
+                  aria-label={t("image.show_label", { label: image.label })}
                   aria-current={isActive}
                   className={`grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br shadow-soft transition sm:h-20 sm:w-20 ${
                     image.accentClass ?? DEFAULT_ACCENT

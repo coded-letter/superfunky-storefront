@@ -4,6 +4,7 @@ import { CurrencyMark } from "./CurrencyMark";
 import { flagIconSrc, type LanguageOption } from "./options";
 import { useCurrency } from "./CurrencyContext";
 import { useLanguage } from "./LanguageContext";
+import { useT } from "./UiStringsContext";
 
 /** Shared outside-click + Escape handling for a trigger/panel dropdown pair. */
 function useDropdown<T extends HTMLElement>() {
@@ -65,6 +66,7 @@ export type LanguageSwitcherProps = {
 };
 
 export function LanguageSwitcher({ className = "", fullWidth = false }: LanguageSwitcherProps) {
+  const t = useT();
   const { canSwitchLanguage, languageCode, languageOptions, setLanguageCode } = useLanguage();
   const selected = languageOptions.find(({ code }) => code === languageCode) ?? languageOptions[0];
   const { isOpen, setIsOpen, containerRef } = useDropdown<HTMLDivElement>();
@@ -86,7 +88,7 @@ export function LanguageSwitcher({ className = "", fullWidth = false }: Language
       </button>
 
       {isOpen ? (
-        <ul role="listbox" aria-label="Select language" className={`${getPanelClass(fullWidth)} scrollbar-thin max-h-72 overflow-y-auto`}>
+        <ul role="listbox" aria-label={t("nav.select_language")} className={`${getPanelClass(fullWidth)} scrollbar-thin max-h-72 overflow-y-auto`}>
           {languageOptions.map((language) => (
             <li key={language.code}>
               <button
@@ -118,6 +120,7 @@ export type CurrencySwitcherProps = {
 };
 
 export function CurrencySwitcher({ className = "", fullWidth = false }: CurrencySwitcherProps) {
+  const t = useT();
   const { currencyCode, currencyOptions, setCurrencyCode } = useCurrency();
   const selected = currencyOptions.find(({ code }) => code === currencyCode) ?? currencyOptions[0];
   const { isOpen, setIsOpen, containerRef } = useDropdown<HTMLDivElement>();
@@ -141,7 +144,7 @@ export function CurrencySwitcher({ className = "", fullWidth = false }: Currency
       </button>
 
       {isOpen ? (
-        <ul role="listbox" aria-label="Select currency" className={`${getPanelClass(fullWidth)} scrollbar-thin max-h-72 overflow-y-auto`}>
+        <ul role="listbox" aria-label={t("nav.select_currency")} className={`${getPanelClass(fullWidth)} scrollbar-thin max-h-72 overflow-y-auto`}>
           {currencyOptions.map((currency) => (
             <li key={currency.code}>
               <button

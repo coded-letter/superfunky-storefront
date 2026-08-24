@@ -43,16 +43,16 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
   const showLearnMore = product.productType !== "external" && product.productType !== "grouped" && product.productType !== "variable" && !hasPrice;
   const ctaLabel =
     showLearnMore
-      ? "Learn more"
+      ? t("product.cta.learn_more")
       : product.productType === "external"
         ? product.externalUrl
-          ? "Buy now"
-          : "View product"
+          ? t("product.buy_now")
+          : t("product.cta.view_product")
         : product.productType === "grouped"
-          ? "View products"
+          ? t("product.cta.view_products")
           : product.productType === "variable"
             ? t("product.select_options")
-            : "Add to cart";
+            : t("product.add_to_cart");
 
   // Lock page scroll while open, matching the image lightbox's behaviour.
   useEffect(() => {
@@ -76,7 +76,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
       className="sf-product-quick-view fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={`Quick view — ${product.name}`}
+      aria-label={t("product.cta.quick_view_aria", { name: product.name })}
       onClick={onClose}
     >
       <div
@@ -86,7 +86,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close quick view"
+          aria-label={t("nav.close_quickview")}
           className="absolute right-3 top-3 z-10 inline-grid h-9 w-9 place-items-center rounded-full bg-white/90 text-zinc-700 shadow-soft backdrop-blur transition hover:bg-white dark:bg-zinc-950/80 dark:text-zinc-200"
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -103,7 +103,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
               draggable={false}
             />
           ) : (
-            <div className="grid h-full w-full min-h-[16rem] place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">Product image</div>
+            <div className="grid h-full w-full min-h-[16rem] place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">{t("product.image_alt")}</div>
           )}
         </div>
 
@@ -134,7 +134,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                   key={url + index}
                   type="button"
                   onClick={() => setActiveImageIndex(index)}
-                  aria-label={`Show photo ${index + 1}`}
+                  aria-label={t("product.cta.show_photo_aria", { index: index + 1 })}
                   aria-current={index === activeImageIndex}
                   className={`h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-zinc-100 transition dark:bg-zinc-800 ${
                     index === activeImageIndex ? "ring-2 ring-brand-500" : "opacity-70 hover:opacity-100"
@@ -194,7 +194,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                   showToast({
                     title: t("product.added"),
                     description: product.name,
-                    action: { label: "View cart", onClick: openDrawer },
+                    action: { label: t("cart.view_cart"), onClick: openDrawer },
                   });
                   onClose();
                 }}
