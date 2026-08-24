@@ -1,6 +1,6 @@
 const CRYPTO_CURRENCY_FORMAT: Record<string, { symbol: string; decimals: number }> = {
   BTC: { symbol: "₿", decimals: 8 },
-  ETH: { symbol: "Ξ", decimals: 6 },
+  ETH: { symbol: "⟠", decimals: 6 },
 };
 
 export function formatCurrencyAmount(

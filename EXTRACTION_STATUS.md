@@ -7,6 +7,7 @@ public repository.
 |---|---|---|
 | 2025-08-03 | Full storefront + UI library | ✅ Complete — 450 files published |
 | 2026-08-14 | Static-first storefront and package architecture | ✅ Release candidate extracted |
+| 2026-08-24 | Storefront application and public workspace packages | ✅ Synchronized and deployment-ready |
 
 ## What's Included
 

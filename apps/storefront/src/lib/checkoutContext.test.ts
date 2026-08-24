@@ -89,6 +89,49 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.customer_password, "correct-horse-battery-staple");
 });
 
+test("digital checkout supplies hidden WooCommerce address placeholders", () => {
+  const payload = buildStoreCheckoutPayload(
+    {
+      firstName: "Ada",
+      lastName: "Lovelace",
+      addressLine1: "",
+      city: "",
+      postcode: "",
+      countryCode: "PL",
+      email: "ada@example.com",
+      phone: "+48 123 456 789",
+    },
+    "funkycommerce_crypto",
+    { digitalOrder: true },
+  );
+
+  assert.equal(payload.billing_address.address_1, "Digital delivery");
+  assert.equal(payload.billing_address.city, "Digital order");
+  assert.equal(payload.billing_address.postcode, "00000");
+  assert.equal(payload.billing_address.country, "PL");
+  assert.deepEqual(payload.shipping_address, payload.billing_address);
+});
+
+test("physical checkout does not invent missing address fields", () => {
+  const payload = buildStoreCheckoutPayload(
+    {
+      firstName: "Ada",
+      lastName: "Lovelace",
+      addressLine1: "",
+      city: "",
+      postcode: "",
+      countryCode: "PL",
+      email: "ada@example.com",
+      phone: "+48 123 456 789",
+    },
+    "cod",
+  );
+
+  assert.equal(payload.billing_address.address_1, "");
+  assert.equal(payload.billing_address.city, "");
+  assert.equal(payload.billing_address.postcode, "");
+});
+
 test("checkout validates a required state consistently with other address fields", () => {
   const result = validateCheckoutForm({
     firstName: "Ada",

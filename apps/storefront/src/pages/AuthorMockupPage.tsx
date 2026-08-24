@@ -13,7 +13,7 @@ import { NotFoundMockupPage } from "./NotFoundMockupPage";
 export function AuthorMockupPage() {
   const { slug = "", language: routeLanguage } = useParams();
   const [searchParams] = useSearchParams();
-  const { languageCode, languageOptions, syncLanguageCode } = useLanguage();
+  const { configuredLanguageCodes, languageCode, languageOptions, syncLanguageCode } = useLanguage();
   const { authorProfileHeaderLayout: headerLayout } = useLayoutPreferences();
   const blogPath = useStorefrontPath("blog", "/blog");
   const queryLanguage = searchParams.get("lang");
@@ -25,8 +25,13 @@ export function AuthorMockupPage() {
   const requestedLanguage = explicitLanguage || languageCode;
   const requestedBackendLanguage = languageOptions.find(({ code }) => code === requestedLanguage)?.backendCode;
   const { data: author, isLoading, error } = useIncrementalData(
-    `author:${slug}:${requestedLanguage}:${requestedBackendLanguage}`,
-    () => getAuthorArchive(slug, requestedBackendLanguage || requestedLanguage.toUpperCase()),
+    `author:${slug}:${requestedLanguage}:${requestedBackendLanguage}:${configuredLanguageCodes.join(",")}`,
+    () => getAuthorArchive(
+      slug,
+      requestedBackendLanguage || requestedLanguage.toUpperCase(),
+      requestedLanguage,
+      configuredLanguageCodes,
+    ),
   );
 
   useEffect(() => {

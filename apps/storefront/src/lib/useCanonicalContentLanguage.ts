@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useLanguage } from "@funky/ui";
+import { normalizeLanguagePath, useLanguage } from "@funky/ui";
+import { mergeKnownRoutes, samePath, toInternalPath } from "./canonicalContentRoutes";
 
 type ContentTranslation = {
   languageCode: string;
@@ -13,12 +14,14 @@ export function useCanonicalContentLanguage(
   pathname: string,
   isTranslationDataResolved = true,
   isEnabled = true,
+  sourceUri?: string | null,
 ): void {
   const navigate = useNavigate();
   const {
     hasLanguagePreference,
     languageCode,
     languageSelectionRevision,
+    configuredLanguageCodes,
     setLanguageCodeFromRoute,
   } = useLanguage();
   const handledSelectionRevision = useRef(0);
@@ -52,6 +55,7 @@ export function useCanonicalContentLanguage(
     if (sourceLanguageCode) {
       knownRoutes.current = mergeKnownRoutes(
         sourceLanguageCode,
+        sourceUri,
         pathname,
         translations,
         knownRoutes.current,
@@ -80,7 +84,11 @@ export function useCanonicalContentLanguage(
 
       handledSelectionRevision.current = languageSelectionRevision;
       resolvedRoutePath.current = pathname;
-      const selectedPath = toInternalPath(selectedRoute.uri);
+      const selectedPath = normalizeLanguagePath(
+        toInternalPath(selectedRoute.uri),
+        normalizedLanguage,
+        configuredLanguageCodes,
+      );
       if (!samePath(selectedPath, pathname)) {
         pendingTranslation.current = {
           path: selectedPath,
@@ -99,6 +107,7 @@ export function useCanonicalContentLanguage(
   }, [
     languageCode,
     languageSelectionRevision,
+    configuredLanguageCodes,
     hasLanguagePreference,
     isEnabled,
     isTranslationDataResolved,
@@ -106,42 +115,7 @@ export function useCanonicalContentLanguage(
     pathname,
     setLanguageCodeFromRoute,
     sourceLanguageCode,
+    sourceUri,
     translations,
   ]);
-}
-
-function mergeKnownRoutes(
-  sourceLanguageCode: string,
-  pathname: string,
-  translations: ContentTranslation[],
-  existingRoutes: ContentTranslation[],
-): ContentTranslation[] {
-  const routes = new Map<string, ContentTranslation>();
-  if (existingRoutes.some((route) => samePath(toInternalPath(route.uri), pathname))) {
-    for (const route of existingRoutes) {
-      routes.set(route.languageCode.toLowerCase(), route);
-    }
-  }
-  routes.set(sourceLanguageCode.toLowerCase(), {
-    languageCode: sourceLanguageCode,
-    uri: pathname,
-  });
-  for (const translation of translations) {
-    routes.set(translation.languageCode.toLowerCase(), translation);
-  }
-  return [...routes.values()];
-}
-
-function samePath(left: string, right: string): boolean {
-  const normalize = (value: string) => value === "/" ? value : value.replace(/\/+$/, "");
-  return normalize(left) === normalize(right);
-}
-
-function toInternalPath(url: string): string {
-  try {
-    const parsed = new URL(url, window.location.origin);
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return url;
-  }
 }

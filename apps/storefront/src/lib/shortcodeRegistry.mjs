@@ -1,5 +1,8 @@
 export const CONTENT_SHORTCODE_NAMES = Object.freeze([
   "hero",
+  "video-hero",
+  "spotify-radio",
+  "chat_assistant",
   "categories",
   "slider",
   "carousel",
@@ -7,6 +10,7 @@ export const CONTENT_SHORTCODE_NAMES = Object.freeze([
   "sticky-posts",
   "sticky_posts",
   "tags",
+  "product-tags",
   "authors",
   "reviews",
   "comments",

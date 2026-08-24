@@ -23,7 +23,7 @@ export function WordPressSpecialPageContent({
       className={`sf-${pageSlug}`}
       fallback={fallback}
       loadPage={loadPage}
-      pageCacheKey={`special-page:${pageSlug}:${languageCode}`}
+      pageCacheKey={`special-page:v2:${pageSlug}:${languageCode}`}
       rootId={`sf-${pageSlug}`}
       robots="noindex, follow"
       shortcodeRenderers={APPLICATION_SHORTCODE_RENDERERS}

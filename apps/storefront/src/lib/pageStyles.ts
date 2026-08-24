@@ -147,6 +147,26 @@ export const WORDPRESS_BLOCK_COMPATIBILITY_CSS = `
   min-width: 0;
 }
 
+:where(.wp-site-blocks.entry-content .wp-block-icon) {
+  --funky-cms-inline-icon-size: 24px;
+  line-height: 0;
+}
+
+:where(.wp-site-blocks.entry-content .wp-block-icon.aligncenter) {
+  display: flex;
+  justify-content: center;
+}
+
+:where(.wp-site-blocks.entry-content .wp-block-icon > svg) {
+  box-sizing: border-box;
+  display: block;
+  fill: currentColor;
+  height: auto;
+  max-height: var(--funky-cms-inline-icon-size, 24px);
+  max-width: var(--funky-cms-inline-icon-size, 24px);
+  width: auto;
+}
+
 .wp-site-blocks.entry-content pre {
   max-width: 100%;
   overflow-x: auto;
@@ -258,8 +278,13 @@ export const WORDPRESS_BLOCK_COMPATIBILITY_CSS = `
 }
 
 .wp-site-blocks.entry-content
-  .wp-block-cover:not([style*="border-radius"]):not([style*="border-top-left-radius"]):not([style*="border-top-right-radius"]):not([style*="border-bottom-left-radius"]):not([style*="border-bottom-right-radius"]) {
+  .wp-block-cover:not(.alignfull):not([style*="border-radius"]):not([style*="border-top-left-radius"]):not([style*="border-top-right-radius"]):not([style*="border-bottom-left-radius"]):not([style*="border-bottom-right-radius"]) {
   border-radius: var(--theme-radius);
+}
+
+.wp-site-blocks.entry-content
+  .wp-block-cover.alignfull:not([style*="border-radius"]):not([style*="border-top-left-radius"]):not([style*="border-top-right-radius"]):not([style*="border-bottom-left-radius"]):not([style*="border-bottom-right-radius"]) {
+  border-radius: 0;
 }
 
 .wp-site-blocks.entry-content
@@ -607,16 +632,26 @@ export const WORDPRESS_BLOCK_COMPATIBILITY_CSS = `
 `;
 
 export function mountPageStyles(styles: CmsThemeStyles | null | undefined, trustedBackendUrl?: string): () => void {
-  const keys = [
-    mountInlineStyle("wordpress-font-faces", sanitizeWordPressFontFaces(styles?.fontFaceStyles || "")),
-    mountInlineStyle("wordpress-global-styles", sanitizeWordPressGlobalStyles(styles?.globalStyles || "")),
-    // Core block styles must follow global element defaults so variants such as
-    // Button "Outline" can override the generic button background and border.
-    ...sanitizeWordPressStylesheetUrls(styles?.stylesheets || [], trustedBackendUrl).map(mountStylesheet),
-    mountInlineStyle("wordpress-custom-css", styles?.customCss || ""),
-    // Always mounted last so block semantics survive Tailwind and theme collisions.
-    mountInlineStyle("wordpress-block-compatibility", WORDPRESS_BLOCK_COMPATIBILITY_CSS, true),
-  ].filter((key): key is string => Boolean(key));
+  const stylesheets = sanitizeWordPressStylesheetUrls(styles?.stylesheets || [], trustedBackendUrl);
+  const staticStyleBundle = document.head.querySelector<HTMLLinkElement | HTMLStyleElement>("[data-wordpress-static-style-source]");
+  const staticStyleFailed = staticStyleBundle?.tagName === "LINK"
+    && !staticStyleBundle.sheet;
+  if (staticStyleFailed) staticStyleBundle.remove();
+  // The prerendered link is render-blocking, so a missing sheet by hydration time means
+  // the request failed and runtime styles must take over.
+  const hasStaticStyles = Boolean(staticStyleBundle && !staticStyleFailed);
+  const keys = hasStaticStyles
+    ? []
+    : [
+        mountInlineStyle("wordpress-font-faces", sanitizeWordPressFontFaces(styles?.fontFaceStyles || "")),
+        mountInlineStyle("wordpress-global-styles", sanitizeWordPressGlobalStyles(styles?.globalStyles || "")),
+        // Core block styles must follow global element defaults so variants such as
+        // Button "Outline" can override the generic button background and border.
+        ...stylesheets.map(mountStylesheet),
+        mountInlineStyle("wordpress-custom-css", styles?.customCss || ""),
+        // Always mounted last so block semantics survive Tailwind and theme collisions.
+        mountInlineStyle("wordpress-block-compatibility", WORDPRESS_BLOCK_COMPATIBILITY_CSS, true),
+      ].filter((key): key is string => Boolean(key));
   orderMountedPageStyles();
 
   return () => {
@@ -627,6 +662,44 @@ export function mountPageStyles(styles: CmsThemeStyles | null | undefined, trust
       if (mounted.count > 0) return;
       mounted.element.remove();
       mountedStyles.delete(key);
+    });
+  };
+}
+
+export function afterMountedPageStylesSettle(onSettled: () => void): () => void {
+  const pendingLinks = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>(
+      'link[data-wordpress-page-style="wordpress-block-library"]',
+    ),
+  ).filter((link) => !link.sheet);
+  if (!pendingLinks.length) {
+    onSettled();
+    return () => undefined;
+  }
+
+  let remaining = pendingLinks.length;
+  let active = true;
+  const listeners = pendingLinks.map((link) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      link.removeEventListener("load", settle);
+      link.removeEventListener("error", settle);
+      remaining -= 1;
+      if (active && remaining === 0) onSettled();
+    };
+    link.addEventListener("load", settle);
+    link.addEventListener("error", settle);
+    if (link.sheet) queueMicrotask(settle);
+    return { link, settle };
+  });
+
+  return () => {
+    active = false;
+    listeners.forEach(({ link, settle }) => {
+      link.removeEventListener("load", settle);
+      link.removeEventListener("error", settle);
     });
   };
 }

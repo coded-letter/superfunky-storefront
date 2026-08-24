@@ -17,7 +17,7 @@ import {
   type AssistantPlacement,
   type ResolvedAssistantRuntime,
 } from "../lib/aiAssistant";
-import { AssistantRobot3D, scheduleAssistantRobotPreload } from "./AssistantRobot3D";
+import { AssistantRobot3D } from "./AssistantRobot3D";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -49,9 +49,26 @@ export function useAiShoppingAssistantSurfaces(
   storefrontConfig?: StorefrontConfiguration | null,
 ): AssistantSurfaceSlots {
   const { languageCode } = useLanguage();
+  const assistantConfig = storefrontConfig?.aiAssistant;
   const themeConfig = useMemo(
-    () => resolveAssistantThemeConfig(storefrontConfig?.aiAssistant),
-    [storefrontConfig?.aiAssistant],
+    () => resolveAssistantThemeConfig(assistantConfig),
+    [
+      assistantConfig?.enabled,
+      assistantConfig?.nativeProviderActive,
+      assistantConfig?.placement,
+      assistantConfig?.showHeader,
+      assistantConfig?.showFooter,
+      assistantConfig?.showFixed,
+      assistantConfig?.title,
+      assistantConfig?.subtitle,
+      assistantConfig?.greeting,
+      assistantConfig?.composerPlaceholder,
+      assistantConfig?.launcherLabel,
+      assistantConfig?.iframeUrl,
+      assistantConfig?.iframeTitle,
+      assistantConfig?.iframeSandbox,
+      assistantConfig?.iframeReferrerPolicy,
+    ],
   );
   const [runtime, setRuntime] = useState<ResolvedAssistantRuntime>(() =>
     resolveAssistantRuntime({
@@ -60,6 +77,7 @@ export function useAiShoppingAssistantSurfaces(
     }),
   );
   const [runtimeReady, setRuntimeReady] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(readHistory);
@@ -73,6 +91,14 @@ export function useAiShoppingAssistantSurfaces(
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!themeConfig.enabled) {
+      setRuntime(resolveAssistantRuntime({
+        nativeDiscovery: { status: "unavailable" },
+        themeConfig,
+      }));
+      setRuntimeReady(true);
+      return;
+    }
     const controller = new AbortController();
     let cancelled = false;
     setRuntimeReady(false);
@@ -133,11 +159,6 @@ export function useAiShoppingAssistantSurfaces(
     if (open) messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open, sending]);
 
-  useEffect(() => {
-    if (runtime.launcher.kind !== "3d") return;
-    return scheduleAssistantRobotPreload(runtime.launcher.textureUrl);
-  }, [runtime.launcher]);
-
   const title = runtime.theme.title;
   const subtitle = runtime.theme.subtitle;
   const assistantIconName = storefrontConfig?.headerIcons?.assistant;
@@ -145,7 +166,7 @@ export function useAiShoppingAssistantSurfaces(
     ? null
     : validateAssistantAssetUrl(storefrontConfig?.headerIconMedia?.assistant, window.location.origin);
 
-  const openAssistant = () => {
+  const openAssistant = useCallback(() => {
     setError(null);
     if (runtime.kind === "native") {
       const action = runtime.provider.open || runtime.provider.toggle;
@@ -157,6 +178,20 @@ export function useAiShoppingAssistantSurfaces(
       return;
     }
     setOpen(true);
+  }, [runtime]);
+
+  useEffect(() => {
+    if (!runtimeReady || !pendingOpen || runtime.kind === "hidden") return;
+    setPendingOpen(false);
+    openAssistant();
+  }, [openAssistant, pendingOpen, runtime.kind, runtimeReady]);
+
+  const requestAssistantOpen = () => {
+    if (!runtimeReady) {
+      setPendingOpen(true);
+      return;
+    }
+    openAssistant();
   };
 
   const closeAssistant = useCallback(() => {
@@ -221,7 +256,7 @@ export function useAiShoppingAssistantSurfaces(
     }
   };
 
-  const footerAssistantSlot = !runtimeReady || runtime.kind === "hidden" || runtime.theme.placement !== "footer"
+  const footerAssistantSlot = !runtimeReady || runtime.kind === "hidden" || !runtime.theme.showFooter
     ? null
     : (
         <AssistantSurfaceCard
@@ -243,7 +278,7 @@ export function useAiShoppingAssistantSurfaces(
         />
       );
 
-  const floatingAssistantSlot = !runtimeReady || runtime.kind === "hidden" || runtime.theme.placement !== "fixed"
+  const floatingAssistantSlot = runtime.kind === "hidden" || !runtime.theme.showFixed
     ? null
     : (
         <aside className="sf-ai-assistant-launcher fixed bottom-5 right-5 z-[70] flex max-w-[calc(100vw-1rem)] flex-col items-end gap-3">
@@ -273,13 +308,19 @@ export function useAiShoppingAssistantSurfaces(
             expanded={runtime.kind !== "native" ? open : undefined}
             iconName={assistantIconName}
             label={runtime.launcher.label}
-            onClick={() => (runtime.kind === "native" ? openAssistant() : setOpen((current) => !current))}
-            hidden={isNearPageBottom || (runtime.kind !== "native" && open)}
+            onClick={() => {
+              if (!runtimeReady || runtime.kind === "native") {
+                requestAssistantOpen();
+              } else {
+                setOpen((current) => !current);
+              }
+            }}
+            hidden={runtimeReady && (isNearPageBottom || (runtime.kind !== "native" && open))}
           />
         </aside>
       );
 
-  const assistantOverlaySlot = !runtimeReady || runtime.kind === "hidden" || runtime.theme.placement !== "header-command-overlay"
+  const assistantOverlaySlot = !runtimeReady || runtime.kind === "hidden" || !runtime.theme.showHeader
     ? null
     : (
         <AssistantDialog
@@ -310,12 +351,16 @@ export function useAiShoppingAssistantSurfaces(
         </AssistantDialog>
       );
 
-  const headerActionSlot = !runtimeReady || runtime.kind === "hidden" || runtime.theme.placement !== "header-command-overlay"
+  const reserveHeaderAction = themeConfig.enabled && themeConfig.showHeader;
+  const headerActionSlot = !reserveHeaderAction
     ? null
-    : (
+    : runtime.kind === "hidden"
+      ? null
+      : (
         <button
           type="button"
-          onClick={openAssistant}
+          data-storefront-control="assistant"
+          onClick={requestAssistantOpen}
           aria-controls={dialogId}
           aria-expanded={runtime.kind === "native" ? undefined : open}
           aria-haspopup="dialog"
@@ -525,26 +570,23 @@ function AssistantLauncherButton({
   label: string;
   onClick: () => void;
 }) {
-  const [visualReady, setVisualReady] = useState(appearance.kind !== "3d");
-  useEffect(() => setVisualReady(appearance.kind !== "3d"), [appearance]);
-  const visuallyHidden = hidden || !visualReady;
-
   return (
     <button
       type="button"
+      data-storefront-control="assistant-fixed"
       onClick={onClick}
       className={`inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-gradient text-white shadow-glow transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-soft-lg ${
-        visuallyHidden ? "pointer-events-none translate-y-4 scale-90 opacity-0" : "pointer-events-auto translate-y-0 scale-100 opacity-100"
+        hidden ? "pointer-events-none translate-y-4 scale-90 opacity-0" : "pointer-events-auto translate-y-0 scale-100 opacity-100"
       }`}
       aria-label={label}
       aria-expanded={expanded}
-      aria-hidden={visuallyHidden}
-      tabIndex={visuallyHidden ? -1 : 0}
+      aria-hidden={hidden}
+      tabIndex={hidden ? -1 : 0}
     >
       <AssistantLauncherVisual
+        allow3d={false}
         appearance={appearance}
         iconName={iconName}
-        on3dStatusChange={(status) => setVisualReady(status !== "loading")}
         size="launcher"
       />
     </button>

@@ -22,7 +22,10 @@ function applicationBlock(
 ) {
   return (
     <ApplicationShortcodeOverrideProvider names={names} attributes={attributes}>
-      <div className="my-6 min-h-64 rounded-3xl border border-zinc-200/70 bg-zinc-50/40 p-4 dark:border-zinc-800 dark:bg-zinc-950/20 sm:p-6">
+      <div
+        data-funkycommerce-component={names[0]}
+        className="my-6 min-h-64 rounded-3xl border border-zinc-200/70 bg-zinc-50/40 p-4 dark:border-zinc-800 dark:bg-zinc-950/20 sm:p-6"
+      >
         <Suspense fallback={<div role="status" aria-busy="true" className="min-h-56" />}>
           {children}
         </Suspense>

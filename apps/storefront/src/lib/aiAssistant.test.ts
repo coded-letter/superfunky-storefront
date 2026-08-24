@@ -41,6 +41,11 @@ test("accepts production configurations without new header icon fields", () => {
   assert.match(assistantSource, /headerIconMedia\?\.assistant/);
 });
 
+test("does not probe optional assistant REST routes when the backend disables the assistant", () => {
+  assert.match(assistantSource, /if \(!themeConfig\.enabled\) \{/);
+  assert.match(assistantSource, /setRuntimeReady\(true\)/);
+});
+
 test("keeps overlay composer focus stable while typing", () => {
   assert.match(assistantSource, /const closeAssistant = useCallback\(/);
   assert.match(assistantSource, /data-assistant-composer/);
@@ -54,21 +59,20 @@ test("keeps the site header lightweight while preserving the animated chat ident
   assert.match(assistantSource, /useIsNearPageBottom\(\)/);
 });
 
-test("preloads real robot assets and never renders the legacy CSS robot", () => {
-  assert.match(robotComponentSource, /scheduleAssistantRobotPreload/);
-  assert.match(robotComponentSource, /requestIdleCallback/);
-  assert.match(robotComponentSource, /MODEL_URLS\.forEach/);
+test("loads real robot assets only when the assistant surface requests them", () => {
+  assert.doesNotMatch(robotComponentSource, /scheduleAssistantRobotPreload|preloadAsset/);
+  assert.match(robotComponentSource, /import\("\.\.\/lib\/assistantRobotRenderer"\)/);
   assert.doesNotMatch(robotComponentSource, /AssistantRobotFallback|animate-\[bounce/);
   assert.match(assistantSource, /const \[hasOpened, setHasOpened\] = useState\(isOpen\)/);
+  assert.match(assistantSource, /<AssistantLauncherVisual[\s\S]*allow3d=\{false\}[\s\S]*size="launcher"/);
 });
 
-test("keeps fixed 3d launchers hidden until ready and while chat is open", () => {
-  assert.match(assistantSource, /hidden=\{isNearPageBottom \|\| \(runtime\.kind !== "native" && open\)\}/);
-  assert.match(assistantSource, /const \[visualReady, setVisualReady\] = useState\(appearance\.kind !== "3d"\)/);
-  assert.match(assistantSource, /const visuallyHidden = hidden \|\| !visualReady/);
+test("shows the lightweight fixed launcher while runtime discovery completes", () => {
+  assert.match(assistantSource, /hidden=\{runtimeReady && \(isNearPageBottom \|\| \(runtime\.kind !== "native" && open\)\)\}/);
+  assert.match(assistantSource, /data-storefront-control="assistant-fixed"/);
+  assert.match(assistantSource, /allow3d=\{false\}/);
   assert.match(assistantSource, /showFallbackWhileLoading=\{size !== "launcher"\}/);
   assert.match(assistantSource, /priority=\{priority \|\| size === "launcher"\}/);
-  assert.match(assistantSource, /on3dStatusChange=\{\(status\) => setVisualReady\(status !== "loading"\)\}/);
 });
 
 test("renders chat header identity without a colored background", () => {
@@ -76,12 +80,16 @@ test("renders chat header identity without a colored background", () => {
   assert.doesNotMatch(assistantSource, /h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-brand-gradient/);
 });
 
-test("does not render the default chat icon before appearance discovery completes", () => {
+test("renders the header launcher while discovery completes and queues early activation", () => {
   assert.match(assistantSource, /const \[runtimeReady, setRuntimeReady\] = useState\(false\)/);
+  assert.match(assistantSource, /const \[pendingOpen, setPendingOpen\] = useState\(false\)/);
   assert.match(assistantSource, /setRuntimeReady\(false\)/);
   assert.match(assistantSource, /setRuntimeReady\(true\)/);
-  assert.match(assistantSource, /const headerActionSlot = !runtimeReady \|\|/);
-  assert.match(assistantSource, /const floatingAssistantSlot = !runtimeReady \|\|/);
+  assert.match(assistantSource, /const reserveHeaderAction = themeConfig\.enabled && themeConfig\.showHeader/);
+  assert.match(assistantSource, /onClick=\{requestAssistantOpen\}/);
+  assert.doesNotMatch(assistantSource, /headerIconButtonClassName\} invisible/);
+  assert.match(assistantSource, /data-storefront-control="assistant"/);
+  assert.match(assistantSource, /const floatingAssistantSlot = runtime\.kind === "hidden" \|\| !runtime\.theme\.showFixed/);
 });
 
 test("matches legacy robot interaction without blocking model readiness on HDR", () => {
@@ -120,9 +128,25 @@ test("prefers the canonical native assistant provider before the legacy global",
 });
 
 test("normalizes legacy header placement to the overlay surface", () => {
-  assert.equal(
-    resolveAssistantThemeConfig({ enabled: true, placement: "header" }).placement,
-    "header-command-overlay",
+  const resolved = resolveAssistantThemeConfig({ enabled: true, placement: "header" });
+  assert.equal(resolved.placement, "header-command-overlay");
+  assert.deepEqual(
+    [resolved.showHeader, resolved.showFooter, resolved.showFixed],
+    [true, false, false],
+  );
+});
+
+test("supports independent assistant surfaces while ignoring legacy placement", () => {
+  const resolved = resolveAssistantThemeConfig({
+    enabled: true,
+    placement: "fixed",
+    showHeader: true,
+    showFooter: true,
+    showFixed: false,
+  });
+  assert.deepEqual(
+    [resolved.showHeader, resolved.showFooter, resolved.showFixed],
+    [true, true, false],
   );
 });
 

@@ -6,7 +6,7 @@ import { Breadcrumbs, seoBreadcrumbsToItems } from "./Breadcrumbs";
 import { useIncrementalData } from "@funky/sdk/react";
 import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
 import { mountEnqueuedScripts } from "../lib/pageScripts";
-import { mountPageStyles } from "../lib/pageStyles";
+import { afterMountedPageStylesSettle, mountPageStyles } from "../lib/pageStyles";
 import { BACKEND_ORIGIN } from "@funky/sdk";
 import { getPageByUri, type CmsPage } from "../lib/pages";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
@@ -15,6 +15,8 @@ import {
   type WordPressShortcodeRenderer,
 } from "./wordpressShortcodes";
 import { ContentLoadingState } from "./ContentLoadingState";
+import { getInitialCmsPageMarkup } from "../lib/prerenderSnapshot";
+import { activatePrerenderImages } from "../lib/prerenderImages";
 import {
   normalizeShortcodeName,
   normalizeRenderedShortcodeOutput,
@@ -31,6 +33,7 @@ type CmsPageContentProps = {
   loadPage?: () => Promise<CmsPage | null>;
   pageCacheKey?: string;
   rootId?: string;
+  fallbackRobots?: string;
   robots?: string;
   shortcodeRenderers?: Record<string, WordPressShortcodeRenderer>;
   synchronizeLanguage?: boolean;
@@ -43,6 +46,7 @@ export function CmsPageContent({
   loadPage,
   pageCacheKey,
   rootId,
+  fallbackRobots,
   robots,
   shortcodeRenderers = {},
   synchronizeLanguage = true,
@@ -51,6 +55,8 @@ export function CmsPageContent({
   const { configuredLanguageCodes } = useLanguage();
   const pageUri = normalizePageUri(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
+  const snapshotRef = useRef<HTMLElement>(null);
+  const [pageStylesReady, setPageStylesReady] = useState(false);
   const { data: page, isLoading, isRevalidating, error } = useIncrementalData(
     pageCacheKey || `page:${pageUri}`,
     loadPage || (() => getPageByUri(pageUri)),
@@ -60,26 +66,60 @@ export function CmsPageContent({
     synchronizeLanguage ? page?.translations || [] : [],
     pathname,
     !isLoading && !isRevalidating,
+    synchronizeLanguage,
+    page?.uri,
   );
+  const homePath = isHomePath(pathname, configuredLanguageCodes);
+  const initialMarkup = homePath ? getInitialCmsPageMarkup() : "";
 
   useEffect(() => {
     if (contentRef.current && page?.headlessContent) return mountCmsBehaviors(contentRef.current);
     return undefined;
   }, [page?.headlessContent]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if ((!isLoading && !error) || !snapshotRef.current) return undefined;
+    return activatePrerenderImages(snapshotRef.current);
+  }, [error, isLoading]);
+
+  useLayoutEffect(() => {
+    setPageStylesReady(false);
     if (!page) return undefined;
-    const unmountScripts = mountEnqueuedScripts(page.scripts);
     const unmountStyles = mountPageStyles(page.themeStyles, BACKEND_ORIGIN);
+    const stopWaitingForStyles = afterMountedPageStylesSettle(() => setPageStylesReady(true));
     return () => {
-      unmountScripts();
+      stopWaitingForStyles();
       unmountStyles();
     };
-  }, [page]);
+  }, [page?.themeStyles]);
+
+  useEffect(() => {
+    if (!page) return undefined;
+    return mountEnqueuedScripts(page.scripts);
+  }, [page?.scripts]);
 
   const resolvedShortcodeRenderers = { ...WORDPRESS_SHORTCODE_RENDERERS, ...shortcodeRenderers };
 
-  if (isLoading) return <ContentLoadingState label="Loading page" />;
+  if ((isLoading || error) && initialMarkup) {
+    return (
+      <section
+        ref={snapshotRef}
+        aria-label="Storefront content"
+        data-cms-page
+        data-prerendered-cms-snapshot
+        className={`sf-cms-page funky-cms-page-content ${className}`}
+      >
+        <div
+          className="wp-site-blocks entry-content is-layout-flow"
+          dangerouslySetInnerHTML={{ __html: sanitizeCmsHtml(initialMarkup) }}
+        />
+      </section>
+    );
+  }
+
+  if (isLoading) {
+    return <ContentLoadingState label="Loading page" />;
+  }
 
   if (error) {
     if (fallback !== undefined) return fallback;
@@ -92,7 +132,6 @@ export function CmsPageContent({
   }
 
   const description = page.seo.description || page.seo.opengraphDescription || summarizeHtml(page.headlessContent);
-  const homePath = isHomePath(pathname, configuredLanguageCodes);
   const breadcrumbs = homePath
     ? []
     : seoBreadcrumbsToItems(page.seo.breadcrumbs, [{ label: "Home", href: "/" }, { label: page.title }]);
@@ -114,7 +153,16 @@ export function CmsPageContent({
           keywords={page.seo.keywords || undefined}
           siteName={page.seo.siteName || undefined}
           appendSiteName={false}
-          robots={robots || page.seo.robots}
+          robots={
+            robots
+            || (
+              homePath
+                ? "index, follow"
+                : page.seo.robotsSource === "explicit"
+                  ? page.seo.robots
+                  : fallbackRobots || page.seo.robots
+            )
+          }
           opengraphType={page.seo.opengraphType === "article" ? "article" : "website"}
           opengraphTitle={page.seo.opengraphTitle || undefined}
           opengraphDescription={page.seo.opengraphDescription || undefined}
@@ -152,6 +200,7 @@ export function CmsPageContent({
           id={rootId}
           aria-label={`${page.title} content`}
           data-cms-page={page.databaseId}
+          data-cms-styles-ready={pageStylesReady ? "true" : undefined}
           data-cms-shortcodes={JSON.stringify(page.headlessShortcodes)}
           className={`sf-cms-page funky-cms-page-content ${className}`}
         >
@@ -174,8 +223,8 @@ export function renderCmsContent(
 ): ReactNode {
   html = normalizeRenderedShortcodeOutput(sanitizeCmsHtml(html), Object.keys(renderers), rawShortcodes);
   html = normalizeSupportedShortcodes(html, Object.keys(renderers));
-  const slotted = slotRenderableShortcodeMarkers(html);
-  const markers = recoverRawShortcodeAttributes(slotted.markers, rawShortcodes);
+  const slotted = slotRenderableShortcodeMarkers(html, rawShortcodes);
+  const markers = slotted.markers;
   const slots = markers.map((marker) => {
     const name = marker.name;
     const renderer = resolveRenderer(renderers, name);
@@ -229,10 +278,76 @@ function NestedWordPressShortcodes({ html, slots }: { html: string; slots: Neste
   return (
     <>
       <div ref={contentRef} className="wp-content-fragment" dangerouslySetInnerHTML={{ __html: html }} />
-      {slots.map(({ marker, content }, index) =>
-        targets[index] ? createPortal(content, targets[index], marker.slotId) : null,
-      )}
+      {slots.map(({ marker, content }, index) => (
+        <DeferredShortcodePortal
+          key={marker.slotId}
+          target={targets[index]}
+          marker={marker}
+          content={content}
+        />
+      ))}
     </>
+  );
+}
+
+function DeferredShortcodePortal({
+  target,
+  marker,
+  content,
+}: {
+  target: Element | null | undefined;
+  marker: SlottedShortcodeMarker;
+  content: ReactNode;
+}) {
+  const { pathname } = useLocation();
+  const isCommunityRoute = /^\/(?:[a-z]{2}\/)?(?:community|spolecznosc)(?:\/|$)/i.test(pathname);
+  const eager = (isCommunityRoute && marker.name.startsWith("community-")) || marker.name.includes("hero");
+  const [observed, setObserved] = useState(false);
+  const active = eager || observed;
+
+  useLayoutEffect(() => {
+    if (!target || active) return undefined;
+    const bounds = target.getBoundingClientRect();
+    const leadDistance = 400;
+    if (bounds.top <= window.innerHeight + leadDistance && bounds.bottom >= -leadDistance) {
+      setObserved(true);
+      return undefined;
+    }
+    if (!("IntersectionObserver" in window)) {
+      setObserved(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setObserved(true);
+        observer.disconnect();
+      },
+      { rootMargin: `${leadDistance}px 0px` },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [active, target]);
+
+  if (!target) return null;
+  return createPortal(
+    active
+      ? content
+      : (
+          <div
+            role="status"
+            aria-label={`Loading ${marker.name} section`}
+            data-deferred-cms-shortcode={marker.name}
+            className="flex min-h-24 items-center justify-center"
+          >
+            <div className="relative inline-flex items-center justify-center">
+              <div className="absolute h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
+              <span className="sr-only">Loading {marker.name}</span>
+            </div>
+          </div>
+        ),
+    target,
+    marker.slotId,
   );
 }
 

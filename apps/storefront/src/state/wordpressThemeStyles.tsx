@@ -1,6 +1,14 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useIncrementalData } from "@funky/sdk/react";
 import {
+  afterMountedPageStylesSettle,
   applyThemePresetVariables,
   createWordPressElementTypographyCss,
   mountPageStyles,
@@ -9,18 +17,40 @@ import { getWordPressThemeStyles } from "../lib/themeStyles";
 import type { CmsThemeStyles } from "../lib/pages";
 import { BACKEND_ORIGIN } from "@funky/sdk";
 
-const WordPressThemeStylesContext = createContext<CmsThemeStyles | null>(null);
+type WordPressThemeStylesContextValue = {
+  data: CmsThemeStyles | null;
+  ready: boolean;
+};
+
+const WordPressThemeStylesContext = createContext<WordPressThemeStylesContextValue>({
+  data: null,
+  ready: true,
+});
 
 export function WordPressThemeStylesProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
-  const { data } = useIncrementalData("wordpress-theme-styles:v5", getWordPressThemeStyles, enabled);
+  const { data, isLoading, isRevalidating, error } = useIncrementalData(
+    "wordpress-theme-styles:v5",
+    getWordPressThemeStyles,
+    enabled,
+  );
+  const [appliedData, setAppliedData] = useState<CmsThemeStyles | null>(null);
+  const [hasLoadedStaticStyleSeed] = useState(() => Boolean(
+    document.head.querySelector<HTMLLinkElement | HTMLStyleElement>('[data-wordpress-static-style-source]')?.sheet
+    && document.head.querySelector('style[data-storefront-static-theme]'),
+  ));
 
-  useEffect(() => {
-    if (!data) return undefined;
+  useLayoutEffect(() => {
+    if (!data) {
+      setAppliedData(null);
+      return undefined;
+    }
     const unmountStyles = mountPageStyles(data, BACKEND_ORIGIN);
     const restoreVariables = applyThemePresetVariables(data);
     const unmountThemePalette = mountWordPressThemePalette(data.colors);
     const unmountElementTypography = mountWordPressElementTypography(data.globalStyles);
+    const stopWaitingForStylesheets = afterMountedPageStylesSettle(() => setAppliedData(data));
     return () => {
+      stopWaitingForStylesheets();
       unmountElementTypography();
       unmountThemePalette();
       restoreVariables();
@@ -28,11 +58,20 @@ export function WordPressThemeStylesProvider({ children, enabled = true }: { chi
     };
   }, [data]);
 
-  return <WordPressThemeStylesContext.Provider value={data}>{children}</WordPressThemeStylesContext.Provider>;
+  const ready = !enabled
+    || hasLoadedStaticStyleSeed
+    || (!isLoading && !isRevalidating && (Boolean(error) || (Boolean(data) && appliedData === data)));
+  const value = useMemo(() => ({ data, ready }), [data, ready]);
+
+  return <WordPressThemeStylesContext.Provider value={value}>{children}</WordPressThemeStylesContext.Provider>;
 }
 
 export function useWordPressThemeStyles(): CmsThemeStyles | null {
-  return useContext(WordPressThemeStylesContext);
+  return useContext(WordPressThemeStylesContext).data;
+}
+
+export function useWordPressThemeStylesReady(): boolean {
+  return useContext(WordPressThemeStylesContext).ready;
 }
 
 function mountWordPressThemePalette(colors: CmsThemeStyles["colors"]): () => void {

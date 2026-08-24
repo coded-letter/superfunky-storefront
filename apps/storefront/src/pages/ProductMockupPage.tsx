@@ -13,6 +13,7 @@ import {
   useWishlist,
   type ProductGalleryImage,
   type ProductPageLayout,
+  type RelatedProductsColumns,
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
@@ -47,6 +48,8 @@ export function ProductMockupPage() {
     normalizedProduct?.translations || [],
     pathname,
     !isLoading && !isRevalidating,
+    true,
+    normalizedProduct?.uri,
   );
 
   if (isLoading) return <ContentLoadingState label="Loading product" />;
@@ -60,7 +63,12 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const shopPath = useStorefrontPath("shop", "/shop");
   const { formatBaseAmount, currencyCode, convertSelectedToBase } = useCurrency();
-  const { productPageLayout, discussionLayout } = useLayoutPreferences();
+  const {
+    productPageLayout,
+    relatedProductsColumns,
+    showStudioRelatedProductsUnderMeta,
+    discussionLayout,
+  } = useLayoutPreferences();
   const { data: navigationData } = useNavigationData();
   const productPresentation = navigationData?.storefrontConfig.productPresentation
     ?? DEFAULT_STOREFRONT_CONFIGURATION.productPresentation;
@@ -128,6 +136,12 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     { label: product.name },
   ];
   const reviewSummary = summarizeReviews(product.reviews);
+  const hasLongDescription = hasMeaningfulProductHtml(product.descriptionHtml);
+  const displayAttributes = product.attributes.flatMap((attribute) => {
+    const label = (attribute.label || attribute.name).trim();
+    const options = attribute.options.map((option) => option.trim()).filter(Boolean);
+    return label && options.length ? [{ ...attribute, label, options }] : [];
+  });
 
   useEffect(() => {
     if (!contentRef.current) return;
@@ -356,6 +370,15 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
           </div>
           )}
 
+          {productPageLayout === "studio" && hasLongDescription ? (
+            <section className="grid gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+              <h2 className="m-0 font-display text-2xl font-bold">Product details</h2>
+              <div className="prose prose-zinc max-w-none dark:prose-invert">
+                {renderProductContent(product.descriptionHtml)}
+              </div>
+            </section>
+          ) : null}
+
           <dl className="grid gap-2 border-t border-zinc-200 pt-5 text-sm dark:border-zinc-800">
             {product.sku ? <MetaRow label="SKU" value={product.sku} /> : null}
             {product.categories.length ? (
@@ -366,29 +389,35 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             ) : null}
             {product.tags.length ? <MetaLinks label="Tags" items={product.tags.map((item) => ({ name: item.name, uri: item.uri }))} /> : null}
           </dl>
+          {showStudioRelatedProductsUnderMeta ? (
+            <ProductConnectionsList product={product} columns={relatedProductsColumns} />
+          ) : null}
           </div>
         )}
-        details={product.descriptionHtml || product.attributes.length ? (
-          <section className={`grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 ${
-            productPageLayout === "classic" ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
-          }`}>
-          <div>
-            <h2 className="font-display text-2xl font-bold">Product details</h2>
-            {product.descriptionHtml ? (
-              <div className="prose prose-zinc max-w-none dark:prose-invert">
-                {renderProductContent(product.descriptionHtml)}
+        details={productPageLayout === "classic" ? (
+          hasLongDescription || displayAttributes.length ? (
+            <section className={`grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 ${
+              hasLongDescription && displayAttributes.length ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
+            }`}>
+            {hasLongDescription ? (
+              <div>
+                <h2 className="font-display text-2xl font-bold">Product details</h2>
+                <div className="prose prose-zinc max-w-none dark:prose-invert">
+                  {renderProductContent(product.descriptionHtml)}
+                </div>
               </div>
             ) : null}
-          </div>
-          {product.attributes.length ? (
-            <dl className="grid content-start gap-3 rounded-2xl bg-zinc-50 p-6 text-sm dark:bg-zinc-900">
-              {product.attributes.map((attribute) => (
-                <MetaRow key={attribute.name} label={attribute.name} value={attribute.options.join(", ")} />
-              ))}
-            </dl>
-          ) : null}
-          </section>
-        ) : null}
+            {displayAttributes.length ? <ProductAttributes attributes={displayAttributes} /> : null}
+            </section>
+          ) : null
+        ) : (
+          displayAttributes.length ? (
+            <section className="grid gap-5 border-t border-zinc-200 pt-10 dark:border-zinc-800">
+              <h2 className="m-0 font-display text-2xl font-bold">Product attributes</h2>
+              <ProductAttributes attributes={displayAttributes} />
+            </section>
+          ) : null
+        )}
         reviews={(
           <CommentsSection
             anchorId="product-reviews"
@@ -419,15 +448,29 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             }}
           />
         )}
-        connections={(
-          <>
-            <ProductConnections title="Related products" products={product.related} compact={productPageLayout === "studio"} />
-            <ProductConnections title="You may also like" products={product.upsells} compact={productPageLayout === "studio"} />
-            <ProductConnections title="Frequently bought together" products={product.crossSells} compact={productPageLayout === "studio"} />
-          </>
-        )}
+        connections={
+          productPageLayout === "studio" && showStudioRelatedProductsUnderMeta
+            ? null
+            : <ProductConnectionsList product={product} columns={relatedProductsColumns} />
+        }
       />
     </div>
+  );
+}
+
+function ProductConnectionsList({
+  product,
+  columns,
+}: {
+  product: CmsProductDetail;
+  columns: RelatedProductsColumns;
+}) {
+  return (
+    <>
+      <ProductConnections title="Related products" products={product.related} columns={columns} />
+      <ProductConnections title="You may also like" products={product.upsells} columns={columns} />
+      <ProductConnections title="Frequently bought together" products={product.crossSells} columns={columns} />
+    </>
   );
 }
 
@@ -461,23 +504,24 @@ function ProductPageLayoutShell({
   }
 
   return (
-    <section
-      data-product-page-layout="studio"
-      className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(28rem,0.95fr)] lg:items-start"
-    >
-      <div className="lg:sticky lg:top-28 lg:self-start">{gallery}</div>
-      <div
-        role="region"
-        aria-label="Product information"
-        tabIndex={0}
-        className="grid gap-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto lg:pr-4"
+    <>
+      <section
+        data-product-page-layout="studio"
+        className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(28rem,0.95fr)] lg:items-start"
       >
-        {summary}
-        {details}
-        {reviews}
-        {connections}
-      </div>
-    </section>
+        <div className="lg:sticky lg:top-28 lg:self-start">{gallery}</div>
+        <div
+          role="region"
+          aria-label="Product information"
+          className="grid gap-12"
+        >
+          {summary}
+        </div>
+      </section>
+      {details}
+      {reviews}
+      {connections}
+    </>
   );
 }
 
@@ -488,20 +532,35 @@ function renderProductContent(html: string) {
   );
 }
 
+function ProductAttributes({ attributes }: { attributes: CmsProductDetail["attributes"] }) {
+  return (
+    <dl className="grid content-start gap-3 rounded-2xl bg-zinc-50 p-6 text-sm dark:bg-zinc-900">
+      {attributes.map((attribute) => (
+        <MetaRow key={attribute.id || attribute.label} label={attribute.label} value={attribute.options.join(", ")} />
+      ))}
+    </dl>
+  );
+}
+
 function ProductConnections({
   title,
   products,
-  compact = false,
+  columns,
 }: {
   title: string;
   products: CmsProductDetail["related"];
-  compact?: boolean;
+  columns: RelatedProductsColumns;
 }) {
   if (!products.length) return null;
+  const columnClass = {
+    "2": "lg:grid-cols-2",
+    "3": "lg:grid-cols-3",
+    "4": "lg:grid-cols-4",
+  }[columns];
   return (
     <section className="grid gap-6">
       <h2 className="m-0 font-display text-2xl font-bold text-zinc-950 dark:text-zinc-50">{title}</h2>
-      <div className={`grid gap-6 sm:grid-cols-2 ${compact ? "" : "lg:grid-cols-4"}`}>
+      <div className={`grid gap-6 sm:grid-cols-2 ${columnClass}`} data-related-products-columns={columns}>
         {products.map((product) => <ProductCard key={product.id} product={product} />)}
       </div>
     </section>
@@ -558,4 +617,12 @@ function mapGallery(product: CmsProductDetail): ProductGalleryImage[] {
 
 function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function hasMeaningfulProductHtml(value: string): boolean {
+  const text = stripHtml(value)
+    .replace(/&(nbsp|#160|#x0*a0);/gi, "")
+    .replace(/\u00a0|\u200b/g, "")
+    .trim();
+  return Boolean(text) || /<(?:audio|blockquote|figure|iframe|img|ol|pre|table|ul|video)\b/i.test(value);
 }

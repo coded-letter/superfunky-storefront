@@ -1,16 +1,26 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 import { useLanguage } from "@funky/ui";
-import { getBlogData, type CmsBlogData } from "../lib/blog";
+import { getBlogData, getBlogSummaryData, type CmsBlogData } from "../lib/blog";
 import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 
 const BlogDataContext = createContext<IncrementalDataState<CmsBlogData> | null>(null);
 
-export function BlogDataProvider({ children, enabled = true }: { children?: ReactNode; enabled?: boolean }) {
+export function BlogDataProvider({
+  children,
+  enabled = true,
+  summaryOnly = false,
+}: {
+  children?: ReactNode;
+  enabled?: boolean;
+  summaryOnly?: boolean;
+}) {
   const { languageCode, languageBackendCode } = useLanguage();
   const rawState = useIncrementalData(
-    `blog-data:v3:${languageCode}:${languageBackendCode}`,
-    () => getBlogData(languageCode, languageBackendCode),
+    `blog-data:${summaryOnly ? "summary:v1" : "v4"}:${languageCode}:${languageBackendCode}`,
+    () => summaryOnly
+      ? getBlogSummaryData(languageCode, languageBackendCode)
+      : getBlogData(languageCode, languageBackendCode),
     enabled,
   );
   const state = useMemo<IncrementalDataState<CmsBlogData>>(() => ({

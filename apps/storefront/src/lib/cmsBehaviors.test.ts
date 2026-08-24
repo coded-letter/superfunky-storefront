@@ -6,6 +6,14 @@ import { sanitizeWordPressGlobalStyles } from "./pageStyles.ts";
 
 let dom: JSDOM;
 
+async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const started = Date.now();
+  while (!condition()) {
+    if (Date.now() - started > timeoutMs) throw new Error("Timed out waiting for condition.");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 beforeEach(() => {
   dom = new JSDOM(`
     <header id="main-header"></header>
@@ -26,6 +34,8 @@ beforeEach(() => {
     DOMParser: dom.window.DOMParser,
     Element: dom.window.Element,
     HTMLElement: dom.window.HTMLElement,
+    HTMLImageElement: dom.window.HTMLImageElement,
+    HTMLVideoElement: dom.window.HTMLVideoElement,
     location: dom.window.location,
     history: dom.window.history,
     sessionStorage: dom.window.sessionStorage,
@@ -55,22 +65,53 @@ test("known docs behavior mounts after render and remounts after a route transit
   routeCleanup();
 });
 
-test("native and standalone code are highlighted once with aliases and language badges", () => {
+test("autoplay CMS videos are resumed on mount and when the page becomes visible", async () => {
+  const root = document.querySelector<HTMLElement>("#cms-root")!;
+  root.innerHTML = `<video autoplay loop src="https://example.test/uploads/intro.mp4"></video>`;
+  const video = root.querySelector<HTMLVideoElement>("video");
+  if (!video) throw new Error("Expected autoplay test video");
+
+  let playCalls = 0;
+  Object.defineProperty(video, "play", {
+    configurable: true,
+    value: () => {
+      playCalls += 1;
+      return Promise.resolve();
+    },
+  });
+
+  const cleanup = mountCmsBehaviors(root);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(video.muted, true);
+  assert.equal(video.playsInline, true);
+  assert.ok(playCalls >= 1);
+
+  document.dispatchEvent(new dom.window.Event("visibilitychange"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(playCalls >= 2);
+
+  cleanup();
+});
+
+test("native and standalone code use local Prism language and color selection", async () => {
   const root = document.querySelector<HTMLElement>("#cms-root")!;
   root.innerHTML = `
-    <pre class="wp-block-code"><code class="language-js">const total = 2;</code></pre>
+    <pre class="wp-block-code" data-code-theme="okaidia"><code class="language-js">const total = 2;</code></pre>
     <code class="js">const standalone = true;</code>
     <code class="rounded">ordinary inline code</code>
     <pre><code class="language-unknown">&lt;safe&gt;</code></pre>
+    <pre class="no-copy"><code class="language-js">const privateSnippet = true;</code></pre>
   `;
 
   const cleanup = mountCmsBehaviors(root);
+  await waitFor(() => root.querySelectorAll("code.language-javascript").length >= 2);
   const highlighted = root.querySelectorAll<HTMLElement>("code.language-javascript");
   const nested = highlighted[0];
   const standalone = highlighted[1];
   const firstHighlight = nested.innerHTML;
 
-  assert.equal(highlighted.length, 2);
+  assert.equal(highlighted.length, 3);
   assert.equal(nested.dataset.cmsHighlighted, "true");
   assert.match(firstHighlight, /token keyword/);
   assert.equal(nested.parentElement?.dataset.codeLanguage, "js");
@@ -79,10 +120,28 @@ test("native and standalone code are highlighted once with aliases and language 
   assert.match(standalone.innerHTML, /token keyword/);
   assert.equal(root.querySelector<HTMLElement>("code.rounded")?.dataset.cmsHighlighted, undefined);
   assert.equal(root.querySelector<HTMLElement>(".language-unknown")?.classList.contains("language-none"), true);
+  assert.equal(root.querySelectorAll(".cms-code-copy").length, 2);
+  assert.equal(root.querySelector(".no-copy .cms-code-copy"), null);
+  const languageSelect = root.querySelector<HTMLSelectElement>(".cms-code-language-select");
+  assert.equal(languageSelect?.value, "javascript");
+  if (!languageSelect) throw new Error("Expected a local syntax highlighting selector");
+  languageSelect.value = "typescript";
+  languageSelect.dispatchEvent(new dom.window.Event("change"));
+  assert.equal(nested.classList.contains("language-typescript"), true);
+  assert.equal(nested.parentElement?.dataset.codeLanguage, "TypeScript");
+  const themeSelect = root.querySelector<HTMLSelectElement>(".cms-code-theme-select");
+  assert.equal(themeSelect?.value, "okaidia");
+  if (!themeSelect) throw new Error("Expected a local syntax color selector");
+  themeSelect.value = "twilight";
+  themeSelect.dispatchEvent(new dom.window.Event("change"));
+  assert.equal(nested.parentElement?.dataset.codeTheme, "twilight");
+  document.documentElement.classList.toggle("dark");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(nested.parentElement?.dataset.codeTheme, "twilight");
+  document.documentElement.classList.remove("dark");
 
   cleanup();
-  mountCmsBehaviors(root)();
-  assert.equal(nested.innerHTML, firstHighlight);
+  assert.equal(root.querySelector(".cms-code-controls"), null);
 });
 
 test("approved Superfunky documentation behavior tracks the heading in the viewport", () => {
@@ -129,6 +188,73 @@ test("sanitizer preserves Custom HTML scripts while removing executable attribut
   assert.equal(parsed.querySelector("[srcdoc]"), null);
   assert.equal(parsed.querySelector("a")?.hasAttribute("href"), false);
   assert.equal((globalThis as typeof globalThis & { cmsPayload?: boolean }).cmsPayload, undefined);
+});
+
+test("optimized CMS images fall back to their original source after an error", () => {
+  dom.reconfigure({ url: "https://superfunky.pro/" });
+  Object.assign(globalThis, { location: dom.window.location, window: dom.window });
+  const originalSource = "https://blog.superfunky.pro/wp-content/uploads/new-photo.jpg";
+  const root = document.querySelector<HTMLElement>("#cms-root")!;
+  root.innerHTML = sanitizeCmsHtml(`<img src="${originalSource}" alt="New photo">`);
+  const image = root.querySelector<HTMLImageElement>("img")!;
+
+  assert.match(image.src, /\/\.netlify\/images\?/);
+  assert.equal(image.dataset.originalSrc, originalSource);
+  assert.ok(image.hasAttribute("srcset"));
+
+  const cleanup = mountCmsBehaviors(root);
+  image.dispatchEvent(new dom.window.Event("error"));
+
+  assert.equal(image.src, originalSource);
+  assert.equal(image.hasAttribute("srcset"), false);
+  assert.equal(image.hasAttribute("sizes"), false);
+  assert.equal(image.dataset.originalSrc, undefined);
+  cleanup();
+});
+
+test("sanitizer gives one meaningful raster image priority and lazily loads the rest", () => {
+  const html = sanitizeCmsHtml(`
+    <img src="/icon.png" width="32" height="32" loading="eager" fetchpriority="high">
+    <img src="/decoration.svg" width="800" height="400">
+    <img src="/hero.jpg" width="1200" height="800" loading="lazy">
+    <img src="/gallery.jpg" width="800" height="600" loading="eager" fetchpriority="high">
+  `);
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const [icon, decoration, hero, gallery] = Array.from(parsed.querySelectorAll("img"));
+
+  assert.equal(icon.getAttribute("loading"), "lazy");
+  assert.equal(icon.getAttribute("fetchpriority"), null);
+  assert.equal(decoration.getAttribute("loading"), "lazy");
+  assert.equal(hero.getAttribute("loading"), "eager");
+  assert.equal(hero.getAttribute("decoding"), "sync");
+  assert.equal(hero.getAttribute("fetchpriority"), "high");
+  assert.equal(gallery.getAttribute("loading"), "lazy");
+  assert.equal(gallery.getAttribute("decoding"), "async");
+  assert.equal(gallery.getAttribute("fetchpriority"), null);
+});
+
+test("sanitizer keeps small editor images intrinsic instead of requesting viewport candidates", () => {
+  dom.reconfigure({ url: "https://superfunky.pro/" });
+  Object.assign(globalThis, { location: dom.window.location, window: dom.window });
+  const html = sanitizeCmsHtml(`
+    <img
+      src="https://v3.superfunky.pro/wp-content/uploads/editor-icon.png"
+      width="24"
+      height="24"
+      srcset="https://v3.superfunky.pro/wp-content/uploads/editor-icon.png 24w"
+      sizes="100vw"
+      alt=""
+    >
+  `);
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const image = parsed.querySelector<HTMLImageElement>("img")!;
+
+  assert.match(image.getAttribute("src") || "", /\/\.netlify\/images\?/);
+  assert.match(image.getAttribute("src") || "", /(?:\\?|&)w=24(?:&|$)/);
+  assert.equal(image.getAttribute("width"), "24");
+  assert.equal(image.getAttribute("height"), "24");
+  assert.equal(image.hasAttribute("srcset"), false);
+  assert.equal(image.hasAttribute("sizes"), false);
 });
 
 test("sanitizer preserves native Custom HTML CSS and JavaScript attributes", () => {

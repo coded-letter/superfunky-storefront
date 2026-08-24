@@ -6,6 +6,9 @@ export type AssistantThemeConfig = {
   enabled?: boolean | null;
   nativeProviderActive?: boolean | null;
   placement?: string | null;
+  showHeader?: boolean | null;
+  showFooter?: boolean | null;
+  showFixed?: boolean | null;
   title?: string | null;
   subtitle?: string | null;
   greeting?: string | null;
@@ -21,6 +24,9 @@ export type ResolvedAssistantThemeConfig = {
   enabled: boolean;
   nativeProviderActive: boolean;
   placement: AssistantPlacement;
+  showHeader: boolean;
+  showFooter: boolean;
+  showFixed: boolean;
   title: string;
   subtitle: string;
   greeting: string;
@@ -126,6 +132,9 @@ const DEFAULT_ASSISTANT_THEME: ResolvedAssistantThemeConfig = {
   enabled: false,
   nativeProviderActive: false,
   placement: "footer",
+  showHeader: false,
+  showFooter: true,
+  showFixed: false,
   title: "AI Assistant",
   subtitle: "Site-wide help",
   greeting: "Ask about products, posts, pages, categories, or tags.",
@@ -153,10 +162,14 @@ export function resolveAssistantThemeConfig(
   const placement = VALID_PLACEMENTS.has(requestedPlacement as AssistantPlacement)
     ? requestedPlacement as AssistantPlacement
     : DEFAULT_ASSISTANT_THEME.placement;
+  const hasSurfaceToggles = config?.showHeader != null || config?.showFooter != null || config?.showFixed != null;
   return {
     enabled: config?.enabled ?? DEFAULT_ASSISTANT_THEME.enabled,
     nativeProviderActive: config?.nativeProviderActive ?? DEFAULT_ASSISTANT_THEME.nativeProviderActive,
     placement,
+    showHeader: hasSurfaceToggles ? config?.showHeader === true : placement === "header-command-overlay",
+    showFooter: hasSurfaceToggles ? config?.showFooter === true : placement === "footer",
+    showFixed: hasSurfaceToggles ? config?.showFixed === true : placement === "fixed",
     title: trimOrFallback(config?.title, DEFAULT_ASSISTANT_THEME.title),
     subtitle: trimOrFallback(config?.subtitle, DEFAULT_ASSISTANT_THEME.subtitle),
     greeting: trimOrFallback(config?.greeting, DEFAULT_ASSISTANT_THEME.greeting),

@@ -1,5 +1,6 @@
 export { SocialPostCard, type SocialPostCardAuthor, type SocialPostCardData, type SocialPostCardProps } from "./SocialPostCard";
 export { CommunityMediaGallery, type CommunityMediaGalleryProps, type SocialPostMedia } from "./CommunityMediaGallery";
+export { CommunityMediaLightbox, type CommunityMediaLightboxProps } from "./CommunityMediaLightbox";
 export { SocialFeedGrid, type SocialFeedGridProps, type SocialFeedLayout } from "./SocialFeedGrid";
 export {
   UploadPostModal,

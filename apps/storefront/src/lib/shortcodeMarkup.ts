@@ -142,8 +142,19 @@ export function findRenderableShortcodeMarkers(html: string): ShortcodeMarker[] 
 export function slotRenderableShortcodeMarkers(html: string): {
   html: string;
   markers: SlottedShortcodeMarker[];
+};
+export function slotRenderableShortcodeMarkers(
+  html: string,
+  rawShortcodes?: readonly string[],
+): {
+  html: string;
+  markers: SlottedShortcodeMarker[];
 } {
-  const markers = findRenderableShortcodeMarkers(html).map((marker, index) => ({
+  const recoveredMarkers = recoverRawShortcodeAttributes(
+    findRenderableShortcodeMarkers(html),
+    rawShortcodes ?? [],
+  );
+  const markers = recoveredMarkers.map((marker, index) => ({
     ...marker,
     slotId: `shortcode-${index}`,
   }));
@@ -152,7 +163,12 @@ export function slotRenderableShortcodeMarkers(html: string): {
   for (const marker of [...markers].reverse()) {
     const markerHtml = html.slice(marker.start, marker.end);
     const openingTagEnd = markerHtml.indexOf(">");
-    const slottedMarker = `${markerHtml.slice(0, openingTagEnd)} data-funkycommerce-render-slot="${marker.slotId}"${markerHtml.slice(openingTagEnd)}`;
+    const fullWidthAttribute = ["1", "true", "yes", "on"].includes(
+      (marker.attributes.fullwidth ?? "").toLowerCase(),
+    )
+      ? ' data-funkycommerce-fullwidth="true"'
+      : "";
+    const slottedMarker = `${markerHtml.slice(0, openingTagEnd)} data-funkycommerce-render-slot="${marker.slotId}"${fullWidthAttribute}${markerHtml.slice(openingTagEnd)}`;
     slottedHtml = `${slottedHtml.slice(0, marker.start)}${slottedMarker}${slottedHtml.slice(marker.end)}`;
   }
 

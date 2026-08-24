@@ -4,8 +4,10 @@ import {
   PaginableProductGrid,
   ProductCard,
   ResponsiveImage,
+  SpotifyPlayerMock,
   SocialPostCard,
   SocialFeedGrid,
+  normalizeLanguagePath,
   useLanguage,
   useT,
   avatarColorFor,
@@ -16,7 +18,7 @@ import {
   type SocialFeedLayout,
 } from "@funky/ui";
 import { AlertTriangle, CheckCircle2, Download, LifeBuoy, Mail, MapPin, Package, Star, Truck, UserCircle2 } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { getOrderById, type AccountOrder } from "../lib/account";
 import {
@@ -34,10 +36,11 @@ import { useStickyPostsData } from "../state/stickyPostsData";
 import { useCommerceData } from "../state/commerceData";
 import { useCommunityData } from "../state/communityData";
 import { useNavigationData } from "../state/navigationData";
-import type { CommunityPostData } from "../lib/community";
+import { toggleCommunityPostLike, type CommunityPostData } from "../lib/community";
 import { CommentsSection, StarRating, stringToHSL } from "../pages/CommentThread";
 import { ContentLoadingState } from "./ContentLoadingState";
 import { HeroMock, type HeroVariant } from "./HeroMock";
+import { VideoHero } from "./VideoHero";
 import { LocationsShortcode, MapShortcode } from "./LocationsShortcode";
 import { SliderMock, type SliderWidth } from "./SliderMock";
 import { CONTENT_SHORTCODE_NAMES } from "../lib/shortcodeRegistry.mjs";
@@ -45,6 +48,7 @@ import { withCollectionOffset } from "../lib/shortcodeCollections";
 import { resolveShortcodeImage, resolveSliderContentType, resolveStaticSliderItems } from "../lib/shortcodeSlider";
 import { resolveShortcodeCta } from "../lib/shortcodeCta";
 import { getOrderDownloadAccess, type OrderDownloadAccess } from "../lib/downloads";
+import { isRetryableHttpStatus, shouldRetryRequestError } from "../lib/requestRetry";
 import { DigitalDownloadsPanel } from "./DigitalDownloadsPanel";
 import { isCommunityArticlePost } from "../lib/communityProfiles";
 import { requestNewsletterUnsubscribe } from "../lib/submissions";
@@ -53,25 +57,87 @@ import { resolveHeadingLevel } from "../lib/headingLevels";
 export type WordPressShortcodeAttributes = Record<string, string>;
 export type WordPressShortcodeRenderer = (attributes: WordPressShortcodeAttributes) => ReactNode;
 
+const LazyChatAssistantShortcode = lazy(() =>
+  import("./ChatAssistantShortcode").then((module) => ({ default: module.ChatAssistantShortcode })),
+);
+
 const PRODUCT_CARD_VARIANTS: ProductCardVariant[] = ["default", "minimal", "editorial", "gallery", "simple", "variation", "expandable"];
 const POST_CARD_VARIANTS: PostCardVariant[] = ["default", "compact", "editorial", "minimal"];
 
+function isCurrentRoute(pathname: string, targetPath: string) {
+  const normalize = (value: string) => value.replace(/\/+$/, "") || "/";
+  return normalize(pathname) === normalize(targetPath);
+}
+
 function HeroShortcode({ attributes }: ShortcodeProps) {
-  const variant = oneOf<HeroVariant>(attributes.variant, ["glow", "fullbleed", "split", "minimal", "strip"], "fullbleed");
-  const headingLevel = resolveHeadingLevel(attributes["heading-level"], "h1");
+  const { homeHeroLayout } = useLayoutPreferences();
+  const { pathname } = useLocation();
+  const homePath = useStorefrontPath("home", "/");
+  const isHomeHero = isCurrentRoute(pathname, homePath);
+  const variant = isHomeHero
+    ? homeHeroLayout === "classic" ? "glow" : "fullbleed"
+    : oneOf<HeroVariant>(attributes.variant, ["glow", "fullbleed", "split", "minimal", "strip"], "fullbleed");
+  const headingLevel = resolveHeadingLevel(
+    attributes["heading-level"],
+    attributes.h2 && !attributes.h1 ? "h2" : "h1",
+  );
   return (
     <HeroMock
       variant={variant}
       headingLevel={headingLevel}
       kicker={attributes.pill || attributes.kicker || undefined}
-      title={attributes.h1 || attributes.title || "Storefront hero"}
+      title={attributes.h1 || attributes.h2 || attributes.title || "Storefront hero"}
       description={attributes.p || attributes.description || undefined}
       image={resolveShortcodeImage(attributes.bgimg || attributes["bg-image"] || attributes.image || attributes["background-image"] || "") || undefined}
       primaryCta={resolveShortcodeCta(attributes, "primary")}
       secondaryCta={resolveShortcodeCta(attributes, "secondary")}
-      fullWidth={toBoolean(attributes.fullwidth)}
-      height={attributes.height || undefined}
+      fullWidth={isHomeHero ? homeHeroLayout !== "classic" : toBoolean(attributes.fullwidth)}
+      height={isHomeHero && homeHeroLayout !== "classic" ? attributes.height || "75vh" : attributes.height || undefined}
     />
+  );
+}
+
+function VideoHeroShortcode({ attributes }: ShortcodeProps) {
+  return (
+    <VideoHero
+      source={attributes.src || attributes.video || ""}
+      poster={resolveShortcodeImage(attributes.poster || attributes.image || "") || undefined}
+      kicker={attributes.kicker || attributes.pill || undefined}
+      title={attributes.title || attributes.h1 || attributes.h2 || "Video hero"}
+      description={attributes.description || attributes.p || undefined}
+      primaryCta={resolveShortcodeCta(attributes, "primary")}
+      secondaryCta={resolveShortcodeCta(attributes, "secondary")}
+      height={attributes.height || undefined}
+      overlayOpacity={toInteger(attributes["overlay-opacity"] || attributes.overlay_opacity, 55, 0, 90)}
+      align={oneOf<"left" | "center" | "right">(attributes.align, ["left", "center", "right"], "left")}
+      autoplay={attributes.autoplay === undefined ? true : toBoolean(attributes.autoplay)}
+      loop={attributes.loop === undefined ? true : toBoolean(attributes.loop)}
+      muted={attributes.muted === undefined ? true : toBoolean(attributes.muted)}
+      variant={oneOf(attributes.variant, ["glow", "fullbleed", "split", "minimal", "strip"], "fullbleed")}
+    />
+  );
+}
+
+function SpotifyRadioShortcode({ attributes }: ShortcodeProps) {
+  const title = attributes.title || "Superfunky Radio";
+  const contentType = oneOf(
+    attributes["content-type"],
+    ["track", "album", "playlist", "artist", "show", "episode"] as const,
+    "playlist",
+  );
+  const theme = oneOf(attributes.theme, ["auto", "dark", "light"] as const, "auto");
+
+  return (
+    <ShortcodeSection title={title}>
+      {attributes.description ? <p className="text-sm text-zinc-500 dark:text-zinc-400">{attributes.description}</p> : null}
+      <SpotifyPlayerMock
+        uri={attributes.uri}
+        contentType={contentType}
+        height={toInteger(attributes.height, 400, 152, 800)}
+        theme={theme}
+        title={title}
+      />
+    </ShortcodeSection>
   );
 }
 
@@ -134,7 +200,10 @@ function CategoriesShortcode({ attributes }: ShortcodeProps) {
 function SliderShortcode({ attributes }: ShortcodeProps) {
   const { data: commerce, isLoading: commerceLoading, error: commerceError } = useCommerceData();
   const { data: blog, isLoading: blogLoading, error: blogError } = useBlogData();
-  const { themeMaxWidthPx } = useLayoutPreferences();
+  const { homeHeroLayout, themeMaxWidthPx } = useLayoutPreferences();
+  const { pathname } = useLocation();
+  const homePath = useStorefrontPath("home", "/");
+  const isHomeCampaign = isCurrentRoute(pathname, homePath);
   const type = resolveSliderContentType(attributes.type);
   const campaignLike = type === "campaign";
   const width = sliderWidth(attributes.layout);
@@ -164,6 +233,24 @@ function SliderShortcode({ attributes }: ShortcodeProps) {
       attributes.offset,
       limit,
     );
+    if (isHomeCampaign && homeHeroLayout !== "cinematic-slider") {
+      const [hero] = campaignItems;
+      if (!hero) return <ShortcodeStatus message="No campaign slides were configured." />;
+      return (
+        <HeroMock
+          variant={homeHeroLayout === "classic" ? "glow" : "fullbleed"}
+          headingLevel={firstSlideHeadingLevel}
+          kicker={hero.label}
+          title={hero.title}
+          description={hero.subtitle}
+          image={hero.image}
+          primaryCta={primaryCtaConfig}
+          secondaryCta={secondaryCtaConfig}
+          fullWidth={homeHeroLayout === "cinematic"}
+          height={homeHeroLayout === "cinematic" ? attributes.height || "75vh" : attributes.height || undefined}
+        />
+      );
+    }
     return (
       <SliderMock
         title={title}
@@ -174,7 +261,7 @@ function SliderShortcode({ attributes }: ShortcodeProps) {
         gridClassName="grid-cols-1"
         autoplayMs={autoplay || undefined}
         navigation={navigation}
-        fullBleed={fullBleed}
+        fullBleed={isHomeCampaign ? true : fullBleed}
         height={attributes.height || undefined}
         showHeader={Boolean(title || subtitle)}
         headingLevel={sectionHeadingLevel}
@@ -419,6 +506,31 @@ function TagsShortcode({ attributes }: ShortcodeProps) {
   );
 }
 
+function ProductTagsShortcode({ attributes }: ShortcodeProps) {
+  const { data, isLoading, error } = useCommerceData();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const include = csv(attributes.include);
+  const tags = withCollectionOffset(
+    sortItems(
+      (data?.tags || []).filter((tag) => !include.length || include.includes(tag.id) || include.includes(tag.slug)),
+      attributes.orderby === "count" ? (tag) => tag.count : attributes.orderby === "include" ? (tag) => include.indexOf(tag.slug) : (tag) => tag.name.toLowerCase(),
+      attributes.order,
+    ),
+    attributes.offset,
+    toInteger(attributes.limit, 24, 1, 100),
+  );
+  if (isLoading) return <ContentLoadingState compact label="Loading product tags" />;
+  if (error) return <ShortcodeStatus message={error.message} isError />;
+  if (!tags.length) return <ShortcodeStatus message="No product tags matched this shortcode." />;
+  return (
+    <ShortcodeSection title={attributes.title || "Product tags"}>
+      <div className={attributes.layout === "cards" ? "grid gap-3 sm:grid-cols-3" : "flex flex-wrap gap-2"}>
+        {tags.map((tag) => <Link key={tag.id} to={normalizeLanguagePath(tag.uri, languageCode, configuredLanguageCodes)} className="rounded-full border border-dashed border-zinc-300 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 no-underline dark:border-zinc-700 dark:text-zinc-400">#{tag.name} ({tag.count})</Link>)}
+      </div>
+    </ShortcodeSection>
+  );
+}
+
 function AuthorsShortcode({ attributes }: ShortcodeProps) {
   const { data, isLoading, error } = useBlogData();
   const include = csv(attributes.include);
@@ -555,9 +667,17 @@ function CommentsShortcode({ attributes }: ShortcodeProps) {
 function CommunityFeedShortcode({ attributes }: ShortcodeProps) {
   const [searchParams] = useSearchParams();
   const { data, isLoading, error } = useCommunityData();
+  const { languageCode } = useLanguage();
+  const {
+    communityFeedLayout,
+    communityFeedLoadMode,
+    communityFeedPageSize,
+    communityFeedFilters,
+  } = useLayoutPreferences();
   const selectedTags = csv(attributes.tags);
   const posts = withCollectionOffset(
     (data?.posts || []).filter((post) =>
+      (!post.languageCode || post.languageCode === languageCode.toLowerCase()) &&
       inDateRange(post.createdAt, attributes["date-from"], attributes["date-to"]) &&
       post.likes >= toInteger(attributes["min-likes"], 0, 0, 1000000) &&
       (post.ratingAverage || 0) >= toNumber(attributes["min-rating"], 0, 0, 5) &&
@@ -566,10 +686,12 @@ function CommunityFeedShortcode({ attributes }: ShortcodeProps) {
     ),
     attributes.offset,
   );
-  const layout = oneOf<SocialFeedLayout>(attributes.layout, ["masonry", "grid-3", "grid-4", "list", "compact"], "masonry");
-  const loadMode = attributes["load-mode"] === "infinite" ? "infinite" : "manual";
-  const pageSize = toInteger(attributes["page-size"], 12, 1, 48);
-  const showFilters = attributes["show-filters"] !== "false";
+  const layout = oneOf<SocialFeedLayout>(attributes.layout, ["masonry", "grid-3", "grid-4", "list", "compact"], communityFeedLayout);
+  const loadMode = oneOf(attributes["load-mode"], ["manual", "infinite"], communityFeedLoadMode);
+  const pageSize = toInteger(attributes["page-size"], Number(communityFeedPageSize), 1, 48);
+  const showFilters = attributes["show-filters"] === undefined
+    ? communityFeedFilters === "show"
+    : toBoolean(attributes["show-filters"]);
   const deepLinkTag = searchParams.get("tag");
 
   if (isLoading) return <ContentLoadingState compact label="Loading community feed" />;
@@ -586,6 +708,7 @@ function CommunityFeedShortcode({ attributes }: ShortcodeProps) {
       initialSelectedTags={deepLinkTag ? [deepLinkTag] : selectedTags.length ? selectedTags : undefined}
       defaultLayout={layout}
       defaultLoadMode={loadMode}
+      onToggleLike={(post) => toggleCommunityPostLike(Number(post.id))}
     />
   );
 }
@@ -904,6 +1027,7 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
   const deepLinkOrderId = Number(deepLink.get("order_id") || 0);
   const deepLinkOrderKey = deepLink.get("key") || "";
   const deepLinkEmail = deepLink.get("email") || "";
+  const refreshIntervalMs = 10_000;
 
   useEffect(() => {
     if (!confirmation) return;
@@ -911,41 +1035,65 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
     setIsLoading(true);
     setRefreshError(null);
 
-    void getOrder(
-      confirmation.order.order_id,
-      confirmation.order.order_key || "",
-      confirmation.billingEmail,
-    ).then(async (result) => {
-      if (cancelled) return;
-      if (result.ok) {
-        setLiveOrder(result.data);
-        setIsLoading(false);
-        return;
-      }
-
+    let refreshTimer = 0;
+    const scheduleRefresh = () => {
+      refreshTimer = window.setTimeout(refreshOrder, refreshIntervalMs);
+    };
+    async function refreshOrder() {
       try {
-        const authenticatedOrder = await getOrderById(confirmation.order.order_id);
+        const result = await getOrder(
+          confirmation.order.order_id,
+          confirmation.order.order_key || "",
+          confirmation.billingEmail,
+        );
         if (cancelled) return;
-        if (authenticatedOrder) {
-          setAccountOrder(authenticatedOrder);
-        } else {
-          setRefreshError(result.error);
+        if (result.ok) {
+          setLiveOrder(result.data);
+          setRefreshError(null);
+          setIsLoading(false);
+          if (["pending", "processing", "on-hold"].includes(result.data.status.replace(/^wc-/, ""))) {
+            scheduleRefresh();
+          }
+          return;
+        }
+
+        try {
+          const authenticatedOrder = await getOrderById(confirmation.order.order_id);
+          if (cancelled) return;
+          if (authenticatedOrder) {
+            setAccountOrder(authenticatedOrder);
+            setRefreshError(null);
+            if (["pending", "processing", "on-hold"].includes(authenticatedOrder.status.replace(/^wc-/, ""))) {
+              scheduleRefresh();
+            }
+          } else {
+            setRefreshError(result.error);
+            if (isRetryableHttpStatus(result.status)) {
+              scheduleRefresh();
+            }
+          }
+        } catch (error) {
+          if (!cancelled) {
+            setRefreshError(error instanceof Error ? error.message : result.error);
+            if (isRetryableHttpStatus(result.status)) {
+              scheduleRefresh();
+            }
+          }
+        } finally {
+          if (!cancelled) setIsLoading(false);
         }
       } catch (error) {
-        if (!cancelled) {
-          setRefreshError(error instanceof Error ? error.message : result.error);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
+        if (cancelled) return;
+        setRefreshError(error instanceof Error ? error.message : t("order_success.refresh_error"));
+        setIsLoading(false);
+        scheduleRefresh();
       }
-    }).catch((error: unknown) => {
-      if (cancelled) return;
-      setRefreshError(error instanceof Error ? error.message : t("order_success.refresh_error"));
-      setIsLoading(false);
-    });
+    }
+    void refreshOrder();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(refreshTimer);
     };
   }, [confirmation, t]);
 
@@ -956,21 +1104,38 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
     if (!orderId || (!confirmation && (!orderKey || !billingEmail))) return;
 
     let cancelled = false;
+    let refreshTimer = 0;
+    let initialRequest = true;
     setDownloadsLoading(true);
     setDownloadsError(null);
-    void getOrderDownloadAccess({ orderId, orderKey, billingEmail })
-      .then((result) => {
-        if (!cancelled) setDownloadAccess(result);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setDownloadsError(error instanceof Error ? error.message : "Your download links could not be loaded.");
-      })
-      .finally(() => {
-        if (!cancelled) setDownloadsLoading(false);
-      });
+    const refreshDownloads = async () => {
+      try {
+        const result = await getOrderDownloadAccess({ orderId, orderKey, billingEmail });
+        if (cancelled) return;
+        setDownloadAccess(result);
+        setDownloadsError(null);
+        if (!result.downloadPermitted) {
+          refreshTimer = window.setTimeout(refreshDownloads, refreshIntervalMs);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDownloadsError(error instanceof Error ? error.message : "Your download links could not be loaded.");
+          if (shouldRetryRequestError(error)) {
+            refreshTimer = window.setTimeout(refreshDownloads, refreshIntervalMs);
+          }
+        }
+      } finally {
+        if (!cancelled && initialRequest) {
+          initialRequest = false;
+          setDownloadsLoading(false);
+        }
+      }
+    };
+    void refreshDownloads();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(refreshTimer);
     };
   }, [confirmation, deepLinkOrderId, deepLinkOrderKey, deepLinkEmail]);
 
@@ -993,9 +1158,12 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
               isLoading={downloadsLoading}
               error={downloadsError}
               emptyMessage={downloadAccess?.hasDownloadableItems && !downloadAccess.downloadPermitted
-                ? "Download links will appear after payment is confirmed."
+                ? "Download links will appear automatically after payment is confirmed and the order is completed."
                 : undefined}
             />
+            <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Guest access to this secure order page remains available for 7 days after order completion.
+            </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Link to={shopPath} className="rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 no-underline dark:border-zinc-700 dark:text-zinc-200">
                 {t("order_success.cta.shopping")}
@@ -1069,15 +1237,20 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
         ) : null}
 
         {resolvedMode === "digital" ? (
-          <DigitalDownloadsPanel
-            downloads={downloadAccess?.downloads.length ? downloadAccess.downloads : accountOrder?.downloads || []}
-            isLoading={downloadsLoading}
-            error={downloadsError}
-            emptyMessage={(downloadAccess?.hasDownloadableItems || accountOrder?.hasDownloadableItems)
-              && !(downloadAccess?.downloadPermitted || accountOrder?.downloadPermitted)
-              ? "Download links will appear after payment is confirmed."
-              : undefined}
-          />
+          <div className="grid gap-2">
+            <DigitalDownloadsPanel
+              downloads={downloadAccess?.downloads.length ? downloadAccess.downloads : accountOrder?.downloads || []}
+              isLoading={downloadsLoading}
+              error={downloadsError}
+              emptyMessage={(downloadAccess?.hasDownloadableItems || accountOrder?.hasDownloadableItems)
+                && !(downloadAccess?.downloadPermitted || accountOrder?.downloadPermitted)
+                ? "Download links will appear automatically after payment is confirmed and the order is completed."
+                : undefined}
+            />
+            <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              This secure order page is retained in this browser for 7 days.
+            </p>
+          </div>
         ) : null}
 
         <div className="grid gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-sm dark:border-zinc-800 dark:bg-zinc-950/40">
@@ -1334,6 +1507,13 @@ function UnsubscribeFormShortcode({ attributes }: ShortcodeProps) {
 
 export const WORDPRESS_SHORTCODE_RENDERERS: Record<string, WordPressShortcodeRenderer> = {
   hero: (attributes) => <HeroShortcode attributes={attributes} />,
+  "video-hero": (attributes) => <VideoHeroShortcode attributes={attributes} />,
+  "spotify-radio": (attributes) => <SpotifyRadioShortcode attributes={attributes} />,
+  chat_assistant: () => (
+    <Suspense fallback={<ContentLoadingState compact label="Loading AI Assistant" />}>
+      <LazyChatAssistantShortcode />
+    </Suspense>
+  ),
   categories: (attributes) => <CategoriesShortcode attributes={attributes} />,
   slider: (attributes) => <SliderShortcode attributes={attributes} />,
   carousel: (attributes) => <CarouselShortcode attributes={attributes} />,
@@ -1341,6 +1521,7 @@ export const WORDPRESS_SHORTCODE_RENDERERS: Record<string, WordPressShortcodeRen
   "sticky-posts": (attributes) => <StickyPostsShortcode attributes={attributes} />,
   sticky_posts: (attributes) => <StickyPostsShortcode attributes={attributes} />,
   tags: (attributes) => <TagsShortcode attributes={attributes} />,
+  "product-tags": (attributes) => <ProductTagsShortcode attributes={attributes} />,
   authors: (attributes) => <AuthorsShortcode attributes={attributes} />,
   reviews: (attributes) => <ReviewsShortcode attributes={attributes} />,
   comments: (attributes) => <CommentsShortcode attributes={attributes} />,

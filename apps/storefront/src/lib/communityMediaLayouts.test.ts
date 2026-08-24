@@ -14,6 +14,14 @@ const feed = readFileSync(
   new URL("../../../../packages/ui/src/social/SocialFeedGrid.tsx", import.meta.url),
   "utf8",
 );
+const lightbox = readFileSync(
+  new URL("../../../../packages/ui/src/social/CommunityMediaLightbox.tsx", import.meta.url),
+  "utf8",
+);
+const postTemplate = readFileSync(
+  new URL("../pages/CommunityPostMockupPage.tsx", import.meta.url),
+  "utf8",
+);
 
 test("community grid cards cover their locked aspect while compact thumbnails remain contained", () => {
   assert.match(card, /fit="contain-right"[\s\S]*lockAspect/);
@@ -27,6 +35,39 @@ test("community grid videos expose playable overlay controls", () => {
   assert.match(gallery, /aria-label=\{isMuted \? "Unmute video" : "Mute video"\}/);
   assert.match(gallery, /controls/);
   assert.match(gallery, /playsInline/);
+});
+
+test("grouped community cards switch media without activating card navigation", () => {
+  assert.match(gallery, /aria-label="Previous media"/);
+  assert.match(gallery, /aria-label="Next media"/);
+  assert.match(gallery, /event\.stopPropagation\(\)/);
+  assert.match(gallery, /aria-pressed=\{index === activeIndex\}/);
+  assert.match(card, /closest\("a, button, input, textarea, select"\)/);
+});
+
+test("community post detail gallery opens an accessible image and video lightbox", () => {
+  assert.match(postTemplate, /<CommunityMediaGallery[\s\S]*variant="detail"/);
+  assert.match(gallery, /<CommunityMediaLightbox/);
+  assert.match(lightbox, /role="dialog"/);
+  assert.match(lightbox, /aria-modal="true"/);
+  assert.match(lightbox, /current\.mediaType === "video"[\s\S]*<video/);
+  assert.match(lightbox, /<ResponsiveImage/);
+  assert.match(lightbox, /media\.length > 1/);
+});
+
+test("community media lightbox supports keyboard, swipe, and focus restoration", () => {
+  assert.match(lightbox, /event\.key === "Escape"/);
+  assert.match(lightbox, /event\.key === "ArrowRight"/);
+  assert.match(lightbox, /event\.key === "ArrowLeft"/);
+  assert.match(lightbox, /onTouchStart=\{handleTouchStart\}/);
+  assert.match(lightbox, /onTouchEnd=\{handleTouchEnd\}/);
+  assert.match(lightbox, /closeButtonRef\.current\?\.focus\(\)/);
+  assert.match(lightbox, /returnFocusRef\.current\?\.focus\(\)/);
+  assert.match(lightbox, /document\.documentElement\.style\.overflow = "hidden"/);
+  assert.match(lightbox, /event\.target\.closest\("video, input, textarea, select, \[contenteditable\]"\)/);
+  assert.match(lightbox, /event\.stopPropagation\(\);[\s\S]*onClose\(\)/);
+  assert.match(gallery, /activeMedia\?\.mediaType !== "video" \|\| isLightboxOpen/);
+  assert.match(gallery, /onIndexChange=\{setCurrentMedia\}/);
 });
 
 test("community list cards stack cleanly before the desktop media rail", () => {

@@ -67,19 +67,6 @@ export const COMPATIBLE_SEARCH_QUERY = /* GraphQL */ `
     authors: users(first: 6, where: { search: $search, hasPublishedPosts: POST }) {
       nodes { id databaseId name slug uri }
     }
-    communityPosts(first: 6, where: { search: $search, status: PUBLISH }) {
-      nodes { id databaseId title uri slug }
-    }
-    communityTags(first: 4, where: { search: $search, hideEmpty: true }) {
-      nodes { id name uri slug }
-    }
-    communityMembers(search: $search, first: 6) {
-      databaseId
-      name
-      communityHandle
-      description
-      communityProfilePublic
-    }
   }
 `;
 
@@ -101,6 +88,9 @@ export function isSearchCompatibilitySchemaError(errors: { message: string }[] |
     "productTags",
     "productBrands",
     "language",
+    "communityPosts",
+    "communityTags",
+    "communityMembers",
   ]) || Boolean(
     errors?.length
     && errors.every(({ message }) =>

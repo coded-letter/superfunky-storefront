@@ -1,12 +1,19 @@
 import {
   normalizeLanguagePath,
+  resolvePathLanguageCode,
   resolveCanonicalLanguagePath,
   resolveCanonicalLanguageRoute,
+  resolveLocalizedPageUri,
   useLanguage,
   type CanonicalLanguageRouteResolution,
 } from "@funky/ui";
 import { useIncrementalData } from "@funky/sdk/react";
-import { graphqlRequest } from "@funky/sdk";
+import {
+  graphqlRequest,
+  STOREFRONT_DEFAULT_LANGUAGE,
+  STOREFRONT_EXPECTED_LOCALES,
+  type GraphqlResponse,
+} from "@funky/sdk";
 import {
   missingGraphqlFieldRule,
   requestGraphqlWithCompatibility,
@@ -14,11 +21,16 @@ import {
 } from "./graphqlFieldFallback";
 import {
   classifyPageRouteKeys,
+  resolveRoutePageUri,
   type RoutePageNode,
   type StorefrontRouteKey,
 } from "./storefrontRouteClassification";
 import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
-import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility";
+import {
+  createCoreRouteRegistryQuery,
+  shouldPreferCoreGraphqlQueries,
+  shouldPreferCoreContentQueries,
+} from "./profileGraphqlCompatibility";
 
 export type { StorefrontRouteKey } from "./storefrontRouteClassification";
 
@@ -27,6 +39,8 @@ export type RouteRegistryEntry = {
   uri: string;
   languageCode: string;
 };
+
+const EXPECTED_LOCALE_CODES = STOREFRONT_EXPECTED_LOCALES as readonly string[];
 
 type RouteRegistryResult = {
   pages: {
@@ -38,7 +52,7 @@ type RouteRegistryResult = {
   } | null;
 };
 
-const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v4";
+export const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v6";
 
 const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
   query StorefrontRouteRegistry($after: String) {
@@ -62,7 +76,7 @@ const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
 
 const PAGE_STATUS_COMPATIBILITY_RULE: GraphqlCompatibilityRule = {
   matches: (message) => message.includes("Cannot access offset of type string on string"),
-  transform: (query) => query.replace(/where:\s*\{\s*status:\s*PUBLISH\s*\}\s*,\s*/g, ""),
+  transform: createCoreRouteRegistryQuery,
 };
 
 const ROUTE_REGISTRY_COMPATIBILITY_RULES = [
@@ -76,20 +90,31 @@ function normalizeUri(uri: string): string {
 }
 
 function normalizePathname(pathname: string): string {
-  return normalizeUri(pathname === "/" ? "/" : pathname);
+  let decodedPathname = pathname;
+  try {
+    decodedPathname = decodeURI(pathname);
+  } catch {
+    decodedPathname = pathname;
+  }
+  return normalizeUri(decodedPathname === "/" ? "/" : decodedPathname);
 }
 
 function normalizeLanguageCode(languageCode: string | null | undefined): string {
   return languageCode?.toLowerCase() || "en";
 }
 
-export async function getStorefrontRouteRegistry(): Promise<RouteRegistryEntry[]> {
+export async function getStorefrontRouteRegistry(
+  defaultLanguageCode = STOREFRONT_DEFAULT_LANGUAGE,
+): Promise<RouteRegistryEntry[]> {
   const entries: RouteRegistryEntry[] = [];
   let after: string | null = null;
   do {
-    const result = await requestGraphqlWithCompatibility<RouteRegistryResult>(
+    const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+      ? createCoreRouteRegistryQuery(ROUTE_REGISTRY_QUERY)
+      : ROUTE_REGISTRY_QUERY;
+    const result: GraphqlResponse<RouteRegistryResult> = await requestGraphqlWithCompatibility<RouteRegistryResult>(
       graphqlRequest,
-      ROUTE_REGISTRY_QUERY,
+      query,
       { after },
       ROUTE_REGISTRY_COMPATIBILITY_RULES,
     );
@@ -99,12 +124,28 @@ export async function getStorefrontRouteRegistry(): Promise<RouteRegistryEntry[]
     if (!pages) throw new Error("The storefront route registry query returned no pages");
 
     for (const page of pages.nodes) {
-      if (!page.uri) continue;
+      const fallbackPageUri = resolveRoutePageUri(page);
+      if (!fallbackPageUri) continue;
+      const languageCode = page.language?.code
+        ? normalizeLanguageCode(page.language.code)
+        : resolvePathLanguageCode(
+            fallbackPageUri,
+            EXPECTED_LOCALE_CODES,
+            defaultLanguageCode,
+            STOREFRONT_BACKEND_PROFILE === "blog",
+          );
+      const pageUri = resolveLocalizedPageUri(
+        page.uri,
+        page.slug,
+        languageCode,
+        EXPECTED_LOCALE_CODES,
+      );
+      if (!pageUri) continue;
       for (const key of classifyPageRouteKeys(page)) {
         entries.push({
           key,
-          uri: normalizeUri(page.uri),
-          languageCode: normalizeLanguageCode(page.language?.code),
+          uri: normalizeUri(pageUri),
+          languageCode,
         });
       }
     }
@@ -170,9 +211,9 @@ export function useResolvedStorefrontPath(
   const { configuredLanguageCodes, languageCode: selectedLanguageCode } = useLanguage();
   const languageCode = targetLanguageCode?.toLowerCase() || selectedLanguageCode;
   const { data: registry, isLoading } = useIncrementalData(
-    ROUTE_REGISTRY_CACHE_KEY,
-    getStorefrontRouteRegistry,
-    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+    `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || STOREFRONT_DEFAULT_LANGUAGE}`,
+    () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
+    !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE),
   );
 
   return {
@@ -192,9 +233,9 @@ export function useResolvedStorefrontLanguageRoute(
 ): { resolution: CanonicalLanguageRouteResolution<StorefrontRouteKey> | null; isLoading: boolean } {
   const { configuredLanguageCodes, languageCode } = useLanguage();
   const { data: registry, isLoading } = useIncrementalData(
-    ROUTE_REGISTRY_CACHE_KEY,
-    getStorefrontRouteRegistry,
-    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+    `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || STOREFRONT_DEFAULT_LANGUAGE}`,
+    () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
+    !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE),
   );
   return {
     resolution: resolveCanonicalLanguageRoute(
@@ -208,10 +249,11 @@ export function useResolvedStorefrontLanguageRoute(
 }
 
 export function useMatchedStorefrontRouteKey(pathname: string): StorefrontRouteKey | null {
+  const { configuredLanguageCodes } = useLanguage();
   const { data: registry } = useIncrementalData(
-    ROUTE_REGISTRY_CACHE_KEY,
-    getStorefrontRouteRegistry,
-    !shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+    `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || STOREFRONT_DEFAULT_LANGUAGE}`,
+    () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
+    !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE),
   );
   return matchStorefrontRouteKey(registry || [], pathname);
 }

@@ -66,6 +66,9 @@ import { resolveMarketplaceMutationPrice } from "../lib/marketplaceProductPricin
 import { DigitalDownloadsPanel } from "../components/DigitalDownloadsPanel";
 import {
   getStorefrontAccount,
+  getCachedStorefrontAccount,
+  getCachedStorefrontAccountOrders,
+  getStorefrontAccountOrders,
   removeStorefrontAvatar,
   resendStorefrontEmailVerification,
   updateStorefrontEmail,
@@ -111,14 +114,37 @@ export function AccountMockupPage() {
   const defaultTab = allowedTabs.includes(configuredTab) ? configuredTab : allowedTabs[0] ?? "dashboard";
   const hashTab = accountTabFromHash(location.hash);
   const [activeTab, setActiveTab] = useConfiguredState<AccountTab>(hashTab && allowedTabs.includes(hashTab) ? hashTab : defaultTab);
+  const shouldLoadAccount = activeTab !== "community";
   const [accountRevision, setAccountRevision] = useState(0);
   const [authUserId, setAuthUserId] = useState(() => authStore.load()?.user?.databaseId || 0);
+  const cachedAccount = getCachedStorefrontAccount();
+  const cachedAccountOrders = getCachedStorefrontAccountOrders();
   const [accountState, setAccountState] = useState<{ data: StorefrontAccount | null; isLoading: boolean; error: Error | null }>({
-    data: null,
-    isLoading: Boolean(authUserId),
+    data: cachedAccount,
+    isLoading: Boolean(authUserId && !cachedAccount && shouldLoadAccount),
     error: null,
   });
-  useEffect(() => authStore.subscribe(() => setAuthUserId(authStore.load()?.user?.databaseId || 0)), []);
+  const [ordersState, setOrdersState] = useState<{ isLoading: boolean; loadedForUserId: number | null; error: Error | null }>({
+    isLoading: false,
+    loadedForUserId: cachedAccountOrders ? authUserId : null,
+    error: null,
+  });
+  useEffect(() => authStore.subscribe(() => {
+    const nextUserId = authStore.load()?.user?.databaseId || 0;
+    const nextAccount = getCachedStorefrontAccount();
+    const nextOrders = getCachedStorefrontAccountOrders();
+    setAuthUserId(nextUserId);
+    setAccountState({
+      data: nextAccount,
+      isLoading: false,
+      error: null,
+    });
+    setOrdersState({
+      isLoading: false,
+      loadedForUserId: nextOrders ? nextUserId : null,
+      error: null,
+    });
+  }), []);
   useEffect(() => {
     let cancelled = false;
     if (!authUserId) {
@@ -127,10 +153,24 @@ export function AccountMockupPage() {
         cancelled = true;
       };
     }
+    if (!shouldLoadAccount) {
+      setAccountState((current) => ({ ...current, isLoading: false, error: null }));
+      return () => {
+        cancelled = true;
+      };
+    }
     setAccountState((current) => ({ ...current, isLoading: true, error: null }));
-    getStorefrontAccount()
+    getStorefrontAccount({ force: accountRevision > 0 })
       .then((data) => {
-        if (!cancelled) setAccountState({ data, isLoading: false, error: null });
+        if (!cancelled) {
+          setAccountState((current) => ({
+            data: data && current.data?.orders.length
+              ? { ...data, orders: current.data.orders }
+              : data,
+            isLoading: false,
+            error: null,
+          }));
+        }
       })
       .catch((error) => {
         if (!cancelled) setAccountState({ data: null, isLoading: false, error: error instanceof Error ? error : new Error("The account could not be loaded") });
@@ -138,9 +178,51 @@ export function AccountMockupPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountRevision, authUserId]);
+  }, [accountRevision, authUserId, shouldLoadAccount]);
+  const needsOrders = activeTab === "orders" || activeTab === "downloads";
+  useEffect(() => {
+    let cancelled = false;
+    if (!authUserId) {
+      setOrdersState({ isLoading: false, loadedForUserId: null, error: null });
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!needsOrders || ordersState.loadedForUserId === authUserId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setOrdersState((current) => ({ ...current, isLoading: true, error: null }));
+    getStorefrontAccountOrders()
+      .then((orders) => {
+        if (cancelled) return;
+        setAccountState((current) => current.data
+          ? { ...current, data: { ...current.data, orders } }
+          : current);
+        setOrdersState({ isLoading: false, loadedForUserId: authUserId, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setOrdersState({
+            isLoading: false,
+            loadedForUserId: ordersState.loadedForUserId,
+            error: error instanceof Error ? error : new Error("Your orders could not be loaded"),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, needsOrders, ordersState.loadedForUserId]);
   const account = accountState.data;
-  const accountInitials = `${account?.firstName[0] ?? ""}${account?.lastName[0] ?? ""}`.toUpperCase() || "—";
+  const authUser = authStore.load()?.user;
+  const accountDisplayName = account?.displayName || authUser?.displayName || "Guest account";
+  const accountEmail = account?.email || authUser?.email || "Sign in to load your account";
+  const accountInitials = `${account?.firstName[0] ?? ""}${account?.lastName[0] ?? ""}`.toUpperCase()
+    || accountDisplayName.slice(0, 1).toUpperCase()
+    || "—";
 
   const updateAccountAvatar = ({ avatarUrl, attachmentId }: AccountAvatar) => {
     setAccountState((current) => current.data
@@ -170,7 +252,7 @@ export function AccountMockupPage() {
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="grid h-fit gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-28">
           <div className="flex items-center gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
-            {accountState.isLoading ? (
+            {accountState.isLoading && !authUser ? (
               <div className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-700" aria-hidden="true" />
             ) : account?.avatarUrl ? (
               <ResponsiveImage
@@ -185,15 +267,15 @@ export function AccountMockupPage() {
                 {accountInitials}
               </div>
             )}
-            {accountState.isLoading ? (
+            {accountState.isLoading && !authUser ? (
               <div className="grid min-w-0 flex-1 gap-2" role="status" aria-label="Loading account identity">
                 <span className="h-3.5 w-28 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
                 <span className="h-3 w-36 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
               </div>
             ) : (
               <div className="grid min-w-0 gap-0.5">
-                <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{account?.displayName || "Guest account"}</p>
-                <p className="m-0 truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.email || "Sign in to load your account"}</p>
+                <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{accountDisplayName}</p>
+                <p className="m-0 truncate text-xs text-zinc-500 dark:text-zinc-400">{accountEmail}</p>
               </div>
             )}
           </div>
@@ -261,8 +343,8 @@ export function AccountMockupPage() {
               onAccountChanged={() => setAccountRevision((revision) => revision + 1)}
             />
           ) : null}
-          {authUserId && activeTab === "orders" ? <OrdersPanel account={account} isLoading={accountState.isLoading} error={accountState.error} /> : null}
-          {authUserId && activeTab === "downloads" ? <DownloadsPanel account={account} isLoading={accountState.isLoading} error={accountState.error} /> : null}
+          {authUserId && activeTab === "orders" ? <OrdersPanel account={account} isLoading={accountState.isLoading || ordersState.isLoading} error={accountState.error || ordersState.error} /> : null}
+          {authUserId && activeTab === "downloads" ? <DownloadsPanel account={account} isLoading={accountState.isLoading || ordersState.isLoading} error={accountState.error || ordersState.error} /> : null}
           {authUserId && activeTab === "addresses" ? (
             <AddressesPanel
               account={account}
@@ -408,7 +490,7 @@ function DashboardPanel({
   onAccountChanged: () => void;
 }) {
   const { showToast } = useToast();
-  const { viewer } = useCommunityData();
+  const pushEnabled = useNavigationData().data?.storefrontConfig.features.push === true;
   const [profile, setProfile] = useState<ProfileFormState>(DEFAULT_PROFILE);
   const [draft, setDraft] = useState<ProfileFormState>(DEFAULT_PROFILE);
   const [isEditing, setIsEditing] = useState(false);
@@ -540,7 +622,6 @@ function DashboardPanel({
 
   const initials = `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase() || "JD";
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
-  const canManageLayouts = viewer?.capabilities.includes("manage_options") ?? false;
   if (isLoading) return <AccountLoadingDots label="Loading your account" />;
   if (error) return <AccountPanelStatus message={error.message} tone="error" />;
   if (!account) return <AccountPanelStatus message="Sign in to load your profile and account summary." />;
@@ -655,25 +736,23 @@ function DashboardPanel({
         <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           Storefront controls
         </h2>
-        <div className={`mt-4 grid gap-3 ${canManageLayouts ? "sm:grid-cols-2" : ""}`}>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <AccountControlLink
             to="/shortcodes"
             icon={<Sparkles className="h-5 w-5" aria-hidden="true" />}
             title="Shortcode library"
             description="Browse public storefront shortcodes and their supported attributes."
           />
-          {canManageLayouts ? (
-            <AccountControlLink
-              to="/layout-studio"
-              icon={<Store className="h-5 w-5" aria-hidden="true" />}
-              title="Layout Studio"
-              description="Configure storefront layouts and preview component variants."
-            />
-          ) : null}
+          <AccountControlLink
+            to="/layout-studio"
+            icon={<Store className="h-5 w-5" aria-hidden="true" />}
+            title="Layout Studio"
+            description="Configure storefront layouts and preview component variants."
+          />
         </div>
       </section>
 
-      <PushNotificationsCard />
+      {pushEnabled ? <PushNotificationsCard /> : null}
 
       <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-4 flex items-center justify-between">

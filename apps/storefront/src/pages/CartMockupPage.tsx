@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
-import { ProductCard, ResponsiveImage, useCart, useCurrency } from "@funky/ui";
-import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
+import { ProductCard, ResponsiveImage, useCart, useCurrency, useLayoutPreferences } from "@funky/ui";
+import { StandaloneApplicationNotice, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { useAbandonedCartRecovery } from "../lib/abandonedCart";
 import { DEFAULT_FREE_SHIPPING_METHOD, isCartVirtual, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, useCheckoutCart } from "../lib/checkout";
 import { isBackendConfigured } from "@funky/sdk";
@@ -13,8 +13,6 @@ import { FREE_SHIPPING_THRESHOLD, MOCK_PRODUCTS, OrderSummaryCard, primaryAction
 import { type StoreApiAddress } from "../lib/wcStoreApi";
 import { useCommerceData } from "../state/commerceData";
 import { useNavigationData } from "../state/navigationData";
-
-type CartPageLayout = "classic" | "editorial";
 
 export function CartMockupPage() {
   const embedded = useEmbeddedApplicationShortcode();
@@ -43,13 +41,12 @@ export function CartMockupPage() {
   }
   const { data: navigationData } = useNavigationData();
   const { data: commerceData } = useCommerceData();
-  const config = useApplicationShortcode(["funkycommerce_cart", "woocommerce_cart"], { layout: "classic", "summary-position": "sticky" });
+  const { cartLayout: layout, cartSummaryPosition } = useLayoutPreferences();
   const shopPath = useStorefrontPath("shop", "/shop");
   const checkoutPath = useStorefrontPath("checkout", "/checkout");
   const { items, subtotalAmount, subtotalLabel, removeItem, updateQuantity } = useCart();
   const { formatBaseAmount } = useCurrency();
-  const layout: CartPageLayout = config.layout === "editorial" ? "editorial" : "classic";
-  const summarySticky = config["summary-position"] !== "static";
+  const summarySticky = cartSummaryPosition === "sticky";
   
   // Country selector for previewing shipping costs and taxes in different locations
   const configuredCountries =

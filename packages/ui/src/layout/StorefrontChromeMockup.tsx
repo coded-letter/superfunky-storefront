@@ -69,6 +69,10 @@ export type StorefrontChromeMockupProps = {
       newsletterPrivacyLabel?: string;
       extraHtml?: string;
       copyrightText?: string;
+      spotifyPlaylistUrl?: string;
+      spotifyPlaylistEmbedUrl?: string;
+      spotifyPlayerTitle?: string;
+      spotifyPlayerDescription?: string;
     };
     features: {
       promo: boolean;
@@ -84,7 +88,6 @@ export type StorefrontChromeMockupProps = {
       crypto: boolean;
     };
   };
-  assistantPlacement?: "footer" | "header-command-overlay" | "fixed";
   headerActionSlot?: ReactNode;
   footerAssistantSlot?: ReactNode;
   assistantOverlaySlot?: ReactNode;
@@ -120,7 +123,6 @@ function StorefrontChromeShell({
   pushBusy,
   homePath,
   storefrontConfig,
-  assistantPlacement,
   headerActionSlot,
   footerAssistantSlot,
   assistantOverlaySlot,
@@ -174,6 +176,7 @@ function StorefrontChromeShell({
         }]
       : [],
   );
+  const spotifyPlaylistUrl = storefrontConfig?.footer?.spotifyPlaylistUrl?.trim() ?? "";
 
   useEffect(() => {
     const iconUrl = storefrontConfig?.branding.iconUrl;
@@ -265,17 +268,16 @@ function StorefrontChromeShell({
           extraWrapperLayout={footerExtraWrapperLayout}
           showExtraWrapper={showFooterExtraWrapper}
           extraWrapperHtml={storefrontConfig?.footer?.extraHtml ?? ""}
-          showSpotifyPlayer={showFooterSpotifyPlayer}
-          spotifyPlayerProps={storefrontConfig?.footer?.spotifyPlaylistUrl ? { uri: storefrontConfig.footer.spotifyPlaylistUrl } : undefined}
-          showAssistantFrame={showFooterAssistantFrame && (!assistantPlacement || assistantPlacement === "footer")}
+          showSpotifyPlayer={showFooterSpotifyPlayer && Boolean(spotifyPlaylistUrl)}
+          spotifyPlayerTitle={storefrontConfig?.footer?.spotifyPlayerTitle || undefined}
+          spotifyPlayerDescription={storefrontConfig?.footer?.spotifyPlayerDescription || undefined}
+          spotifyPlayerProps={spotifyPlaylistUrl ? { uri: spotifyPlaylistUrl } : undefined}
+          showAssistantFrame={showFooterAssistantFrame && Boolean(footerAssistantSlot)}
           showPaymentMethods={showFooterPaymentMethods}
           showSocialLinks={showFooterSocialLinks}
           socialLinks={footerSocialLinks}
           showCopyright={showFooterCopyright}
-          hiddenPaymentMethodKeys={[
-            ...hiddenFooterPaymentMethodKeys,
-            ...(storefrontConfig?.features.crypto === false ? ["btc", "eth"] : []),
-          ]}
+          hiddenPaymentMethodKeys={hiddenFooterPaymentMethodKeys}
           hiddenSocialLinkKeys={hiddenFooterSocialLinkKeys}
           projectName={storefrontConfig?.branding.storeName}
           logoUrl={storefrontConfig?.branding.logoUrl || undefined}

@@ -1,6 +1,9 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useLayoutPreferences } from "@funky/ui";
-import { mapLayoutToHiddenFooterKeys, type StorefrontLayoutConfiguration } from "./navigation";
+import {
+  mapLayoutToHiddenFooterKeys,
+  type StorefrontLayoutConfiguration,
+} from "./navigation";
 
 type PrefsContext = ReturnType<typeof useLayoutPreferences>;
 
@@ -24,6 +27,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setShowHeaderReadingListLink(layout.showHeaderReadingListLink);
   prefs.setShowHeaderWishlistLink(layout.showHeaderWishlistLink);
   prefs.setShowHeaderCartIcon(layout.showHeaderCartIcon);
+  prefs.setShowHeaderPublishButton(layout.showHeaderPublishButton);
   prefs.setCartTriggerVariant(layout.cartTriggerVariant);
   prefs.setShowCartDrawerPromotedProduct(layout.showCartDrawerPromotedProduct);
   prefs.setShowFooter(layout.showFooter);
@@ -50,6 +54,19 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setBrandPalette(layout.brandPalette);
   prefs.setBrandGradientStyle(layout.brandGradientStyle);
   prefs.setProductPageLayout(layout.productPageLayout);
+  prefs.setRelatedProductsColumns(layout.relatedProductsColumns);
+  prefs.setShowStudioRelatedProductsUnderMeta(layout.showStudioRelatedProductsUnderMeta);
+  prefs.setHomeHeroLayout(layout.homeHeroLayout);
+  prefs.setShopProductCardVariant(layout.shopProductCardVariant);
+  prefs.setAuthLayout(layout.authLayout);
+  prefs.setReadingListLayout(layout.readingListLayout);
+  prefs.setWishlistCardVariant(layout.wishlistCardVariant);
+  prefs.setCommunityFeedLayout(layout.communityFeedLayout);
+  prefs.setCommunityFeedLoadMode(layout.communityFeedLoadMode);
+  prefs.setCommunityFeedPageSize(layout.communityFeedPageSize);
+  prefs.setCommunityFeedFilters(layout.communityFeedFilters);
+  prefs.setCartLayout(layout.cartLayout);
+  prefs.setCartSummaryPosition(layout.cartSummaryPosition);
   prefs.setCheckoutStoreMode(layout.checkoutStoreMode);
   prefs.setCheckoutCouponPosition(layout.checkoutCouponPosition);
   prefs.setCheckoutPaymentPosition(layout.checkoutPaymentPosition);
@@ -63,6 +80,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setAuthorProfileHeaderLayout(layout.authorProfileHeaderLayout);
   prefs.setProductArchiveHeroLayout(layout.productArchiveHeroLayout);
   prefs.setPostArchiveHeroLayout(layout.postArchiveHeroLayout);
+  prefs.setShowArchiveDescriptionInHero(layout.showArchiveDescriptionInHero);
   prefs.setPostTocLayout(layout.postTocLayout);
   prefs.setPostSharePosition(layout.postSharePosition);
   prefs.setPostAuthorLayout(layout.postAuthorLayout);
@@ -74,16 +92,24 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
 }
 
 /** Hydrates/reconciles the shared `LayoutPreferencesContext` from the canonical
- *  backend storefront `layout` configuration. Runs (via `useLayoutEffect`, so it
- *  applies before the browser paints) whenever the navigation data's `layout` object
- *  changes — on initial load and again if it is later revalidated with a different
- *  value — so the storefront's live chrome always reflects backend Control Center
- *  settings deterministically, with no client-side persistence or editing. */
-export function useLayoutPreferencesFromBackendConfig(layout: StorefrontLayoutConfiguration | undefined) {
+ *  backend storefront `layout` configuration. Layout Studio temporarily disables
+ *  reconciliation while its session-local preview is active so navigation-data
+ *  revalidation cannot overwrite the user's in-progress customization. */
+export function useLayoutPreferencesFromBackendConfig(
+  layout: StorefrontLayoutConfiguration | undefined,
+  enabled = true,
+) {
   const prefs = useLayoutPreferences();
+  const appliedLayoutSignature = useRef<string | null>(null);
+  const layoutSignature = enabled && layout ? JSON.stringify(layout) : null;
   useLayoutEffect(() => {
-    if (!layout) return;
+    if (!enabled || !layout || !layoutSignature || prefs.isLayoutPreviewActive) {
+      appliedLayoutSignature.current = null;
+      return;
+    }
+    if (appliedLayoutSignature.current === layoutSignature) return;
+    appliedLayoutSignature.current = layoutSignature;
     applyLayoutConfiguration(prefs, layout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout]);
+  }, [enabled, layoutSignature, prefs.isLayoutPreviewActive]);
 }

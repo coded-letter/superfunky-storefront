@@ -1,5 +1,5 @@
 import { normalizeDisplayLabel, type SearchResultItem } from "@funky/ui";
-import { graphqlRequest } from "@funky/sdk";
+import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import {
   mapStorefrontSearchResults,
   type StorefrontSearchQueryResult,
@@ -11,6 +11,7 @@ import {
   LEGACY_SEARCH_QUERY,
   SEARCH_QUERY,
 } from "./searchQuery.ts";
+import { searchWordPressRest } from "./searchRest.ts";
 
 export { mapStorefrontSearchResults, SEARCH_QUERY };
 export type { StorefrontSearchQueryResult };
@@ -21,6 +22,12 @@ export async function searchStorefront(
   routeLanguageCode: string,
   t: (key: string) => string = (key) => key,
 ): Promise<SearchResultItem[]> {
+  if (STOREFRONT_BACKEND_PROFILE === "blog") {
+    return searchWordPressRest(query, routeLanguageCode, t, {
+      normalizeLabel: normalizeDisplayLabel,
+    });
+  }
+
   const variables = {
     search: query,
     language: backendLanguageCode,

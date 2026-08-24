@@ -4,6 +4,8 @@ import type { StorefrontRouteKey } from "../lib/storefrontRouteClassification";
 import type { CmsPage } from "../lib/pages";
 import { BlogIndexFallback } from "../components/BlogIndexFallback";
 
+const PUBLIC_APPLICATION_ROUTES = new Set<StorefrontRouteKey>(["home", "shop", "blog", "community"]);
+
 export function PageMockupPage({
   routeKey,
   loadPage,
@@ -19,6 +21,7 @@ export function PageMockupPage({
     <CmsPageContent
       loadPage={loadPage}
       pageCacheKey={pageCacheKey}
+      fallbackRobots={routeKey && PUBLIC_APPLICATION_ROUTES.has(routeKey) ? "index, follow" : undefined}
       emptyFallback={routeKey === "blog" ? <BlogIndexFallback /> : undefined}
       shortcodeRenderers={APPLICATION_SHORTCODE_RENDERERS}
       synchronizeLanguage={synchronizeLanguage}

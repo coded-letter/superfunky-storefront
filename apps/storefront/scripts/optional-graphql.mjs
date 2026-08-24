@@ -22,3 +22,12 @@ export function hasOnlyMissingField(errors, fieldName, typeName) {
     );
   });
 }
+
+export function hasOnlyUnknownTypes(errors, typeNames) {
+  if (!errors?.length) return false;
+  const normalizedTypeNames = new Set(typeNames.map((typeName) => typeName.toLowerCase()));
+  return errors.every(({ message }) => {
+    const match = message.match(/unknown type "([^"]+)"/i);
+    return match && normalizedTypeNames.has(match[1].toLowerCase());
+  });
+}

@@ -131,7 +131,7 @@ export type StorefrontAccount = {
   orders: AccountOrder[];
 };
 
-const ACCOUNT_FIELDS = /* GraphQL */ `
+const ACCOUNT_PROFILE_FIELDS = /* GraphQL */ `
   databaseId
   displayName
   firstName
@@ -149,6 +149,9 @@ const ACCOUNT_FIELDS = /* GraphQL */ `
   shippingAddress {
     type firstName lastName company address1 address2 city state postcode country phone email
   }
+`;
+
+const ACCOUNT_ORDER_FIELDS = /* GraphQL */ `
   orders {
     databaseId number date status statusText total currency language
     items { name variation quantity total }
@@ -158,16 +161,76 @@ const ACCOUNT_FIELDS = /* GraphQL */ `
   }
 `;
 
-export async function getStorefrontAccount(): Promise<StorefrontAccount | null> {
+let cachedAccount: { token: string; account: StorefrontAccount | null } | null = null;
+let accountRequest: { token: string; promise: Promise<StorefrontAccount | null> } | null = null;
+let cachedOrders: { token: string; orders: AccountOrder[] } | null = null;
+let ordersRequest: { token: string; promise: Promise<AccountOrder[]> } | null = null;
+
+export function getCachedStorefrontAccount(): StorefrontAccount | null {
+  const token = authStore.load()?.authToken;
+  return token && cachedAccount?.token === token ? cachedAccount.account : null;
+}
+
+export function getCachedStorefrontAccountOrders(): AccountOrder[] | null {
+  const token = authStore.load()?.authToken;
+  return token && cachedOrders?.token === token ? cachedOrders.orders : null;
+}
+
+export async function getStorefrontAccount({ force = false }: { force?: boolean } = {}): Promise<StorefrontAccount | null> {
   const token = authStore.load()?.authToken;
   if (!token) return null;
-  const { data, errors } = await graphqlRequest<{ funkycommerceAccount: StorefrontAccount | null }>(
-    `query StorefrontAccount { funkycommerceAccount { ${ACCOUNT_FIELDS} } }`,
+  if (!force && cachedAccount?.token === token) return cachedAccount.account;
+  if (!force && accountRequest?.token === token) return accountRequest.promise;
+
+  const promise = graphqlRequest<{ funkycommerceAccount: Omit<StorefrontAccount, "orders"> | null }>(
+    `query StorefrontAccountProfile { funkycommerceAccount { ${ACCOUNT_PROFILE_FIELDS} } }`,
     undefined,
     token,
-  );
-  if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
-  return data?.funkycommerceAccount || null;
+  ).then(({ data, errors }) => {
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    const account = data?.funkycommerceAccount
+      ? {
+          ...data.funkycommerceAccount,
+          orders: cachedOrders?.token === token ? cachedOrders.orders : [],
+        }
+      : null;
+    cachedAccount = { token, account };
+    return account;
+  }).finally(() => {
+    if (accountRequest?.promise === promise) accountRequest = null;
+  });
+
+  accountRequest = { token, promise };
+  return promise;
+}
+
+export async function getStorefrontAccountOrders({ force = false }: { force?: boolean } = {}): Promise<AccountOrder[]> {
+  const token = authStore.load()?.authToken;
+  if (!token) return [];
+  if (!force && cachedOrders?.token === token) return cachedOrders.orders;
+  if (!force && ordersRequest?.token === token) return ordersRequest.promise;
+
+  const promise = graphqlRequest<{ funkycommerceAccount: { orders: AccountOrder[] } | null }>(
+    `query StorefrontAccountOrders { funkycommerceAccount { ${ACCOUNT_ORDER_FIELDS} } }`,
+    undefined,
+    token,
+  ).then(({ data, errors }) => {
+    if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
+    const orders = data?.funkycommerceAccount?.orders || [];
+    cachedOrders = { token, orders };
+    if (cachedAccount?.token === token && cachedAccount.account) {
+      cachedAccount = {
+        token,
+        account: { ...cachedAccount.account, orders },
+      };
+    }
+    return orders;
+  }).finally(() => {
+    if (ordersRequest?.promise === promise) ordersRequest = null;
+  });
+
+  ordersRequest = { token, promise };
+  return promise;
 }
 
 export async function getOrderById(orderId: number): Promise<AccountOrder | null> {
@@ -231,7 +294,7 @@ export async function updateStorefrontEmail(email: string): Promise<StorefrontAc
   }>(
     `mutation UpdateStorefrontEmail($email: String!) {
       updateFunkycommerceAccountEmail(input: { email: $email }) {
-        account { ${ACCOUNT_FIELDS} }
+        account { ${ACCOUNT_PROFILE_FIELDS} }
       }
     }`,
     { email },
@@ -239,7 +302,12 @@ export async function updateStorefrontEmail(email: string): Promise<StorefrontAc
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   if (!data?.updateFunkycommerceAccountEmail?.account) throw new Error("The email update returned no account");
-  return data.updateFunkycommerceAccountEmail.account;
+  const account = {
+    ...data.updateFunkycommerceAccountEmail.account,
+    orders: cachedOrders?.token === token ? cachedOrders.orders : [],
+  };
+  cachedAccount = { token, account };
+  return account;
 }
 
 export type AccountAvatar = {

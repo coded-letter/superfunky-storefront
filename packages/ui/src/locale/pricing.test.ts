@@ -31,12 +31,12 @@ test("includes Bitcoin and Ethereum in the fallback currency catalog", () => {
       .map(({ code, label, symbol }) => ({ code, label, symbol })),
     [
       { code: "BTC", label: "Bitcoin", symbol: "₿" },
-      { code: "ETH", label: "Ethereum", symbol: "Ξ" },
+      { code: "ETH", label: "Ethereum", symbol: "⟠" },
     ],
   );
 });
 
 test("formats Bitcoin and Ethereum with crypto precision and symbols", () => {
   assert.equal(formatCurrencyAmount(0.00001234, "BTC", "BTC", "en"), "₿\u202F0.00001234");
-  assert.equal(formatCurrencyAmount(0.1234567, "ETH", "ETH", "en"), "Ξ\u202F0.123457");
+  assert.equal(formatCurrencyAmount(0.1234567, "ETH", "ETH", "en"), "⟠\u202F0.123457");
 });

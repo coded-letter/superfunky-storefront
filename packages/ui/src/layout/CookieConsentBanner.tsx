@@ -250,6 +250,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
+              data-storefront-control="cookie-settings-banner"
               onClick={() => {
                 playAction("modal-open");
                 openManager();
@@ -260,6 +261,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
             </button>
             <button
               type="button"
+              data-storefront-control="cookie-accept-all"
               onClick={() => {
                 playAction("success");
                 acceptAll();
@@ -277,6 +279,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
       {consent && !isManagerOpen ? (
         <button
           type="button"
+          data-storefront-control="cookie-settings"
           onClick={() => {
             playAction("modal-open");
             openManager();

@@ -6,7 +6,10 @@ export type GraphqlFieldFallbackRequester = <T>(
 ) => Promise<GraphqlResponse<T>>;
 
 export type GraphqlCompatibilityRule = {
-  matches: (message: string) => boolean;
+  matches: (
+    message: string,
+    error: NonNullable<GraphqlResponse<unknown>["errors"]>[number],
+  ) => boolean;
   transform: (query: string) => string;
 };
 
@@ -32,6 +35,7 @@ export function removeGraphqlFieldSelections(query: string, fieldName: string): 
         openingBrace = index;
         break;
       }
+
       if (result[index] === "\n" && parenthesisDepth === 0) {
         fieldEnd = index + 1;
         break;
@@ -71,6 +75,58 @@ export function removeGraphqlFieldSelections(query: string, fieldName: string): 
   }
 }
 
+export function removeNestedGraphqlFieldSelections(
+  query: string,
+  parentFieldName: string,
+  fieldName: string,
+): string {
+  const parentPattern = new RegExp(`^[\\t ]*${escapeRegExp(parentFieldName)}\\b`, "gm");
+  let result = query;
+  let match: RegExpExecArray | null;
+
+  while ((match = parentPattern.exec(result))) {
+    let parenthesisDepth = 0;
+    let openingBrace = -1;
+    for (let index = match.index + match[0].length; index < result.length; index += 1) {
+      if (result[index] === "(") parenthesisDepth += 1;
+      if (result[index] === ")") parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      if (result[index] === "{" && parenthesisDepth === 0) {
+        openingBrace = index;
+        break;
+      }
+      if (result[index] === "\n" && parenthesisDepth === 0) break;
+    }
+    if (openingBrace === -1) continue;
+
+    let depth = 0;
+    let closingBrace = -1;
+    for (let index = openingBrace; index < result.length; index += 1) {
+      if (result[index] === "{") depth += 1;
+      if (result[index] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          closingBrace = index;
+          break;
+        }
+      }
+    }
+    if (closingBrace === -1) {
+      throw new Error(`Cannot inspect unterminated GraphQL field selection: ${parentFieldName}`);
+    }
+
+    const selection = result.slice(openingBrace + 1, closingBrace);
+    const compatibleSelection = removeGraphqlFieldSelections(selection, fieldName);
+    if (compatibleSelection === selection) {
+      parentPattern.lastIndex = closingBrace + 1;
+      continue;
+    }
+    result = `${result.slice(0, openingBrace + 1)}${compatibleSelection}${result.slice(closingBrace)}`;
+    parentPattern.lastIndex = openingBrace + compatibleSelection.length + 2;
+  }
+
+  return result;
+}
+
 export function missingGraphqlFieldRule(fieldName: string): GraphqlCompatibilityRule {
   const normalizedFieldName = fieldName.toLowerCase();
   return {
@@ -101,8 +157,8 @@ export async function requestGraphqlWithCompatibility<T>(
   const ruleMatchesError = (
     rule: GraphqlCompatibilityRule,
     error: NonNullable<GraphqlResponse<unknown>["errors"]>[number],
-  ): boolean => rule.matches(error.message)
-    || Boolean(error.extensions?.debugMessage && rule.matches(error.extensions.debugMessage));
+  ): boolean => rule.matches(error.message, error)
+    || Boolean(error.extensions?.debugMessage && rule.matches(error.extensions.debugMessage, error));
 
   for (let attempt = 0; response.errors?.length && attempt < rules.length; attempt += 1) {
     const matchingRules = rules.filter((rule) =>

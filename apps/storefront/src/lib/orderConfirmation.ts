@@ -2,7 +2,7 @@ import type { CartLineItem } from "@funky/ui";
 import type { StoreApiCheckoutResult } from "./wcStoreApi";
 
 const STORAGE_KEY = "funkycommerce-order-confirmation-v1";
-export const ORDER_CONFIRMATION_TTL_MS = 24 * 60 * 60 * 1000;
+export const ORDER_CONFIRMATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type CapturedOrderItem = {
   id: string;
@@ -82,10 +82,11 @@ export function createOrderConfirmation(input: CreateOrderConfirmationInput): Or
 export function saveOrderConfirmation(confirmation: OrderConfirmation): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(confirmation));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(confirmation));
+    window.sessionStorage.removeItem(STORAGE_KEY);
   } catch (error) {
     console.warn(
-      "[orderConfirmation] Could not persist the completed order for a page refresh:",
+      "[orderConfirmation] Could not retain the completed order for seven days:",
       error instanceof Error ? error.message : error,
     );
   }
@@ -94,13 +95,21 @@ export function saveOrderConfirmation(confirmation: OrderConfirmation): void {
 export function loadOrderConfirmation(orderId?: number, now = Date.now()): OrderConfirmation | null {
   if (typeof window === "undefined") return null;
   try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) || "null") as unknown;
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+      || window.sessionStorage.getItem(STORAGE_KEY);
+    const parsed = JSON.parse(stored || "null") as unknown;
     if (!isOrderConfirmation(parsed, now)) {
+      window.localStorage.removeItem(STORAGE_KEY);
       window.sessionStorage.removeItem(STORAGE_KEY);
       return null;
     }
+    if (!window.localStorage.getItem(STORAGE_KEY)) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    }
     return orderId === undefined || parsed.order.order_id === orderId ? parsed : null;
   } catch (error) {
+    window.localStorage.removeItem(STORAGE_KEY);
     window.sessionStorage.removeItem(STORAGE_KEY);
     console.warn(
       "[orderConfirmation] Could not read the completed order:",

@@ -5,7 +5,7 @@ import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
 import { BLOG_POST_CARD_FIELDS, mapBlogPost, type RawBlogPost } from "./postArchives";
 import {
   createCoreBlogQuery,
-  shouldPreferCoreGraphqlQueries,
+  shouldPreferCoreContentQueries,
 } from "./profileGraphqlCompatibility";
 
 type StickyPostsResult = {
@@ -47,7 +47,7 @@ const STICKY_POSTS_QUERY = /* GraphQL */ `
 `;
 
 export async function getStickyPosts(backendLanguageCode: string): Promise<PostCardData[]> {
-  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+  const query = shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE)
     ? createCoreBlogQuery(STICKY_POSTS_QUERY)
     : STICKY_POSTS_QUERY;
   const { data, errors } = await requestGraphqlWithCompatibility<StickyPostsResult>(

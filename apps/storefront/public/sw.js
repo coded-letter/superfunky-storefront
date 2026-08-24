@@ -1,8 +1,8 @@
 // FunkyCommerce service worker for installable/offline behavior and notifications sent
-// by the protected WordPress backend. Browser registration and synchronization live in
-// `src/lib/push.ts`.
+// by the protected WordPress backend. Baseline registration lives in
+// `public/register-service-worker.js`; push synchronization lives in `src/lib/push.ts`.
 
-const VERSION = "v2";
+const VERSION = "__FUNKYCOMMERCE_BUILD_VERSION__";
 const APP_SHELL_CACHE = `funkycommerce-shell-${VERSION}`;
 const RUNTIME_CACHE = `funkycommerce-runtime-${VERSION}`;
 
@@ -10,7 +10,10 @@ const RUNTIME_CACHE = `funkycommerce-runtime-${VERSION}`;
 // build assets (JS/CSS in dist/assets) aren't listed here since their filenames change
 // per build — those get opportunistically cached by the runtime "stale-while-
 // revalidate" handler below the first time they're fetched instead.
-const APP_SHELL_URLS = ["/", "/manifest.webmanifest", "/icons/app/icon.svg", "/favicon.ico"];
+// Do not precache a document here. During a deploy, the newly stamped worker can
+// become visible before every CDN edge has the matching HTML; caching "/" during
+// install would then pin an old style/font contract in the new deployment cache.
+const APP_SHELL_URLS = ["/manifest.webmanifest", "/icons/app/icon.svg", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -23,15 +26,18 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key !== APP_SHELL_CACHE && key !== RUNTIME_CACHE)
-            .map((key) => caches.delete(key))
-        )
-      )
+    Promise.all([
+      caches
+        .keys()
+        .then((keys) =>
+          Promise.all(
+            keys
+              .filter((key) => key !== APP_SHELL_CACHE && key !== RUNTIME_CACHE)
+              .map((key) => caches.delete(key))
+          )
+        ),
+      self.registration.navigationPreload?.enable(),
+    ])
       .then(() => self.clients.claim())
   );
 });
@@ -42,32 +48,38 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
-// Network-first for navigations (so users get fresh HTML whenever online), falling
-// back to the cached shell when offline. Stale-while-revalidate for same-origin GET
-// assets otherwise, so repeat visits are fast and the app keeps working offline once
-// warmed up.
+async function cacheSuccessfulResponse(request, response) {
+  if (!response.ok) return response;
+  const cache = await caches.open(RUNTIME_CACHE);
+  await cache.put(request, response.clone());
+  return response;
+}
+
+// Navigations prefer the CDN response so a newly deployed hydration policy cannot be
+// hidden by an older cached document. Navigation preload starts that request while the
+// worker wakes; the last complete SSG document remains an offline fallback. Hashed assets
+// below stay cache-first, keeping repeat-visit application startup effectively immediate.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
 
   if (request.mode === "navigate") {
+    const network = Promise.resolve(event.preloadResponse)
+      .then((preloaded) => preloaded || fetch(request))
+      .then((response) => cacheSuccessfulResponse(request, response));
     event.respondWith(
-      fetch(request).catch(() => caches.match(request).then((cached) => cached ?? caches.match("/")))
+      network.catch(async () =>
+        (await caches.match(request, { ignoreVary: true })) ?? Response.error()
+      )
     );
     return;
   }
 
-  const network = fetch(request).then(async (response) => {
-    if (response.ok) {
-      const cacheCopy = response.clone();
-      const cache = await caches.open(RUNTIME_CACHE);
-      await cache.put(request, cacheCopy);
-    }
-    return response;
-  });
-  event.waitUntil(network.then(() => undefined).catch(() => undefined));
+  const network = fetch(request).then((response) => cacheSuccessfulResponse(request, response));
+  const safeNetwork = network.catch(() => null);
+  event.waitUntil(safeNetwork.then(() => undefined));
   event.respondWith(
-    caches.match(request).then((cached) => cached ?? network)
+    caches.match(request).then(async (cached) => cached ?? await safeNetwork ?? Response.error())
   );
 });
 

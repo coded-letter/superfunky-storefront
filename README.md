@@ -9,7 +9,7 @@
 [![pnpm 10](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](./package.json)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111)](./apps/storefront/package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](./apps/storefront/tsconfig.json)
-[![Netlify](https://img.shields.io/badge/deploy-Netlify-00C7B7?logo=netlify&logoColor=white)](https://www.netlify.com/)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/coded-letter/superfunky-storefront)
 [![CI](https://github.com/coded-letter/superfunky-storefront/actions/workflows/ci.yml/badge.svg)](https://github.com/coded-letter/superfunky-storefront/actions/workflows/ci.yml)
 
 [Live flagship](https://superfunky.pro) ·
@@ -18,6 +18,11 @@
 [Report an issue](https://github.com/coded-letter/superfunky-storefront/issues)
 
 </div>
+
+The Netlify template uses the repository's checked-in `netlify.toml`. Configure
+`VITE_GRAPHQL_ENDPOINT` for your public WPGraphQL endpoint when creating the site;
+all other frontend environment variables are optional and documented in
+`apps/storefront/.env.example`.
 
 ## Managed deployment fleet
 

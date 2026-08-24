@@ -36,7 +36,7 @@ export function artifactConfigFromEnvironment(environment = process.env) {
 
   const origin = requireHttpsUrl(environment.STOREFRONT_ARTIFACT_ORIGIN || "", "STOREFRONT_ARTIFACT_ORIGIN");
   const siteKey = (environment.STOREFRONT_ARTIFACT_SITE_KEY || "").trim();
-  const signingSecret = environment.STOREFRONT_ARTIFACT_SIGNING_SECRET || "";
+  const signingSecret = (environment.STOREFRONT_ARTIFACT_SIGNING_SECRET || "").trim();
   if (!SITE_KEY_PATTERN.test(siteKey)) {
     throw new Error("STOREFRONT_ARTIFACT_SITE_KEY is invalid.");
   }
@@ -172,6 +172,23 @@ export async function publishShellManifest({
     throw new Error(`Artifact shell registration failed with HTTP ${response.status}: ${await response.text()}`);
   }
   return response.json();
+}
+
+export async function publishShellManifestForMode({ mode, ...options }) {
+  try {
+    return {
+      published: true,
+      registration: await publishShellManifest(options),
+      error: null,
+    };
+  } catch (error) {
+    if (mode !== "shadow") throw error;
+    return {
+      published: false,
+      registration: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export function artifactProxyRedirects(manifest, artifactOrigin) {

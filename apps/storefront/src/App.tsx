@@ -4,13 +4,17 @@ import {
   AppStateProvider,
   ProductCardPreferencesProvider,
   StorefrontChromeMockup,
+  UploadPostModal,
+  Seo,
   languageHomePath,
   resolveLanguageUrlAction,
   useCart,
   useLanguage,
+  useLayoutPreferences,
   useT,
   useToast,
 } from "@funky/ui";
+import { Plus } from "lucide-react";
 import { MOCK_PRODUCTS } from "./pages/shared";
 import { useAiShoppingAssistantSurfaces } from "./components/AiShoppingAssistant";
 import { GlobalFeedDiscovery } from "./components/GlobalFeedDiscovery";
@@ -21,14 +25,17 @@ import { useSyncCartToBackend } from "./lib/backendCart";
 import { readingListRemote, wishlistRemote } from "./lib/savedLists";
 import type { StorefrontRouteKey } from "./lib/storefrontPaths";
 import { useResolvedStorefrontLanguageRoute, useResolvedStorefrontPath } from "./lib/storefrontPaths";
-import { useLayoutPreferencesFromBackendConfig } from "./lib/layoutPreferencesSync";
+import { applyLayoutConfiguration, useLayoutPreferencesFromBackendConfig } from "./lib/layoutPreferencesSync";
 import { CreatorContentProvider } from "./state/creatorContent";
 import { BlogDataProvider } from "./state/blogData";
 import { StickyPostsDataProvider } from "./state/stickyPostsData";
 import { NavigationDataProvider, useNavigationData } from "./state/navigationData";
 import { CommerceDataProvider } from "./state/commerceData";
 import { CommunityDataProvider, useCommunityData } from "./state/communityData";
-import { WordPressThemeStylesProvider } from "./state/wordpressThemeStyles";
+import {
+  useWordPressThemeStylesReady,
+  WordPressThemeStylesProvider,
+} from "./state/wordpressThemeStyles";
 import { searchStorefront } from "./lib/search";
 import { submitNewsletterSubmission } from "./lib/submissions";
 import { isBackendConfigured, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
@@ -36,9 +43,15 @@ import { mountCmsScripts } from "./lib/pageScripts";
 import { getExistingSubscription, getPushPreferences, subscribeToPush, unsubscribeFromPush } from "./lib/push";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { StorefrontPreloader } from "./components/StorefrontPreloader";
-import { DEFAULT_LOADER_CONFIGURATION } from "./lib/loaderConfig";
+import { DEFAULT_LOADER_CONFIGURATION, resolveThemeAwareLoaderConfiguration } from "./lib/loaderConfig";
+import { hasPendingVisibleContent } from "./lib/storefrontReadiness";
 import { getHomePage } from "./lib/pages";
-import { resolveBackendDataRequirements } from "./lib/backendDataRequirements";
+import {
+  canUseHomepageBlogSummary,
+  canUseHomepageCommunityFeed,
+  resolveBackendDataRequirements,
+} from "./lib/backendDataRequirements";
+import { createCommunityPost, searchTranslationCandidateCommunityPosts } from "./lib/community";
 
 const AuthorMockupPage = lazy(() => import("./pages/AuthorMockupPage").then((module) => ({ default: module.AuthorMockupPage })));
 const AuthorDirectoryPage = lazy(() => import("./pages/AuthorDirectoryPage").then((module) => ({ default: module.AuthorDirectoryPage })));
@@ -52,6 +65,7 @@ const ContentNodeRoute = lazy(() => import("./pages/ContentNodeRoute").then((mod
 const NotFoundMockupPage = lazy(() => import("./pages/NotFoundMockupPage").then((module) => ({ default: module.NotFoundMockupPage })));
 const OAuthCallbackPage = lazy(() => import("./pages/AuthMockupPage").then((module) => ({ default: module.OAuthCallbackPage })));
 const OrderDetailMockupPage = lazy(() => import("./pages/OrderDetailMockupPage").then((module) => ({ default: module.OrderDetailMockupPage })));
+const OrderSuccessDigitalMockupPage = lazy(() => import("./pages/OrderSuccessDigitalMockupPage").then((module) => ({ default: module.OrderSuccessDigitalMockupPage })));
 const PageMockupPage = lazy(() => import("./pages/PageMockupPage").then((module) => ({ default: module.PageMockupPage })));
 const PostCategoryMockupPage = lazy(() => import("./pages/PostCategoryMockupPage").then((module) => ({ default: module.PostCategoryMockupPage })));
 const PostMockupPage = lazy(() => import("./pages/PostMockupPage").then((module) => ({ default: module.PostMockupPage })));
@@ -67,13 +81,30 @@ const LayoutStudioMockupPage = lazy(() => import("./pages/LayoutStudioMockupPage
 const SitemapPage = lazy(() => import("./pages/SitemapPage").then((module) => ({ default: module.SitemapPage })));
 
 function ConnectedStorefrontChrome() {
-  const { data } = useNavigationData();
+  const { data, isLoading: navigationLoading, error: navigationError } = useNavigationData();
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
   const t = useT();
   const { showToast } = useToast();
+  const { viewer, refresh: refreshCommunity } = useCommunityData();
+  const { showHeaderPublishButton } = useLayoutPreferences();
+  const [isCommunityPublishOpen, setIsCommunityPublishOpen] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const navigationSettled = !navigationLoading && Boolean(data || navigationError || !isBackendConfigured);
+  const pushEnabled = !isBackendConfigured || data?.storefrontConfig.features.push === true;
+  useLayoutEffect(() => {
+    if (!navigationSettled) return;
+    const root = getStorefrontApplicationRoot();
+    if (!root || root.dataset.storefrontShellReady === "true") return;
+    root.dataset.storefrontShellReady = "true";
+    performance.mark("storefront:shell-ready");
+    window.dispatchEvent(new Event("funky:storefront-shell-ready"));
+  }, [navigationSettled]);
   useEffect(() => {
+    if (!navigationSettled || !pushEnabled) {
+      setPushSubscribed(false);
+      return;
+    }
     void getExistingSubscription().then((subscription) => {
       setPushSubscribed(Boolean(subscription));
       if (subscription) {
@@ -86,7 +117,7 @@ function ConnectedStorefrontChrome() {
         });
       }
     });
-  }, [showToast]);
+  }, [navigationSettled, pushEnabled, showToast]);
   const togglePush = useCallback(async () => {
     setPushBusy(true);
     try {
@@ -138,6 +169,18 @@ function ConnectedStorefrontChrome() {
   // correct home without triggering a redirect. "/" is kept for fallback languages
   // that don't have an explicit /:lang home route yet.
   const homePath = languageHomePath(languageCode, configuredLanguageCodes);
+  const canPublishCommunityPosts = viewer?.capabilities.includes("publish_community_posts") ?? false;
+  const publishAction = showHeaderPublishButton && canPublishCommunityPosts ? (
+    <button
+      type="button"
+      onClick={() => setIsCommunityPublishOpen(true)}
+      aria-label="Publish a community post"
+      title="Publish a community post"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:ring-offset-zinc-950"
+    >
+      <Plus className="h-5 w-5" aria-hidden="true" />
+    </button>
+  ) : null;
   return (
     <>
       <StorefrontChromeMockup
@@ -149,15 +192,36 @@ function ConnectedStorefrontChrome() {
         onNewsletterSubscribe={isBackendConfigured ? subscribeToNewsletter : undefined}
         homePath={homePath}
         storefrontConfig={data?.storefrontConfig}
-        onPushToggle={togglePush}
+        onPushToggle={pushEnabled ? togglePush : undefined}
         pushSubscribed={pushSubscribed}
         pushBusy={pushBusy}
-        assistantPlacement={assistant.placement}
-        headerActionSlot={assistant.headerActionSlot}
+        headerActionSlot={<>{publishAction}{assistant.headerActionSlot}</>}
         footerAssistantSlot={assistant.footerAssistantSlot}
         assistantOverlaySlot={assistant.assistantOverlaySlot}
         floatingAssistantSlot={assistant.floatingAssistantSlot}
       />
+      {isCommunityPublishOpen ? (
+        <UploadPostModal
+          onClose={() => setIsCommunityPublishOpen(false)}
+          defaultLanguageCode={languageCode}
+          searchTranslationCandidates={searchTranslationCandidateCommunityPosts}
+          onSubmit={async (draft) => {
+            const media = draft.media.map(({ dataUrl }) => {
+              if (!dataUrl) throw new Error("New community media is missing its upload data");
+              return { dataUrl };
+            });
+            await createCommunityPost({
+              title: draft.title,
+              description: draft.description,
+              tags: draft.tags,
+              media,
+              language: draft.languageCode || languageCode,
+              translationOfId: draft.translationOfId,
+            });
+            refreshCommunity();
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -171,38 +235,65 @@ function ConnectedProductCardPreferences({ children }: { children: ReactNode }) 
   );
 }
 
-function StorefrontReadySignal() {
+function getStorefrontApplicationRoot(): HTMLElement | null {
+  return document.getElementById("storefront-react-root") || document.getElementById("root");
+}
+
+function StorefrontVisibleReadySignal() {
+  const {
+    data: navigation,
+    isLoading: navigationLoading,
+    error: navigationError,
+  } = useNavigationData();
+  const themeStylesReady = useWordPressThemeStylesReady();
+  const navigationSettled = !navigationLoading
+    && Boolean(navigation || navigationError || !isBackendConfigured);
   useEffect(() => {
-    const root = document.getElementById("root");
+    const root = getStorefrontApplicationRoot();
     if (!root) return;
-    let readinessTimer = 0;
+    let hasAnnounced = false;
     const announceWhenCoherent = () => {
-      if (readinessTimer || root.dataset.storefrontReady === "true") return;
-      readinessTimer = window.setTimeout(() => {
-        readinessTimer = 0;
-        const criticalContent = root.querySelector(
-          "[data-cms-page], [data-rendered-cms-shortcode], main article, main h1",
-        );
-        if (!criticalContent) return;
-        root.dataset.storefrontReady = "true";
-        window.dispatchEvent(new Event("funky:storefront-ready"));
-        observer.disconnect();
-      }, 0);
+      if (hasAnnounced) return;
+      const cmsContent = root.querySelector("[data-cms-page]:not([data-prerendered-cms-snapshot])");
+      const criticalContent = cmsContent || root.querySelector(
+        "[data-rendered-cms-shortcode], main article, main h1",
+      );
+      const cmsStylesReady = !cmsContent
+        || cmsContent.getAttribute("data-cms-styles-ready") === "true";
+      const pendingContent = hasPendingVisibleContent(root);
+      if (
+        !criticalContent
+        || pendingContent
+        || !navigationSettled
+        || !themeStylesReady
+        || !cmsStylesReady
+      ) return;
+      hasAnnounced = true;
+      root.dataset.storefrontVisibleReady = "true";
+      root.dataset.storefrontReady = "true";
+      performance.mark("storefront:visible-ready");
+      window.dispatchEvent(new Event("funky:storefront-visible-ready"));
+      window.dispatchEvent(new Event("funky:storefront-ready"));
+      observer.disconnect();
     };
     const observer = new MutationObserver(announceWhenCoherent);
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-cms-styles-ready"],
+      childList: true,
+      subtree: true,
+    });
     announceWhenCoherent();
     return () => {
       observer.disconnect();
-      window.clearTimeout(readinessTimer);
     };
-  }, []);
+  }, [navigationSettled, themeStylesReady]);
   return null;
 }
 
 function CmsScriptRuntime() {
   useEffect(() => {
-    const root = document.getElementById("root");
+    const root = getStorefrontApplicationRoot();
     if (!root) return;
 
     return mountCmsScripts(root);
@@ -238,8 +329,13 @@ function CartSyncManager() {
 function RouteDataProviders({ children, enabled }: { children: ReactNode; enabled: boolean }) {
   const { pathname } = useLocation();
   const isGeneratedHome = pathname === "/" || /^\/[a-z]{2}\/?$/.test(pathname);
+  const initialGeneratedMarkup = useRef<string | null>(null);
+  if (initialGeneratedMarkup.current === null) {
+    initialGeneratedMarkup.current = document.getElementById("prerendered-storefront")?.innerHTML || "";
+  }
   const generatedPayload = isGeneratedHome
-    ? document.getElementById("storefront-route-payload")?.textContent || ""
+    ? document.getElementById("storefront-route-payload")?.textContent
+      || initialGeneratedMarkup.current
     : "";
   const routeRequirements = resolveBackendDataRequirements(
     STOREFRONT_BACKEND_PROFILE,
@@ -253,9 +349,13 @@ function RouteDataProviders({ children, enabled }: { children: ReactNode; enable
   const requirements = detectedRequirements.pathname === pathname
     ? detectedRequirements.requirements
     : routeRequirements;
+  const communityFeedOnly = requirements.community
+    && canUseHomepageCommunityFeed(pathname, generatedPayload);
+  const blogSummaryOnly = requirements.blog
+    && canUseHomepageBlogSummary(pathname, generatedPayload);
 
   useEffect(() => {
-    const root = document.getElementById("root");
+    const root = getStorefrontApplicationRoot();
     const updateRequirements = () => {
       const nextRequirements = resolveBackendDataRequirements(
         STOREFRONT_BACKEND_PROFILE,
@@ -286,9 +386,15 @@ function RouteDataProviders({ children, enabled }: { children: ReactNode; enable
 
   return (
     <CommerceDataProvider enabled={enabled && requirements.commerce}>
-      <CommunityDataProvider enabled={enabled && requirements.community}>
+      <CommunityDataProvider
+        enabled={enabled && requirements.community}
+        feedOnly={Boolean(communityFeedOnly)}
+      >
         <CreatorContentProvider>
-          <BlogDataProvider enabled={enabled && requirements.blog}>
+          <BlogDataProvider
+            enabled={enabled && requirements.blog}
+            summaryOnly={Boolean(blogSummaryOnly)}
+          >
             <StickyPostsDataProvider enabled={enabled && requirements.stickyPosts}>
               {children}
             </StickyPostsDataProvider>
@@ -297,19 +403,6 @@ function RouteDataProviders({ children, enabled }: { children: ReactNode; enable
       </CommunityDataProvider>
     </CommerceDataProvider>
   );
-}
-
-function useRouteCriticalContentReady(): boolean {
-  const [ready, setReady] = useState(
-    () => document.getElementById("root")?.dataset.storefrontReady === "true",
-  );
-  useEffect(() => {
-    const markReady = () => setReady(true);
-    window.addEventListener("funky:storefront-ready", markReady);
-    if (document.getElementById("root")?.dataset.storefrontReady === "true") markReady();
-    return () => window.removeEventListener("funky:storefront-ready", markReady);
-  }, []);
-  return ready;
 }
 
 function normalizeBrowserPath(path: string): string {
@@ -344,7 +437,7 @@ function StorefrontPageRoute({
     return <BlogIndexFallback />;
   }
 
-  return <PageMockupPage routeKey={routeKey} />;
+  return <PageMockupPage routeKey={routeKey} synchronizeLanguage={false} />;
 }
 
 function StorefrontRedirectRoute({
@@ -399,6 +492,7 @@ function HomePageRoute() {
       routeKey="home"
       loadPage={loadPage}
       pageCacheKey={`home-page:v1:${targetLanguageCode}:${configuredLanguageKey}`}
+      synchronizeLanguage={false}
     />
   );
 }
@@ -411,6 +505,42 @@ function LayoutPreferencesBackendSync() {
   const { data } = useNavigationData();
   useLayoutPreferencesFromBackendConfig(data?.storefrontConfig.layout);
   return null;
+}
+
+function LayoutStudioSessionControls() {
+  const navigate = useNavigate();
+  const { data } = useNavigationData();
+  const prefs = useLayoutPreferences();
+  if (!prefs.isLayoutPreviewActive) return null;
+
+  const exitPreview = () => {
+    const layout = data?.storefrontConfig.layout;
+    if (layout) applyLayoutConfiguration(prefs, layout);
+    prefs.setLayoutPreviewActive(false);
+  };
+
+  return (
+    <aside
+      aria-label="Layout Studio preview controls"
+      className="fixed bottom-4 right-4 z-[100] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-violet-300 bg-zinc-950 px-3 py-2 text-xs font-semibold text-white shadow-2xl"
+    >
+      <span className="hidden sm:inline">Layout Studio preview</span>
+      <button
+        type="button"
+        onClick={() => navigate("/layout-studio")}
+        className="rounded-full bg-violet-600 px-3 py-1.5 hover:bg-violet-500"
+      >
+        Controls
+      </button>
+      <button
+        type="button"
+        onClick={exitPreview}
+        className="rounded-full px-3 py-1.5 text-zinc-200 hover:bg-white/10 hover:text-white"
+      >
+        Exit &amp; revert
+      </button>
+    </aside>
+  );
 }
 
 /** Gates a route to authenticated WordPress administrators. Checks the
@@ -434,13 +564,21 @@ function AdminCapabilityRoute({ children }: { children: ReactNode }) {
   return children;
 }
 
+function HiddenPresentationRoute({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <Seo title={title} robots="noindex, nofollow, noarchive, nosnippet" />
+      {children}
+    </>
+  );
+}
+
 function LanguageUrlNormalizer() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
     configuredLanguageCodes,
     hasBackendLanguageOptions,
-    hasLanguagePreference,
     languageCode,
     languageSelectionRevision,
     setLanguageCodeFromRoute,
@@ -449,23 +587,35 @@ function LanguageUrlNormalizer() {
   const { resolution: storefrontLanguageRoute } = useResolvedStorefrontLanguageRoute(location.pathname);
   const storefrontLanguageTarget = storefrontLanguageRoute?.targetPath;
   const handledSelectionRevision = useRef(languageSelectionRevision);
-  const pendingSelectionUrl = useRef<string | null>(null);
+  const pendingSelection = useRef<{ sourceUrl: string; targetUrl: string | null } | null>(null);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!hasBackendLanguageOptions) return;
     const languageSelectionChanged = handledSelectionRevision.current !== languageSelectionRevision;
     handledSelectionRevision.current = languageSelectionRevision;
     if (languageSelectionChanged) {
-      pendingSelectionUrl.current = currentUrl;
-    } else if (pendingSelectionUrl.current && pendingSelectionUrl.current !== currentUrl) {
-      pendingSelectionUrl.current = null;
+      pendingSelection.current = { sourceUrl: currentUrl, targetUrl: null };
+    } else if (pendingSelection.current?.targetUrl === currentUrl) {
+      pendingSelection.current = null;
+      return;
+    } else if (
+      pendingSelection.current?.sourceUrl === currentUrl
+      && pendingSelection.current.targetUrl
+    ) {
+      return;
+    } else if (
+      pendingSelection.current
+      && pendingSelection.current.sourceUrl !== currentUrl
+    ) {
+      pendingSelection.current = null;
     }
-    const languageSelectionPending = pendingSelectionUrl.current === currentUrl;
+    const languageSelectionPending = pendingSelection.current?.sourceUrl === currentUrl;
     if (languageSelectionPending && storefrontLanguageTarget) {
       const targetUrl = `${storefrontLanguageTarget}${location.search}${location.hash}`;
       if (targetUrl === currentUrl) {
-        pendingSelectionUrl.current = null;
+        pendingSelection.current = null;
       } else {
+        pendingSelection.current = { sourceUrl: currentUrl, targetUrl };
         navigate(targetUrl, { replace: true });
       }
       return;
@@ -477,7 +627,7 @@ function LanguageUrlNormalizer() {
     );
     if (
       !canNormalizeSelection
-      && (languageSelectionPending || hasLanguagePreference)
+      && languageSelectionPending
     ) {
       return;
     }
@@ -498,13 +648,12 @@ function LanguageUrlNormalizer() {
       return;
     }
 
-    const timeout = window.setTimeout(() => navigate(action.to, { replace: true }), 100);
-    return () => window.clearTimeout(timeout);
+    pendingSelection.current = { sourceUrl: currentUrl, targetUrl: action.to };
+    navigate(action.to, { replace: true });
   }, [
     configuredLanguageCodes,
     currentUrl,
     hasBackendLanguageOptions,
-    hasLanguagePreference,
     languageCode,
     languageSelectionRevision,
     location.hash,
@@ -548,12 +697,10 @@ function canNormalizeLanguageSelection(
 export function App() {
   useAuthHeartbeat();
   const accountId = useAuthenticatedAccountId();
-  const backendDataReady = useRouteCriticalContentReady();
 
   return (
     <HelmetProvider>
       <GlobalFeedDiscovery />
-      <StorefrontReadySignal />
       <CmsScriptRuntime />
       <BrowserRouter>
         <AppStateProvider
@@ -563,13 +710,15 @@ export function App() {
         >
           <SmartLinkNavigation />
           <CartSyncManager />
-          <WordPressThemeStylesProvider enabled={backendDataReady}>
-            <NavigationDataProvider enabled={backendDataReady}>
-              <LanguageUrlNormalizer />
+          <LanguageUrlNormalizer />
+          <WordPressThemeStylesProvider enabled={isBackendConfigured}>
+            <NavigationDataProvider enabled={isBackendConfigured}>
               <LayoutPreferencesBackendSync />
+              <LayoutStudioSessionControls />
+              <StorefrontVisibleReadySignal />
               <ConnectedProductCardPreferences>
-                <RouteDataProviders enabled={backendDataReady}>
-                  <Suspense fallback={<StorefrontPreloader loader={DEFAULT_LOADER_CONFIGURATION} className="min-h-[45vh]" />}>
+                <RouteDataProviders enabled={isBackendConfigured}>
+                  <Suspense fallback={<RouteSuspenseFallback />}>
                     <Routes>
                   <Route element={<ConnectedStorefrontChrome />}>
                     <Route path="/" element={<HomePageRoute />} />
@@ -586,6 +735,9 @@ export function App() {
                     <Route path="/product-category/*" element={<ProductCategoryMockupPage />} />
                     <Route path="/product-tag/*" element={<ProductTagMockupPage />} />
                     <Route path="/brand/*" element={<ProductBrandMockupPage />} />
+                    <Route path="/:language/product-category/*" element={<ProductCategoryMockupPage />} />
+                    <Route path="/:language/product-tag/*" element={<ProductTagMockupPage />} />
+                    <Route path="/:language/brand/:slug" element={<ProductBrandMockupPage />} />
                     <Route path="/blog" element={<StorefrontPageRoute routeKey="blog" fallback="/blog" />} />
                     <Route path="/:language/blog" element={<StorefrontPageRoute routeKey="blog" fallback="/blog" />} />
                     <Route path="/blog/category/:slug" element={<PostCategoryMockupPage />} />
@@ -627,6 +779,8 @@ export function App() {
                     <Route path="/reading-list" element={<StorefrontRedirectRoute routeKey="reading-list" fallback="/reading-list" />} />
                     <Route path="/community" element={<StorefrontRedirectRoute routeKey="community" fallback="/community" />} />
                     <Route path="/:language/community" element={<StorefrontRedirectRoute routeKey="community" fallback="/community" />} />
+                    <Route path="/spolecznosc" element={<StorefrontRedirectRoute routeKey="community" fallback="/community" />} />
+                    <Route path="/:language/spolecznosc" element={<StorefrontRedirectRoute routeKey="community" fallback="/community" />} />
                     <Route path="/auth" element={<StorefrontRedirectRoute routeKey="auth-login" fallback="/auth" />} />
                     <Route
                       path="/order-success"
@@ -638,19 +792,19 @@ export function App() {
                     />
                     <Route
                       path="/order-success/digital"
-                      element={<StorefrontRedirectRoute routeKey="order-success-digital" fallback="/order-success/digital" />}
+                      element={<OrderSuccessDigitalMockupPage />}
                     />
                     <Route
                       path="/:language/order-success/digital"
-                      element={<StorefrontRedirectRoute routeKey="order-success-digital" fallback="/order-success/digital" />}
+                      element={<OrderSuccessDigitalMockupPage />}
                     />
                     <Route path="/order/:id" element={<OrderDetailMockupPage />} />
                     <Route path="/:language/order/:id" element={<OrderDetailMockupPage />} />
                     <Route path="/unsubscribe" element={<StorefrontRedirectRoute routeKey="unsubscribe" fallback="/unsubscribe" />} />
                     <Route path="/auth/reset-password" element={<ResetPasswordMockupPage />} />
                     <Route path="/oauth/login/:provider" element={<OAuthCallbackPage />} />
-                    <Route path="/shortcodes" element={<ShortcodeLibraryMockupPage />} />
-                    <Route path="/layout-studio" element={<AdminCapabilityRoute><LayoutStudioMockupPage /></AdminCapabilityRoute>} />
+                    <Route path="/shortcodes" element={<HiddenPresentationRoute title="Shortcode library"><ShortcodeLibraryMockupPage /></HiddenPresentationRoute>} />
+                    <Route path="/layout-studio" element={<HiddenPresentationRoute title="Layout Studio"><LayoutStudioMockupPage /></HiddenPresentationRoute>} />
                     <Route path="*" element={<ContentNodeRoute />} />
                   </Route>
                     </Routes>
@@ -662,5 +816,29 @@ export function App() {
         </AppStateProvider>
       </BrowserRouter>
     </HelmetProvider>
+  );
+}
+
+function RouteSuspenseFallback() {
+  const loader = resolveThemeAwareLoaderConfiguration(DEFAULT_LOADER_CONFIGURATION);
+
+  return (
+    <div
+      className="fixed inset-0 z-[2147483646] grid min-h-[100dvh] place-items-center bg-[rgb(var(--theme-background,250_250_250))] px-4 text-[rgb(var(--theme-foreground,24_24_27))] dark:bg-[rgb(var(--theme-foreground,24_24_27))] dark:text-[rgb(var(--theme-background,250_250_250))]"
+      aria-live="polite"
+      role="status"
+    >
+      <div className="flex flex-col items-center gap-3 text-center">
+        <StorefrontPreloader
+          loader={loader}
+          className="flex items-center justify-center"
+          style={{ filter: "drop-shadow(0 0 18px rgb(var(--brand-500) / 0.18))" }}
+        />
+        <span className="text-[10px] font-medium uppercase tracking-[0.32em] text-zinc-500 dark:text-zinc-400">
+          Loading
+        </span>
+        <span className="sr-only">Loading page section</span>
+      </div>
+    </div>
   );
 }

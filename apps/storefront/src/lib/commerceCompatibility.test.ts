@@ -5,6 +5,8 @@ import {
   assertNoCommerceGraphqlErrors,
   createCompatibleProductDetailQuery,
   createCoreProductDetailQuery,
+  createProductQueryWithoutBrands,
+  isMissingProductBrandSchemaError,
   isMissingProductOptionalFieldSchemaError,
   isMissingProductRootSchemaError,
   requestCommerceWithFallback,
@@ -13,6 +15,12 @@ import {
   requestOptionalCommerceRoot,
   type CommerceGraphqlRequester,
 } from "./commerceGraphqlCompatibility.ts";
+import { PRODUCT_LIST_CARD_FIELDS } from "./commerce.ts";
+
+test("catalog product cards request gallery images for the gallery variant", () => {
+  assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages\s*\(\s*first:\s*12\s*\)/);
+  assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages[\s\S]*\bsourceUrl\b/);
+});
 
 test("product detail fallback removes optional fields without losing core commerce data", () => {
   const query = `
@@ -79,6 +87,24 @@ test("core product detail removes only schema extensions and preserves theme com
   assert.match(coreQuery, /\bcurrencyPrices\b|\bpriceBehavior\b|\bbuttonText\b|\bexternalUrl\b/);
 });
 
+test("no-brand compatibility removes only nested product brand selections", () => {
+  const query = `
+    query Catalog {
+      products {
+        nodes {
+          name
+          productBrands { nodes { name uri } }
+          productCategories { nodes { name uri } }
+        }
+      }
+    }`;
+  const compatible = createProductQueryWithoutBrands(query);
+
+  assert.doesNotMatch(compatible, /\bproductBrands\b/);
+  assert.match(compatible, /\bproducts\b/);
+  assert.match(compatible, /\bproductCategories\b/);
+});
+
 test("product root compatibility errors require the RootQuery context", () => {
   assert.equal(
     isMissingProductRootSchemaError([
@@ -122,6 +148,37 @@ test("product root compatibility errors require the RootQuery context", () => {
   );
 });
 
+test("missing brand archives recognize the complete validation family without hiding runtime errors", async () => {
+  const missingBrandErrors = [
+    { message: 'Cannot query field "productBrand" on type "RootQuery".' },
+    { message: 'Unknown type "ProductBrandIdType".' },
+    { message: 'Field "productBrand" is not defined by type "RootQueryToProductConnectionWhereArgs".' },
+    { message: 'Field "productBrand" is not defined by type "RootQueryToProductUnionConnectionWhereArgs".' },
+    { message: 'Field "language" is not defined by type "RootQueryToProductBrandConnectionWhereArgs".' },
+    { message: 'Cannot query field "productBrands" on type "Product".' },
+  ];
+  assert.equal(isMissingProductBrandSchemaError(missingBrandErrors), true);
+  assert.equal(isMissingProductRootSchemaError(missingBrandErrors), true);
+  assert.equal(
+    isMissingProductBrandSchemaError([
+      ...missingBrandErrors,
+      { message: "Product brand resolver timed out." },
+    ]),
+    false,
+  );
+
+  const queries: string[] = [];
+  const request: CommerceGraphqlRequester = async <T>(query: string) => {
+    queries.push(query);
+    return { data: null, errors: missingBrandErrors };
+  };
+  assert.equal(
+    await requestCommerceWithFallback(request, "brand archive", "compatible archive", {}, () => false),
+    null,
+  );
+  assert.deepEqual(queries, ["brand archive"]);
+});
+
 test("product optional-field compatibility errors remain narrowly scoped", () => {
   assert.equal(
     isMissingProductOptionalFieldSchemaError([
@@ -149,6 +206,12 @@ test("product optional-field compatibility errors remain narrowly scoped", () =>
       { message: 'Cannot query field "products" on type "RootQuery".' },
     ]),
     false,
+  );
+  assert.equal(
+    isMissingProductOptionalFieldSchemaError([
+      { message: 'Cannot query field "productBrands" on type "Product".' },
+    ]),
+    true,
   );
   assert.equal(
     isMissingProductOptionalFieldSchemaError([
@@ -246,6 +309,40 @@ test("Woo-only catalog retries the exact no-Polylang validation batch", async ()
   assert.deepEqual(result.data.products, { nodes: ["products"] });
   assert.deepEqual(result.data.productCategories, { nodes: ["productCategories"] });
   assert.deepEqual(requestedQueries, ["primary", "products", "productCategories"]);
+});
+
+test("missing product brands retry a scoped catalog query without unscoping products", async () => {
+  type Catalog = {
+    products: { nodes: string[] } | null;
+  };
+  const requestedQueries: string[] = [];
+  const request: CommerceGraphqlRequester = async <T>(query: string) => {
+    requestedQueries.push(query);
+    if (query === "localized with brands") {
+      return {
+        data: null,
+        errors: [{ message: 'Cannot query field "productBrands" on type "Product".' }],
+      };
+    }
+    if (query === "localized without brands") {
+      return { data: { products: { nodes: ["English product"] } } as T };
+    }
+    throw new Error("The unscoped compatibility operation must not run");
+  };
+
+  const result = await requestCatalogWithFallback<Catalog>(
+    request,
+    "localized with brands",
+    { language: "EN" },
+    [{ field: "products", query: "unscoped products" }],
+    isMissingProductOptionalFieldSchemaError,
+    false,
+    "localized without brands",
+  );
+
+  assert.equal(result.usesCompatibilityFallback, false);
+  assert.deepEqual(result.data.products, { nodes: ["English product"] });
+  assert.deepEqual(requestedQueries, ["localized with brands", "localized without brands"]);
 });
 
 test("free-profile commerce starts with compatible operations and never sends invalid rich queries", async () => {

@@ -6,11 +6,16 @@ import {
 export function createCompatiblePostArchiveQuery(query: string): string {
   return removeGraphqlFieldSelections(
     removeGraphqlFieldSelections(
-      removeGraphqlFieldSelections(query, "content"),
-      "seo",
+      removeGraphqlFieldSelections(
+        removeGraphqlFieldSelections(query, "content"),
+        "seo",
+      ),
+      "enqueuedScripts",
     ),
-    "enqueuedScripts",
-  );
+    "language",
+  )
+    .replace(/(categories|tags)\(([^)]*?),\s*where:\s*\{[^{}]*\}\)/g, "$1($2)")
+    .replace(/(categories|tags)\(\s*where:\s*\{[^{}]*\}\s*\)/g, "$1");
 }
 
 export const MALFORMED_POST_ARCHIVE_RULE: GraphqlCompatibilityRule = {

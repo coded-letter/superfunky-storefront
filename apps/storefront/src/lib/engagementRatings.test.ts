@@ -107,3 +107,15 @@ test("post comments request pagination metadata on the connection", async () => 
     /comments\(first: 100,[\s\S]*?\n        nodes \{[\s\S]*?\n        \}\n        pageInfo \{ hasNextPage endCursor \}\n      \}/,
   );
 });
+
+test("product rating queries use only fields exposed by the shared rating summary schema", async () => {
+  const commerce = await readFile(new URL("./commerce.ts", import.meta.url), "utf8");
+  const selections = Array.from(commerce.matchAll(/engagementRating\s*\{([^}]*)\}/g), (match) => match[1]);
+
+  assert.ok(selections.length > 0);
+  for (const selection of selections) {
+    assert.doesNotMatch(selection, /\blanguage\b/);
+    assert.match(selection, /\baverage\b/);
+    assert.match(selection, /\bcount\b/);
+  }
+});

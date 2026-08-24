@@ -37,3 +37,15 @@ test("returns null when no matching special page translation exists", async () =
 
   assert.equal(result, null);
 });
+
+test("falls back to the WordPress-safe 4o4 page slug", async () => {
+  const calls: string[] = [];
+  const expected = page("en");
+  const result = await resolveLocalizedSpecialPage("404", "en", async (uri) => {
+    calls.push(uri);
+    return uri === "/en/4o4/" ? expected : null;
+  });
+
+  assert.equal(result, expected);
+  assert.deepEqual(calls, ["/en/404/", "/404/", "/en/4o4/"]);
+});

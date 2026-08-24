@@ -3,7 +3,6 @@ import type { CmsPageScript } from "./pages";
 const CMS_SCRIPT_SELECTOR = 'script[data-wp-block-html="js"]';
 const EXECUTED_ATTRIBUTE = "data-funky-cms-executed";
 const BUNDLED_SCRIPT_HANDLES = new Set([
-  "funkycommerce-google-maps-locations",
   "wc-add-to-cart",
   "woocommerce",
 ]);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 
 export type ThemeContextValue = {
   isDarkMode: boolean;
@@ -24,7 +24,11 @@ function readStoredTheme(): boolean {
 function applyTheme(isDarkMode: boolean) {
   if (typeof document === "undefined") return;
 
-  window.localStorage.setItem(STORAGE_KEY, isDarkMode ? "dark" : "light");
+  try {
+    window.localStorage.setItem(STORAGE_KEY, isDarkMode ? "dark" : "light");
+  } catch {
+    // The document-level theme still applies when storage is restricted.
+  }
   // Toggle the `dark` class (and native `color-scheme`) on the root <html> element, not
   // just an inner wrapper — this is what the legacy prototype does (there via
   // document.body.classList), and it's required for anything that keys off document-level
@@ -42,6 +46,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     applyTheme(isDarkMode);
   }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleStaticThemeChange = (event: Event) => {
+      const nextDark = event instanceof CustomEvent && typeof event.detail?.isDarkMode === "boolean"
+        ? event.detail.isDarkMode
+        : document.documentElement.classList.contains("dark");
+      setIsDarkMode(nextDark);
+    };
+    window.addEventListener("funky:storefront-theme-change", handleStaticThemeChange);
+    return () => window.removeEventListener("funky:storefront-theme-change", handleStaticThemeChange);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode: () => setIsDarkMode((previous) => !previous) }}>

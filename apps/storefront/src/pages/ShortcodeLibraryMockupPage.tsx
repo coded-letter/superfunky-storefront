@@ -20,8 +20,9 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { PaginablePostGrid, PostCard, ProductCard, ResponsiveImage, SocialPostCard, ViewSwitch, avatarColorFor, useLayoutPreferences, useSoundUX, type PostCardData, type ProductCardData, type ProductCardVariant, type SocialFeedLayout, type SocialFeedLoadMode } from "@funky/ui";
+import { PaginablePostGrid, PostCard, ProductCard, ResponsiveImage, SocialPostCard, SpotifyPlayerMock, ViewSwitch, avatarColorFor, useLayoutPreferences, useSoundUX, type PostCardData, type ProductCardData, type ProductCardVariant, type SocialFeedLayout, type SocialFeedLoadMode } from "@funky/ui";
 import { HeroMock } from "../components/HeroMock";
+import { VideoHero } from "../components/VideoHero";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { SliderMock } from "../components/SliderMock";
 import { ShortcodeLabel } from "../components/ShortcodeLabel";
@@ -408,6 +409,7 @@ export function ShortcodeLibraryMockupPage() {
               ["variant", ["glow", "fullbleed", "split", "minimal", "strip"]],
               ["heading_level", ["h1", "h2", "h3", "h4", "h5", "h6"]],
               ["kicker / title / description / image", ["text or URL"]],
+              ["h1 / h2 shorthand", ["heading text; h2 also selects h2 semantics when h1 is absent"]],
               ["primary_cta_label / primary_cta_href", ["text", "internal path or URL"]],
               ["primary_cta_target / primary_cta_rel", ["_self", "_blank", "noopener", "noreferrer"]],
               ["secondary CTA fields", ["same label, href, target, and rel options"]],
@@ -588,6 +590,12 @@ export function ShortcodeLibraryMockupPage() {
             ["orderby / order", ["name", "count", "include", "asc", "desc"]],
             ["title", ["text"]],
           ]} />
+          <ShortcodeContract name="product-tags" example={{ layout: "pills", limit: 24, offset: 0, include: "", orderby: "name", order: "asc", title: "Product tags" }} values={[
+            ["layout", ["pills", "cards", "compact"]],
+            ["limit / offset", ["1–100", "0–1000000"]],
+            ["include", ["comma-separated product-tag IDs or slugs"]],
+            ["orderby / order", ["name", "count", "include", "asc", "desc"]],
+          ]} />
           <ShortcodeContract name="authors" example={{ layout: "cards", limit: 12, offset: 0, include: "", show_bio: true, min_posts: 0, orderby: "name", order: "asc", title: "Authors" }} values={[
             ["layout", ["cards", "compact"]],
             ["limit", ["1–100"]],
@@ -697,6 +705,49 @@ export function ShortcodeLibraryMockupPage() {
               primaryCta={{ label: "Shop the drop", href: "/shop" }}
               secondaryCta={{ label: "View lookbook", href: "/blog" }}
             />
+          </div>
+          <div className="grid gap-3">
+            <ShortcodeLabel
+              name="video-hero"
+              attrs={{
+                src: "https://cdn.coverr.co/videos/coverr-a-woman-walking-in-a-clothing-store-1574/1080p.mp4",
+                poster: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
+                kicker: "Motion campaign",
+                title: "Stories made to move",
+                description: "A cinematic banner with a resilient poster fallback, readable overlay, and accessible playback control.",
+                primary_cta_label: "Shop the collection",
+                primary_cta_href: "/shop",
+                secondary_cta_label: "Read the journal",
+                secondary_cta_href: "/blog",
+                overlay_opacity: 58,
+              }}
+            />
+            <p className="m-0 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Video hero / banner</p>
+            <VideoHero
+              variant="fullbleed"
+              source="https://cdn.coverr.co/videos/coverr-a-woman-walking-in-a-clothing-store-1574/1080p.mp4"
+              poster="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
+              kicker="Motion campaign"
+              title="Stories made to move"
+              description="A cinematic banner with a resilient poster fallback, readable overlay, and accessible playback control."
+              primaryCta={{ label: "Shop the collection", href: "/shop" }}
+              secondaryCta={{ label: "Read the journal", href: "/blog" }}
+              overlayOpacity={58}
+            />
+          </div>
+          <div className="grid gap-3">
+            <ShortcodeLabel
+              name="spotify-radio"
+              attrs={{
+                uri: "https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn",
+                title: "Superfunky Radio",
+                description: "Instrumental jazz-hop for browsing.",
+                theme: "auto",
+                height: 400,
+              }}
+            />
+            <p className="m-0 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Spotify radio</p>
+            <SpotifyPlayerMock uri="https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn" title="Superfunky Radio" />
           </div>
         </div>
       </LibrarySection>

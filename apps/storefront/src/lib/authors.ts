@@ -6,7 +6,7 @@ import {
   createCompatibleAuthorArchiveQuery,
 } from "./authorArchiveGraphqlCompatibility";
 import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
-import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility";
+import { shouldPreferCoreContentQueries } from "./profileGraphqlCompatibility";
 
 export type CmsAuthorArchive = {
   id: string;
@@ -61,8 +61,14 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
   }
 `;
 
-export async function getAuthorArchive(slug: string, languageCode: string): Promise<CmsAuthorArchive | null> {
-  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
+export async function getAuthorArchive(
+  slug: string,
+  backendLanguageCode: string,
+  languageCode = backendLanguageCode,
+  configuredLanguageCodes: readonly string[] = [],
+): Promise<CmsAuthorArchive | null> {
+  const normalizedRequestedLanguageCode = languageCode.toLowerCase();
+  const query = shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE)
     ? createCompatibleAuthorArchiveQuery(AUTHOR_ARCHIVE_QUERY)
     : AUTHOR_ARCHIVE_QUERY;
   const { data, errors } = await requestGraphqlWithCompatibility<AuthorArchiveResult>(
@@ -71,7 +77,7 @@ export async function getAuthorArchive(slug: string, languageCode: string): Prom
     {
       slug,
       authorName: slug,
-      language: languageCode,
+      language: backendLanguageCode,
     },
     [AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
   );
@@ -92,9 +98,27 @@ export async function getAuthorArchive(slug: string, languageCode: string): Prom
     // existing `communityCover` field) so authors and community members share one
     // cover image — no separate journal-only cover field.
     coverUrl: data.user.communityCover?.url || null,
-    languageCode: languageCode.toLowerCase(),
+    languageCode: normalizedRequestedLanguageCode,
     posts: data.posts?.nodes
       .filter((post) => post.author?.node.slug === (data.user?.slug || slug))
+      .filter((post) => matchesAuthorPostLanguage(post, normalizedRequestedLanguageCode, configuredLanguageCodes))
       .map(mapBlogPost) || [],
   };
+}
+
+export function matchesAuthorPostLanguage(
+  post: Pick<RawBlogPost, "language" | "uri">,
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): boolean {
+  const requestedLanguage = languageCode.toLowerCase();
+  const postLanguage = post.language?.code?.toLowerCase();
+  if (postLanguage) return postLanguage === requestedLanguage;
+
+  const configured = [...new Set(configuredLanguageCodes.map((code) => code.toLowerCase()).filter(Boolean))];
+  if (configured.length < 2) return true;
+  const prefix = post.uri?.split(/[?#]/, 1)[0].split("/").filter(Boolean)[0]?.toLowerCase() || "";
+  return requestedLanguage === configured[0]
+    ? !configured.slice(1).includes(prefix)
+    : prefix === requestedLanguage;
 }

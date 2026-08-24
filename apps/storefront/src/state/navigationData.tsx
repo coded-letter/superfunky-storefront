@@ -1,6 +1,11 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { useCurrency, useLanguage, useUiStrings } from "@funky/ui";
-import { DEFAULT_STOREFRONT_CONFIGURATION, getNavigationData, type CmsNavigationData } from "../lib/navigation";
+import {
+  DEFAULT_STOREFRONT_CONFIGURATION,
+  getAiAssistantConfiguration,
+  getNavigationData,
+  type CmsNavigationData,
+} from "../lib/navigation";
 import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 import { setStripePublishableKey } from "../lib/stripe";
 import { fetchGeolocation, isGeolocationBackendConfigured } from "../lib/geolocation";
@@ -24,40 +29,59 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   const { syncCurrencyOptions, setCurrencyCode, currencyOptions } = useCurrency();
   const { syncUiStrings } = useUiStrings();
   const rawState = useIncrementalData(
-    `navigation-data:v7:${languageCode}`,
+    `navigation-data:v13:${languageCode}`,
     () => getNavigationData(languageCode),
     enabled,
   );
+  const assistantState = useIncrementalData(
+    `navigation-assistant:v1:${languageCode}`,
+    () => getAiAssistantConfiguration(languageCode),
+    enabled && !rawState.isLoading,
+  );
+  const lastResolvedData = useRef<CmsNavigationData | null>(null);
+  if (rawState.data) lastResolvedData.current = rawState.data;
+  const resolvedData = rawState.data || lastResolvedData.current;
   const state = useMemo<IncrementalDataState<CmsNavigationData>>(() => ({
     ...rawState,
-    data: rawState.data
+    data: resolvedData
       ? {
-          header: Array.isArray(rawState.data.header) ? rawState.data.header : [],
-          mobile: Array.isArray(rawState.data.mobile) ? rawState.data.mobile : [],
-          footer: Array.isArray(rawState.data.footer) ? rawState.data.footer : [],
-          languages: Array.isArray(rawState.data.languages) ? rawState.data.languages : [],
-          storefrontConfig: rawState.data.storefrontConfig || DEFAULT_STOREFRONT_CONFIGURATION,
-          uiStrings: rawState.data.uiStrings || {},
+          header: Array.isArray(resolvedData.header) ? resolvedData.header : [],
+          mobile: Array.isArray(resolvedData.mobile) ? resolvedData.mobile : [],
+          footer: Array.isArray(resolvedData.footer) ? resolvedData.footer : [],
+          languages: Array.isArray(resolvedData.languages) ? resolvedData.languages : [],
+          storefrontConfig: {
+            ...(resolvedData.storefrontConfig || DEFAULT_STOREFRONT_CONFIGURATION),
+            ...(assistantState.data
+              ? {
+                  aiAssistant: {
+                    ...(resolvedData.storefrontConfig?.aiAssistant || DEFAULT_STOREFRONT_CONFIGURATION.aiAssistant),
+                    ...assistantState.data,
+                  },
+                }
+              : {}),
+          },
+          uiStrings: resolvedData.uiStrings || {},
         }
       : null,
-  }), [rawState]);
+  }), [assistantState.data, rawState, resolvedData]);
+  const canRenderChildren = !enabled || Boolean(state.data) || !rawState.isLoading;
   useLayoutEffect(() => {
-    const languages = state.data?.languages;
-    if (!state.isRevalidating && Array.isArray(languages)) syncLanguageOptions(languages);
-  }, [state.data?.languages, state.isRevalidating, syncLanguageOptions]);
+    const languages = rawState.data?.languages;
+    if (!rawState.isRevalidating && Array.isArray(languages)) syncLanguageOptions(languages);
+  }, [rawState.data?.languages, rawState.isRevalidating, syncLanguageOptions]);
   useEffect(() => {
-    const configuration = state.data?.storefrontConfig;
+    const configuration = rawState.data?.storefrontConfig;
     if (configuration?.currencies.length) {
       syncCurrencyOptions(configuration.currencies, configuration.baseCurrency);
     }
-  }, [state.data?.storefrontConfig, syncCurrencyOptions]);
+  }, [rawState.data?.storefrontConfig, syncCurrencyOptions]);
   useEffect(() => {
-    setStripePublishableKey(state.data?.storefrontConfig?.stripePublishableKey ?? null);
-  }, [state.data?.storefrontConfig?.stripePublishableKey]);
+    setStripePublishableKey(rawState.data?.storefrontConfig?.stripePublishableKey ?? null);
+  }, [rawState.data?.storefrontConfig?.stripePublishableKey]);
   useEffect(() => {
-    const uiStrings = state.data?.uiStrings;
+    const uiStrings = rawState.data?.uiStrings;
     if (uiStrings && Object.keys(uiStrings).length) syncUiStrings(uiStrings);
-  }, [state.data?.uiStrings, syncUiStrings]);
+  }, [rawState.data?.uiStrings, syncUiStrings]);
   // Auto-select currency from visitor country on first visit (no stored preference).
   // Runs once when currencies are available and backend geolocation is configured.
   useEffect(() => {
@@ -79,7 +103,7 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
 
   return (
     <NavigationDataContext.Provider value={state}>
-      {children}
+      {canRenderChildren ? children : null}
     </NavigationDataContext.Provider>
   );
 }

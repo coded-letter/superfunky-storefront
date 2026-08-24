@@ -61,6 +61,7 @@ test("leaves external, backend application, special-scheme, and native anchors a
     ["https://cdn.store.test/page"],
     ["https://v3.superfunky.pro/wp-admin/edit.php"],
     ["https://v3.superfunky.pro/wp-json/wp/v2/pages"],
+    ["https://v3.superfunky.pro/?download_file=4970&order=wc_order_test&key=file-id"],
     ["mailto:hello@example.test"],
     ["tel:+123456"],
     ["javascript:void(0)"],
@@ -103,6 +104,57 @@ test("delegates dynamic CMS anchors while preserving modified clicks and editabl
   cleanup();
   dynamic.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, button: 0 }));
   assert.deepEqual(navigations, ["/documentation/dynamic/?q=1#intro"]);
+});
+
+test("leaves the authoritative prerender shell links native until handoff", () => {
+  const navigations: string[] = [];
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    navigate: (to) => navigations.push(to),
+    prefetch: () => undefined,
+  });
+  const root = dom.window.document.querySelector("#root")!;
+  root.className = "storefront-prerender-stage";
+  root.innerHTML = '<a id="static-link" href="/pl/about/">About</a>';
+  const link = root.querySelector<HTMLAnchorElement>("#static-link")!;
+  link.dispatchEvent(new dom.window.MouseEvent("pointerover", { bubbles: true }));
+  const nativeClick = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  link.dispatchEvent(nativeClick);
+
+  assert.equal(link.getAttribute("href"), "/pl/about/");
+  assert.equal(nativeClick.defaultPrevented, false);
+  assert.deepEqual(navigations, []);
+
+  root.classList.add("is-replaced");
+  const reactClick = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  link.dispatchEvent(reactClick);
+  assert.equal(reactClick.defaultPrevented, true);
+  assert.deepEqual(navigations, ["/pl/about/"]);
+  cleanup();
+});
+
+test("never rewrites or intercepts native WooCommerce download anchors", () => {
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    backendOrigin: "https://v3.superfunky.pro",
+    navigate: () => assert.fail("Native download links must not use SPA navigation."),
+    prefetch: () => undefined,
+  });
+  const href = "https://v3.superfunky.pro/?download_file=4970&order=wc_order_test&key=file-id";
+  dom.window.document.querySelector("#root")!.innerHTML = `
+    <a id="download" href="${href}" ${NATIVE_LINK_ATTRIBUTE}>Download</a>
+  `;
+  const anchor = dom.window.document.querySelector<HTMLAnchorElement>("#download")!;
+
+  assert.equal(anchor.href, href);
+  assert.equal(classifyAnchor(anchor, {
+    currentUrl: dom.window.location.href,
+    storefrontOrigin: dom.window.location.origin,
+    backendOrigin: "https://v3.superfunky.pro",
+  }).kind, "native");
+  cleanup();
 });
 
 test("smart navigation canonicalizes links using authoritative language cardinality", () => {
@@ -174,6 +226,31 @@ test("prefetches once across hover and focus, cancels abandoned intent, and clea
   cancel.dispatchEvent(new dom.window.FocusEvent("focusin", { bubbles: true }));
   await new Promise((resolve) => dom.window.setTimeout(resolve, 10));
   assert.deepEqual(prefetched, ["/intent"]);
+});
+
+test("prefetches same-site new-tab links without intercepting their navigation", async () => {
+  const navigations: string[] = [];
+  const prefetched: string[] = [];
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    navigate: (to) => navigations.push(to),
+    prefetch: (to) => prefetched.push(to),
+    intentDelay: 0,
+  });
+  const root = dom.window.document.querySelector("#root")!;
+  root.innerHTML = '<a id="new-tab" href="/new-tab" target="_blank">New tab</a>';
+  const link = root.querySelector("#new-tab")!;
+
+  link.dispatchEvent(new dom.window.MouseEvent("pointerover", { bubbles: true }));
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 10));
+  const click = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  link.dispatchEvent(click);
+
+  assert.deepEqual(prefetched, ["/new-tab"]);
+  assert.deepEqual(navigations, []);
+  assert.equal(click.defaultPrevented, false);
+  cleanup();
 });
 
 test("respects Save-Data and slow network hints", async () => {

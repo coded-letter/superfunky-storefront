@@ -55,11 +55,11 @@ export function mapStorefrontSearchResults(
     ...mapContentResults(data.products?.nodes, "product", t("search.type.product"), normalizeLabel, (node) =>
       resolveCanonicalPath("product", node.slug, node.uri)),
     ...mapContentResults(data.posts?.nodes, "post", t("search.type.post"), normalizeLabel, (node) =>
-      resolveCanonicalPath("blog", node.slug, node.uri)),
+      resolveInternalHref(node.uri, contentPath("blog", node.slug))),
     ...mapContentResults(data.pages?.nodes, "page", t("search.type.page"), normalizeLabel, (node) =>
       resolveInternalHref(node.uri, contentPath("", node.slug))),
-    ...mapTermResults(data.postCategories?.nodes, "post_category", t("search.type.post_category"), "blog/category", normalizeLabel),
-    ...mapTermResults(data.postTags?.nodes, "post_tag", t("search.type.post_tag"), "blog/tag", normalizeLabel),
+    ...mapTermResults(data.postCategories?.nodes, "post_category", t("search.type.post_category"), "blog/category", normalizeLabel, true),
+    ...mapTermResults(data.postTags?.nodes, "post_tag", t("search.type.post_tag"), "blog/tag", normalizeLabel, true),
     ...mapTermResults(data.productCategories?.nodes, "product_category", t("search.type.product_category"), "shop/category", normalizeLabel),
     ...mapTermResults(data.productTags?.nodes, "product_tag", t("search.type.product_tag"), "shop/tag", normalizeLabel),
     ...mapTermResults(data.productBrands?.nodes, "product_brand", t("search.type.product_brand"), "shop/brand", normalizeLabel),
@@ -105,10 +105,13 @@ function mapTermResults(
   subtitle: string,
   routeBase: string,
   normalizeLabel: NormalizeLabel,
+  preferUri = false,
 ): SearchResultItem[] {
   return (nodes || []).flatMap((node) => {
     const title = normalizeLabel(node.name || "").trim();
-    const href = resolveCanonicalPath(routeBase, node.slug, node.uri);
+    const href = preferUri
+      ? resolveInternalHref(node.uri, contentPath(routeBase, node.slug))
+      : resolveCanonicalPath(routeBase, node.slug, node.uri);
     return title && href ? [{ type, id: node.id, title, subtitle, href }] : [];
   });
 }

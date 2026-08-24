@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const appRoot = new URL("../apps/storefront/", import.meta.url);
-const [html, component, styles] = await Promise.all([
+const [html, component, styles, main] = await Promise.all([
   readFile(new URL("index.html", appRoot), "utf8"),
   readFile(new URL("src/components/CrystalPreloader.tsx", appRoot), "utf8"),
   readFile(new URL("src/styles.css", appRoot), "utf8"),
+  readFile(new URL("src/main.tsx", appRoot), "utf8"),
 ]);
 
 const inlineLoader = html.slice(
@@ -91,7 +92,9 @@ test("loader API, accessibility, fail-open behavior, and dependency-free renderi
   assert.match(html, /--crystal-size: 30px/);
   assert.match(html, /--storefront-bootstrap-bg: var\(--wp--preset--color--contrast, #09090b\)/);
   assert.match(inlineLoader, /aria-hidden="true" data-crystal-axis="y"/);
-  assert.match(html, /storefront-bootstrap-fail-open/);
+  assert.doesNotMatch(html, /storefront-bootstrap-fail-open/);
+  assert.match(main, /if \(!prerenderRoot\) failOpenTimer = window\.setTimeout\(finishBootstrap, 2_800\)/);
+  assert.doesNotMatch(main, /4_000/);
 });
 
 test("inline and hydrated loaders have matching visual structure", () => {

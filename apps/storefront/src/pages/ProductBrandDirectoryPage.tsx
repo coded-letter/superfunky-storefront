@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ResponsiveImage } from "@funky/ui";
+import { normalizeLanguagePath, ResponsiveImage, useLanguage } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { getProductBrandDirectory } from "../lib/commerce";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -8,9 +8,11 @@ import { ArchiveDirectory, ArchiveDirectoryStatus } from "./ArchiveDirectory";
 
 export function ProductBrandDirectoryPage() {
   const shopPath = useStorefrontPath("shop", "/shop");
+  const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
+  const directoryPath = normalizeLanguagePath("/product-brand", languageCode, configuredLanguageCodes);
   const { data: brands, isLoading, error } = useIncrementalData(
-    "product-brand-directory:v1",
-    getProductBrandDirectory,
+    `product-brand-directory:v2:${languageCode}`,
+    () => getProductBrandDirectory(languageCode, languageBackendCode),
   );
 
   if (isLoading) return <ContentLoadingState label="Loading product brands" />;
@@ -24,7 +26,7 @@ export function ProductBrandDirectoryPage() {
       title="Product brands"
       kicker="Shop by maker"
       description="Browse every brand with products available in the Superfunky catalog."
-      canonical="/product-brand"
+      canonical={directoryPath}
       parent={{ label: "Shop", href: shopPath }}
       count={entries.length}
     >
@@ -32,7 +34,7 @@ export function ProductBrandDirectoryPage() {
         <ul className="m-0 grid list-none gap-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((brand) => (
             <li key={brand.id}>
-              <Link to={brand.uri} className="group grid h-full gap-4 rounded-3xl border border-zinc-200 bg-white p-5 text-inherit no-underline shadow-soft transition hover:-translate-y-0.5 hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-700">
+              <Link to={normalizeLanguagePath(brand.uri, languageCode, configuredLanguageCodes)} className="group grid h-full gap-4 rounded-3xl border border-zinc-200 bg-white p-5 text-inherit no-underline shadow-soft transition hover:-translate-y-0.5 hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-700">
                 {brand.imageUrl ? (
                   <ResponsiveImage src={brand.imageUrl} alt="" sizes="(min-width: 1024px) 20rem, 50vw" className="aspect-[3/2] w-full rounded-2xl object-cover" />
                 ) : (

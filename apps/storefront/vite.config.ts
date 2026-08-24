@@ -9,8 +9,14 @@ const frontendRoot = fileURLToPath(new URL("../..", import.meta.url));
 // lucide-react, react-helmet-async) resolved against this app's copies — no manual
 // aliasing needed for it to share a single instance of those libraries.
 export default defineConfig({
+  define: {
+    "import.meta.env.STOREFRONT_EXPECTED_LOCALES": JSON.stringify(
+      process.env.STOREFRONT_EXPECTED_LOCALES || "",
+    ),
+  },
   plugins: [react()],
   build: {
+    manifest: true,
     sourcemap: true,
   },
   server: {

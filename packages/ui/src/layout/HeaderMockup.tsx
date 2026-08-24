@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   AlignJustify,
@@ -31,12 +31,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { CurrencySwitcher, LanguageSwitcher } from "../locale";
+import { CurrencySwitcher, LanguageSwitcher, useT } from "../locale";
 import { useLayoutPreferences, useReadingList, useCart, useTheme, useWishlist } from "../state";
 import { CartDropdown } from "./CartDropdown";
 import { SearchAutocomplete, type SearchAutocompleteProps } from "./SearchAutocomplete";
 import { ResponsiveImage } from "../media";
-import { getMegaMenuConfiguration, hasMenuClass } from "./menuClasses";
+import { getMegaMenuConfiguration, isMenuInitiallyExpanded } from "./menuClasses";
 import { MenuDescription } from "./MenuDescription";
 import { SafeHtmlContent } from "./SafeHtmlContent";
 import { sanitizeStorefrontHtml } from "./sanitizeStorefrontHtml";
@@ -252,16 +252,24 @@ export function HeaderMockup({
   cartTriggerVariant = "drawer",
   actionSlot,
 }: HeaderMockupProps) {
+  const t = useT();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { themeMaxWidthPx } = useLayoutPreferences();
   const { count: wishlistCount, syncError: wishlistSyncError } = useWishlist();
   const { count: readingListCount, syncError: readingListSyncError } = useReadingList();
   const { itemCount: cartBadgeCount, toggleDrawer: toggleCartDrawer } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(true);
+  const [hasMountedMobileMenu, setHasMountedMobileMenu] = useState(false);
+  const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(
+    () => typeof window === "undefined" || window.scrollY <= 4,
+  );
   const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml);
   const isAnnouncementBarShown = showAnnouncementBar && Boolean(safeAnnouncementHtml) && isAnnouncementVisible;
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const openMobileMenu = () => {
+    setHasMountedMobileMenu(true);
+    setIsMenuOpen(true);
+  };
   const resolvedMobileNavigation = mobileNavigation?.length ? mobileNavigation : primaryNavigation;
   const location = useLocation();
   const headerRef = useRef<HTMLElement>(null);
@@ -290,6 +298,12 @@ export function HeaderMockup({
   // open. Uses the position:fixed technique (not just overflow:hidden) so the page behind
   // the drawer can't be scrolled on iOS Safari, and restores the exact scroll position on close.
   useEffect(() => setIsMenuOpen(false), [location.pathname]);
+  useEffect(() => {
+    setIsSearchExpanded(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!showSearch || searchVariant !== "expandable") setIsSearchExpanded(false);
+  }, [searchVariant, showSearch]);
   useEffect(() => {
     if (!isMenuOpen) return;
 
@@ -328,6 +342,7 @@ export function HeaderMockup({
       setIsAnnouncementVisible(window.scrollY <= 4);
     }
 
+    handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [announcementScrollEffect]);
@@ -352,13 +367,13 @@ export function HeaderMockup({
           className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${isAnnouncementBarShown ? "max-h-10" : "max-h-0"}`}
         >
           <div
-            className={`bg-zinc-900 px-4 py-2 text-center text-[0.72rem] font-medium tracking-wide text-zinc-50 transition-transform duration-300 ease-in-out dark:bg-brand-950 ${
+            className={`bg-brand-950 px-4 py-2 text-center text-[0.72rem] font-medium tracking-wide text-zinc-50 transition-transform duration-300 ease-in-out ${
               isAnnouncementBarShown ? "translate-y-0" : "-translate-y-full"
             }`}
           >
             <SafeHtmlContent
               html={safeAnnouncementHtml}
-              className="[&_a]:font-semibold [&_a]:text-inherit [&_a]:underline [&_p]:m-0"
+              className="[&_a]:font-semibold [&_a]:text-inherit [&_a]:underline [&_ol]:m-0 [&_p]:m-0 [&_ul]:m-0"
             />
           </div>
         </div>
@@ -391,20 +406,21 @@ export function HeaderMockup({
             <SearchAutocomplete search={search} className="hidden min-w-[220px] flex-1 basis-80 lg:block" />
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {showSearch && searchVariant === "expandable" ? (
               <div className="hidden items-center gap-1 lg:flex">
                 <div
-                  className={`overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${
-                    isSearchExpanded ? "w-72 opacity-100" : "w-0 opacity-0"
+                  inert={isSearchExpanded ? undefined : true}
+                  className={`transition-[width,opacity] duration-300 ease-in-out ${
+                    isSearchExpanded ? "w-72 overflow-visible opacity-100" : "w-0 overflow-hidden opacity-0"
                   }`}
                 >
-                  <SearchAutocomplete search={search} className="w-72" />
+                  <SearchAutocomplete search={search} autoFocus={isSearchExpanded} className="w-72" />
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsSearchExpanded((value) => !value)}
-                  aria-label={isSearchExpanded ? "Close search" : "Open search"}
+                  aria-label={t(isSearchExpanded ? "search.close" : "search.open")}
                   aria-expanded={isSearchExpanded}
                   className={iconButtonClass}
                 >
@@ -426,10 +442,11 @@ export function HeaderMockup({
             {showDarkModeToggle ? (
               <button
                 type="button"
+                data-storefront-control="theme"
                 className={iconButtonClass}
                 onClick={toggleDarkMode}
-                aria-label="Toggle dark mode"
-                title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                aria-label={t("header.theme.toggle")}
+                title={t(isDarkMode ? "header.theme.light" : "header.theme.dark")}
               >
                 <span className="grid transition-transform duration-500 motion-safe:hover:rotate-12">
                   <HeaderActionIcon name={headerIcons?.theme} mediaUrl={headerIconMedia?.theme} fallback={isDarkMode ? Sun : Moon} />
@@ -440,6 +457,7 @@ export function HeaderMockup({
             {showPushAction && onPushToggle ? (
               <button
                 type="button"
+                data-storefront-control="push"
                 onClick={onPushToggle}
                 disabled={pushBusy}
                 className={`${iconButtonClass} focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-wait disabled:opacity-60 ${
@@ -447,9 +465,9 @@ export function HeaderMockup({
                     ? "border-brand-300 text-brand-600 dark:border-brand-700 dark:text-brand-300"
                     : ""
                 }`}
-                aria-label={pushSubscribed ? "Disable push notifications" : "Enable push notifications"}
+                aria-label={t(pushSubscribed ? "header.push.disable" : "header.push.enable")}
                 aria-pressed={pushSubscribed}
-                title={pushSubscribed ? "Push notifications enabled" : "Enable push notifications"}
+                title={t(pushSubscribed ? "header.push.enabled" : "header.push.enable")}
               >
                 <HeaderActionIcon
                   name={pushSubscribed ? "bell-ring" : headerIcons?.push}
@@ -460,15 +478,20 @@ export function HeaderMockup({
             ) : null}
 
             {showAccountLink ? (
-              <Link to="/account" aria-label="Account" title="Account" className={`${iconButtonClass} hidden lg:inline-grid`}>
+              <Link to="/account" data-storefront-control="account" aria-label={t("header.account")} title={t("header.account")} className={`${iconButtonClass} hidden lg:inline-grid`}>
                 <HeaderActionIcon name={headerIcons?.account} mediaUrl={headerIconMedia?.account} fallback={User} />
               </Link>
             ) : null}
             {showReadingListLink ? (
               <Link
                 to="/reading-list"
-                aria-label={readingListSyncError ? "Reading list (sync error)" : "Reading list"}
-                title={readingListSyncError ? `Reading list — ${readingListSyncError}` : "Reading list"}
+                data-storefront-control="reading-list"
+                aria-label={readingListSyncError
+                  ? t("header.sync_error", { label: t("header.reading_list") })
+                  : t("header.reading_list")}
+                title={readingListSyncError
+                  ? t("header.sync_error_detail", { label: t("header.reading_list"), message: readingListSyncError })
+                  : t("header.reading_list")}
                 className={`${iconButtonClass} relative hidden lg:inline-grid`}
               >
                 <HeaderActionIcon name={headerIcons?.readingList} mediaUrl={headerIconMedia?.readingList} fallback={BookMarked} />
@@ -479,8 +502,13 @@ export function HeaderMockup({
             {showWishlistLink ? (
               <Link
                 to="/wishlist"
-                aria-label={wishlistSyncError ? "Wishlist (sync error)" : "Wishlist"}
-                title={wishlistSyncError ? `Wishlist — ${wishlistSyncError}` : "Wishlist"}
+                data-storefront-control="wishlist"
+                aria-label={wishlistSyncError
+                  ? t("header.sync_error", { label: t("header.wishlist") })
+                  : t("header.wishlist")}
+                title={wishlistSyncError
+                  ? t("header.sync_error_detail", { label: t("header.wishlist"), message: wishlistSyncError })
+                  : t("header.wishlist")}
                 className={`${iconButtonClass} relative hidden lg:inline-grid`}
               >
                 <HeaderActionIcon name={headerIcons?.wishlist} mediaUrl={headerIconMedia?.wishlist} fallback={Heart} />
@@ -492,9 +520,10 @@ export function HeaderMockup({
               <div className="relative">
                 <button
                   type="button"
+                  data-storefront-control="cart"
                   onClick={handleCartTriggerClick}
-                  aria-label="Cart"
-                  title="Cart"
+                  aria-label={t("header.cart")}
+                  title={t("header.cart")}
                   className={`${iconButtonClass} relative`}
                 >
                   <HeaderActionIcon name={headerIcons?.cart} mediaUrl={headerIconMedia?.cart} fallback={ShoppingCart} />
@@ -508,10 +537,12 @@ export function HeaderMockup({
 
             <button
               type="button"
+              data-storefront-control="menu"
               className={`${iconButtonClass} lg:hidden`}
-              onClick={() => setIsMenuOpen(true)}
-              aria-label="Open menu"
+              onClick={openMobileMenu}
+              aria-label={t("header.menu.open")}
               aria-expanded={isMenuOpen}
+              aria-controls={hasMountedMobileMenu ? "storefront-mobile-menu" : undefined}
             >
               <HeaderActionIcon name={headerIcons?.menu} mediaUrl={headerIconMedia?.menu} fallback={Menu} />
             </button>
@@ -527,7 +558,7 @@ export function HeaderMockup({
               `navLinkClass`) so its label text sits flush with the row's left edge —
               i.e. the same column as the logo above and the theme's max-width edge —
               instead of appearing indented by the pill's hit-area padding. */}
-          <nav aria-label="Main navigation" className="-ml-3.5 flex flex-wrap items-center gap-x-1 gap-y-1.5">
+          <nav aria-label={t("header.navigation.main")} className="-ml-3.5 flex flex-wrap items-center gap-x-1 gap-y-1.5">
             {primaryNavigation.map((item) =>
               item.children?.length ? (
                 <NavDropdownItem key={menuItemKey(item)} item={item} />
@@ -556,23 +587,32 @@ export function HeaderMockup({
           nor left with a gap. Not needed when `sticky` is off — the header is already
           in normal document flow at that point. */}
       {sticky ? (
-        <div style={{ height: headerHeight }} className="shrink-0 transition-[height] duration-300 ease-in-out" aria-hidden="true" />
+        <div style={{ height: headerHeight }} className="shrink-0" aria-hidden="true" />
       ) : null}
 
-      <MobileDrawer
-        isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        primaryNavigation={resolvedMobileNavigation}
-        wishlistCount={wishlistCount}
-        wishlistSyncError={wishlistSyncError}
-        readingListCount={readingListCount}
-        readingListSyncError={readingListSyncError}
-        cartBadgeCount={cartBadgeCount}
-        onCartClick={handleCartTriggerClick}
-        search={search}
-        showLanguageSwitcher={showLanguageSwitcher}
-        showCurrencySwitcher={showCurrencySwitcher}
-      />
+      {hasMountedMobileMenu ? (
+        <MobileDrawer
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          primaryNavigation={resolvedMobileNavigation}
+          wishlistCount={wishlistCount}
+          wishlistSyncError={wishlistSyncError}
+          readingListCount={readingListCount}
+          readingListSyncError={readingListSyncError}
+          cartBadgeCount={cartBadgeCount}
+          onCartClick={handleCartTriggerClick}
+          search={search}
+          headerIcons={headerIcons}
+          headerIconMedia={headerIconMedia}
+          showSearch={showSearch}
+          showLanguageSwitcher={showLanguageSwitcher}
+          showCurrencySwitcher={showCurrencySwitcher}
+          showAccountLink={showAccountLink}
+          showReadingListLink={showReadingListLink}
+          showWishlistLink={showWishlistLink}
+          showCartIcon={showCartIcon}
+        />
+      ) : null}
     </>
   );
 }
@@ -588,8 +628,15 @@ function MobileDrawer({
   cartBadgeCount,
   onCartClick,
   search,
+  headerIcons,
+  headerIconMedia,
+  showSearch,
   showLanguageSwitcher,
   showCurrencySwitcher,
+  showAccountLink,
+  showReadingListLink,
+  showWishlistLink,
+  showCartIcon,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -601,9 +648,57 @@ function MobileDrawer({
   cartBadgeCount: number;
   onCartClick: () => void;
   search?: SearchAutocompleteProps["search"];
+  headerIcons?: Partial<HeaderIconConfiguration>;
+  headerIconMedia?: HeaderIconMediaConfiguration;
+  showSearch: boolean;
   showLanguageSwitcher: boolean;
   showCurrencySwitcher: boolean;
+  showAccountLink: boolean;
+  showReadingListLink: boolean;
+  showWishlistLink: boolean;
+  showCartIcon: boolean;
 }) {
+  const t = useT();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) || [])].filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [isOpen]);
   // Rendered via a portal directly into <body>: the header uses `backdrop-blur`, which
   // (like `filter`/`will-change: transform`) establishes a new containing block for any
   // `position: fixed` descendant. Left in place, the drawer's `fixed inset-y-0` would be
@@ -617,19 +712,22 @@ function MobileDrawer({
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
+        id="storefront-mobile-menu"
         role="dialog"
         aria-modal="true"
-        aria-label="Site menu"
+        aria-label={t("header.menu.site")}
+        inert={isOpen ? undefined : true}
         className={`fixed inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-soft-lg transition-transform duration-300 ease-out dark:bg-zinc-950 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex shrink-0 items-center justify-between p-6 pb-4">
-          <span className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Menu</span>
+          <span className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{t("header.menu.title")}</span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close menu"
+            aria-label={t("header.menu.close")}
             className="inline-grid h-9 w-9 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -637,7 +735,7 @@ function MobileDrawer({
         </div>
 
         <div className="scrollbar-thin grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-6 pb-6 pt-1">
-          <SearchAutocomplete search={search} fullWidth onNavigate={onClose} />
+          {showSearch ? <SearchAutocomplete search={search} fullWidth onNavigate={onClose} /> : null}
 
           {/* Moved here (from a fixed footer strip) so the dropdown panel has room to
               open downward inside this scrollable area — anchored at the very bottom of
@@ -647,38 +745,48 @@ function MobileDrawer({
             {showCurrencySwitcher ? <CurrencySwitcher fullWidth /> : null}
           </div>
 
-          <nav aria-label="Mobile navigation" className="grid gap-1">
+          <nav aria-label={t("header.navigation.mobile")} className="grid gap-1">
             {primaryNavigation.map((item) => (
               <MobileNavItem key={menuItemKey(item)} item={item} />
             ))}
           </nav>
 
-          <div className="grid gap-1 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            <Link to="/account" className={mobileActionLinkClass}>
-              <User className="h-4 w-4" aria-hidden="true" /> Account
-            </Link>
-            <Link to="/reading-list" className={mobileActionLinkClass}>
-              <BookMarked className="h-4 w-4" aria-hidden="true" /> Reading list
-              {readingListCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{readingListCount}</span> : null}
-              {readingListSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={readingListSyncError} /> : null}
-            </Link>
-            <Link to="/wishlist" className={mobileActionLinkClass}>
-              <Heart className="h-4 w-4" aria-hidden="true" /> Wishlist
-              {wishlistCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{wishlistCount}</span> : null}
-              {wishlistSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={wishlistSyncError} /> : null}
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onCartClick();
-              }}
-              className={`${mobileActionLinkClass} w-full text-left`}
-            >
-              <ShoppingCart className="h-4 w-4" aria-hidden="true" /> Cart
-              {cartBadgeCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{cartBadgeCount}</span> : null}
-            </button>
-          </div>
+          {showAccountLink || showReadingListLink || showWishlistLink || showCartIcon ? (
+            <div className="grid gap-1 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              {showAccountLink ? (
+                <Link to="/account" className={mobileActionLinkClass}>
+                  <HeaderActionIcon name={headerIcons?.account} mediaUrl={headerIconMedia?.account} fallback={User} /> {t("header.account")}
+                </Link>
+              ) : null}
+              {showReadingListLink ? (
+                <Link to="/reading-list" className={mobileActionLinkClass}>
+                  <HeaderActionIcon name={headerIcons?.readingList} mediaUrl={headerIconMedia?.readingList} fallback={BookMarked} /> {t("header.reading_list")}
+                  {readingListCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{readingListCount}</span> : null}
+                  {readingListSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={readingListSyncError} /> : null}
+                </Link>
+              ) : null}
+              {showWishlistLink ? (
+                <Link to="/wishlist" className={mobileActionLinkClass}>
+                  <HeaderActionIcon name={headerIcons?.wishlist} mediaUrl={headerIconMedia?.wishlist} fallback={Heart} /> {t("header.wishlist")}
+                  {wishlistCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{wishlistCount}</span> : null}
+                  {wishlistSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={wishlistSyncError} /> : null}
+                </Link>
+              ) : null}
+              {showCartIcon ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onCartClick();
+                  }}
+                  className={`${mobileActionLinkClass} w-full text-left`}
+                >
+                  <HeaderActionIcon name={headerIcons?.cart} mediaUrl={headerIconMedia?.cart} fallback={ShoppingCart} /> {t("header.cart")}
+                  {cartBadgeCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{cartBadgeCount}</span> : null}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,
@@ -693,10 +801,15 @@ function MobileDrawer({
  * nesting-depth limit. Every sub-list starts collapsed unless its parent has the
  * WordPress menu-item CSS class `expanded`. */
 function MobileNavItem({ item, depth = 0 }: { item: HeaderNavItem; depth?: number }) {
-  const [isExpanded, setIsExpanded] = useState(
-    () => hasMenuClass(item.cssClasses, "expanded"),
-  );
+  const t = useT();
+  const initiallyExpanded = isMenuInitiallyExpanded(item.cssClasses);
+  const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
+  const [hasMountedChildren, setHasMountedChildren] = useState(initiallyExpanded);
   const hasChildren = Boolean(item.children?.length);
+  const toggleExpanded = () => {
+    if (!isExpanded) setHasMountedChildren(true);
+    setIsExpanded((previous) => !previous);
+  };
 
   return (
     <div>
@@ -721,8 +834,8 @@ function MobileNavItem({ item, depth = 0 }: { item: HeaderNavItem; depth?: numbe
         {hasChildren ? (
           <button
             type="button"
-            onClick={() => setIsExpanded((previous) => !previous)}
-            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${item.label} submenu`}
+            onClick={toggleExpanded}
+            aria-label={t(isExpanded ? "footer.nav.collapse" : "footer.nav.expand", { label: item.label })}
             aria-expanded={isExpanded}
             className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           >
@@ -731,7 +844,7 @@ function MobileNavItem({ item, depth = 0 }: { item: HeaderNavItem; depth?: numbe
         ) : null}
       </div>
 
-      {hasChildren ? (
+      {hasChildren && hasMountedChildren ? (
         <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
           <div className="overflow-hidden" aria-hidden={!isExpanded}>
             <div className={`mt-1 grid gap-1 border-l border-zinc-200 pl-3 dark:border-zinc-800 ${depth === 0 ? "ml-3" : "ml-2"}`}>
@@ -775,11 +888,14 @@ function SyncErrorDot() {
  * ancestor's overflow/stacking context — the actual cause of the old dropdown not showing
  * reliably. */
 function NavDropdownItem({ item }: { item: HeaderNavItem }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const initiallyExpanded = isMenuInitiallyExpanded(item.cssClasses);
+  const [isOpen, setIsOpen] = useState(initiallyExpanded);
   const [position, setPosition] = useState<{ top: number; left: number; width?: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const closeTimeoutRef = useRef<number | undefined>(undefined);
+  const openedByClickRef = useRef(false);
   const location = useLocation();
   const isActive = navItemMatchesPath(item, location.pathname);
   const megaMenu = getMegaMenuConfiguration(item.cssClasses, item.children?.length || 0);
@@ -790,7 +906,13 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
 
     const top = rect.bottom + 8;
     if (!megaMenu) {
-      setPosition({ top, left: rect.left });
+      const viewportPadding = 16;
+      const width = Math.min(288, window.innerWidth - viewportPadding * 2);
+      const left = Math.max(
+        viewportPadding,
+        Math.min(rect.left, window.innerWidth - width - viewportPadding),
+      );
+      setPosition({ top, left, width });
       return;
     }
 
@@ -816,10 +938,65 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
   // (matching the legacy `group`/`mouseleave` hover behaviour) without it snapping shut.
   const scheduleClose = () => {
     window.clearTimeout(closeTimeoutRef.current);
-    closeTimeoutRef.current = window.setTimeout(() => setIsOpen(false), 150);
+    closeTimeoutRef.current = window.setTimeout(() => {
+      openedByClickRef.current = false;
+      setIsOpen(false);
+    }, 150);
+  };
+  const toggleMenu = () => {
+    if (isOpen && openedByClickRef.current) {
+      openedByClickRef.current = false;
+      setIsOpen(false);
+      return;
+    }
+    openMenu();
+    openedByClickRef.current = true;
+  };
+  const focusPanelItem = (last = false) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const items = [...(panelRef.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], button:not([disabled])',
+      ) || [])];
+      const target = last ? items[items.length - 1] : items[0];
+      target?.focus();
+    }));
+  };
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    openedByClickRef.current = true;
+    openMenu();
+    focusPanelItem(event.key === "ArrowUp");
+  };
+  const handlePanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openedByClickRef.current = false;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = [...(panelRef.current?.querySelectorAll<HTMLElement>(
+      '[role="menuitem"], button:not([disabled])',
+    ) || [])];
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? Math.min(items.length - 1, currentIndex + 1)
+          : Math.max(0, currentIndex - 1);
+    if (!items[nextIndex]) return;
+    event.preventDefault();
+    items[nextIndex].focus();
   };
 
-  useEffect(() => setIsOpen(false), [location.pathname]);
+  useEffect(() => {
+    openedByClickRef.current = false;
+    setIsOpen(initiallyExpanded);
+  }, [initiallyExpanded, location.pathname]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -827,11 +1004,16 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      openedByClickRef.current = false;
       setIsOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        openedByClickRef.current = false;
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -863,8 +1045,10 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
           {item.label}
         </NavLink>
         <button
+          ref={triggerRef}
           type="button"
-          onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
+          onClick={toggleMenu}
+          onKeyDown={handleTriggerKeyDown}
           aria-haspopup="true"
           aria-expanded={isOpen}
           aria-label={`Show ${item.label} links`}
@@ -881,6 +1065,7 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
             <div
               ref={panelRef}
               role="menu"
+              onKeyDown={handlePanelKeyDown}
               onMouseEnter={openMenu}
               onMouseLeave={scheduleClose}
               style={{
@@ -890,7 +1075,7 @@ function NavDropdownItem({ item }: { item: HeaderNavItem }) {
                 maxHeight: `calc(100vh - ${position.top + 16}px)`,
               }}
               className={`fixed z-50 origin-top-left rounded-xl border border-zinc-100 bg-white shadow-xl transition-all duration-150 dark:border-zinc-800 dark:bg-zinc-900 ${
-                megaMenu ? "overflow-auto p-5" : "grid w-64 gap-0.5 overflow-y-auto p-2"
+                megaMenu ? "overflow-auto p-5" : "grid w-72 gap-1 overflow-y-auto p-2"
               }`}
             >
               {megaMenu ? (
@@ -959,14 +1144,15 @@ function MegaMenuColumn({ item }: { item: HeaderNavItem }) {
  * nested footer-menu columns) rather than a further flyout, keeping deep nesting simple
  * to reach with a mouse without chaining hover-timers across multiple panels. */
 function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
+  const t = useT();
   const [isExpanded, setIsExpanded] = useState(
-    () => hasMenuClass(item.cssClasses, "expanded"),
+    () => isMenuInitiallyExpanded(item.cssClasses),
   );
   const hasChildren = Boolean(item.children?.length);
 
   if (!hasChildren) {
     return (
-      <div>
+      <div className="min-w-0">
         <NavLink
           role="menuitem"
           to={item.href}
@@ -987,14 +1173,14 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
         </NavLink>
         <MenuDescription
           html={item.description}
-          className="-mt-1 px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500"
+          className="mt-0.5 max-w-full break-words px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 [overflow-wrap:anywhere] dark:text-zinc-500"
         />
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="flex items-center">
         <NavLink
           role="menuitem"
@@ -1017,7 +1203,7 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
         <button
           type="button"
           onClick={() => setIsExpanded((previous) => !previous)}
-          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${item.label} submenu`}
+          aria-label={t(isExpanded ? "footer.nav.collapse" : "footer.nav.expand", { label: item.label })}
           aria-expanded={isExpanded}
           className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
@@ -1026,12 +1212,12 @@ function NavDropdownPanelItem({ item }: { item: HeaderNavItem }) {
       </div>
       <MenuDescription
         html={item.description}
-        className="-mt-1 px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 dark:text-zinc-500"
+        className="mt-0.5 max-w-full break-words px-3 pb-2 text-xs font-normal leading-snug text-zinc-400 [overflow-wrap:anywhere] dark:text-zinc-500"
       />
 
       <div className={`grid transition-all duration-200 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
         <div className="overflow-hidden" aria-hidden={!isExpanded}>
-          <div className="ml-3 mt-0.5 grid gap-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-800">
+          <div className="ml-2 mt-2 grid gap-1 border-l border-zinc-200 pl-2 dark:border-zinc-800">
             {item.children?.map((child) => (
               <NavDropdownPanelItem key={menuItemKey(child)} item={child} />
             ))}
@@ -1105,9 +1291,9 @@ function HeaderActionIcon({ name, mediaUrl, fallback: Fallback }: { name?: strin
   const Icon = resolveHeaderActionIcon(name, Fallback);
   if (mediaUrl) {
     return (
-      <span className="relative grid h-[1.15rem] w-[1.15rem] place-items-center">
+      <span className="relative grid h-[18px] w-[18px] place-items-center">
         <Icon
-          className={`h-[1.15rem] w-[1.15rem] transition-opacity duration-150 ${
+          className={`h-[18px] w-[18px] transition-opacity duration-150 ${
             mediaReady && !mediaFailed ? "opacity-0" : "opacity-100"
           }`}
           aria-hidden="true"
@@ -1121,7 +1307,7 @@ function HeaderActionIcon({ name, mediaUrl, fallback: Fallback }: { name?: strin
             fetchPriority="high"
             height={18}
             width={18}
-            className={`absolute h-[1.15rem] w-[1.15rem] object-contain transition-opacity duration-150 ${
+            className={`absolute h-[18px] w-[18px] object-contain transition-opacity duration-150 ${
               mediaReady ? "opacity-100" : "opacity-0"
             }`}
             onLoad={() => {
@@ -1134,7 +1320,7 @@ function HeaderActionIcon({ name, mediaUrl, fallback: Fallback }: { name?: strin
       </span>
     );
   }
-  return <Icon className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />;
+  return <Icon className="h-[18px] w-[18px]" aria-hidden="true" />;
 }
 
 export function resolveHeaderActionIcon(name: string | undefined, fallback: LucideIcon): LucideIcon {

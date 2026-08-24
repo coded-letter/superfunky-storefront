@@ -25,6 +25,11 @@ export type RoutePageNode = {
   headlessShortcodes?: (string | null)[] | null;
 };
 
+export function resolveRoutePageUri(page: RoutePageNode): string | null {
+  if (page.uri) return page.uri;
+  return page.slug ? `/${page.slug}/` : null;
+}
+
 export const ROUTE_PAGE_RECIPES: Record<StorefrontRouteKey, readonly string[]> = {
   home: [],
   shop: ["product_archive"],
@@ -77,6 +82,16 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
     const routeKey = SHORTCODE_ROUTE_KEYS[name];
     if (routeKey) {
       keys.add(routeKey);
+      continue;
+    }
+    if (name === "grid") {
+      const attributes = parseShortcodeAttributes(shortcode);
+      const isPaginated = ["1", "true", "yes", "on"].includes(
+        (attributes.paginated || "").toLowerCase(),
+      );
+      if (attributes.type === "post" && isPaginated) {
+        keys.add("blog");
+      }
       continue;
     }
     if (name === "order-success") {

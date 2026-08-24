@@ -92,3 +92,7 @@ export function useCookieConsent(): CookieConsentContextValue {
   }
   return context;
 }
+
+export function useOptionalCookieConsent(): CookieConsentContextValue | null {
+  return useContext(CookieConsentContext) ?? null;
+}

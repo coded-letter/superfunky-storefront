@@ -1,13 +1,11 @@
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  BookMarked,
   CreditCard,
+  Download,
   Eye,
-  Heart,
   Image as ImageIcon,
-  KeyRound,
   LayoutGrid,
   Mail,
   Maximize,
@@ -34,7 +32,14 @@ import {
   ViewSwitch,
   useLayoutPreferences,
   type ArchiveHeroLayout,
+  type AuthLayout,
   type CartTriggerVariant,
+  type CartLayout,
+  type CartSummaryPosition,
+  type CommunityFeedFilters,
+  type CommunityFeedLayout,
+  type CommunityFeedLoadMode,
+  type CommunityFeedPageSize,
   type DiscussionLayout,
   type FooterAssistantLayout,
   type FooterBottomBarLayout,
@@ -44,14 +49,19 @@ import {
   type FooterNewsletterLayout,
   type HeaderLogoVariant,
   type HeaderSearchVariant,
+  type HomeHeroLayout,
   type NewsletterPopupVariant,
   type PostAuthorLayout,
   type PostSharePosition,
   type PostTocLayout,
   type ProductPageLayout,
+  type ProductCardVariant,
   type ProfileHeaderLayout,
+  type ReadingListLayout,
+  type RelatedProductsColumns,
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
+import { useNavigationData } from "../state/navigationData";
 
 const HEADER_SEARCH_OPTIONS: { value: HeaderSearchVariant; label: string }[] = [
   { value: "full-width", label: "Full-width bar" },
@@ -73,6 +83,73 @@ const NEWSLETTER_POPUP_VARIANT_OPTIONS: { value: NewsletterPopupVariant; label: 
 const PRODUCT_PAGE_LAYOUT_OPTIONS: { value: ProductPageLayout; label: string }[] = [
   { value: "classic", label: "Classic" },
   { value: "studio", label: "Studio" },
+];
+
+const RELATED_PRODUCTS_COLUMNS_OPTIONS: { value: RelatedProductsColumns; label: string }[] = [
+  { value: "2", label: "2 columns" },
+  { value: "3", label: "3 columns" },
+  { value: "4", label: "4 columns" },
+];
+
+const HOME_HERO_LAYOUT_OPTIONS: { value: HomeHeroLayout; label: string }[] = [
+  { value: "classic", label: "Classic glow" },
+  { value: "cinematic", label: "Full-width cinematic" },
+  { value: "cinematic-slider", label: "Cinematic slider" },
+];
+
+const PRODUCT_CARD_VARIANT_OPTIONS: { value: ProductCardVariant; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "minimal", label: "Minimal" },
+  { value: "editorial", label: "Editorial" },
+  { value: "gallery", label: "Gallery" },
+  { value: "simple", label: "Simple" },
+  { value: "variation", label: "Variation" },
+  { value: "expandable", label: "Expandable" },
+];
+
+const AUTH_LAYOUT_OPTIONS: { value: AuthLayout; label: string }[] = [
+  { value: "split", label: "Split" },
+  { value: "centered", label: "Centered" },
+  { value: "image-bg", label: "Image background" },
+];
+
+const READING_LIST_LAYOUT_OPTIONS: { value: ReadingListLayout; label: string }[] = [
+  { value: "cards", label: "Cards" },
+  { value: "editorial-2col", label: "Editorial 2-column" },
+];
+
+const COMMUNITY_FEED_LAYOUT_OPTIONS: { value: CommunityFeedLayout; label: string }[] = [
+  { value: "masonry", label: "Masonry" },
+  { value: "grid-3", label: "3-column grid" },
+  { value: "grid-4", label: "4-column grid" },
+  { value: "list", label: "List" },
+  { value: "compact", label: "Compact" },
+];
+
+const COMMUNITY_FEED_LOAD_OPTIONS: { value: CommunityFeedLoadMode; label: string }[] = [
+  { value: "manual", label: "Load more" },
+  { value: "infinite", label: "Infinite scroll" },
+];
+
+const COMMUNITY_FEED_PAGE_SIZE_OPTIONS: { value: CommunityFeedPageSize; label: string }[] = [
+  { value: "6", label: "6 posts" },
+  { value: "12", label: "12 posts" },
+  { value: "24", label: "24 posts" },
+];
+
+const COMMUNITY_FEED_FILTER_OPTIONS: { value: CommunityFeedFilters; label: string }[] = [
+  { value: "show", label: "Show filters" },
+  { value: "hide", label: "Hide filters" },
+];
+
+const CART_LAYOUT_OPTIONS: { value: CartLayout; label: string }[] = [
+  { value: "classic", label: "Classic" },
+  { value: "editorial", label: "Editorial" },
+];
+
+const CART_SUMMARY_POSITION_OPTIONS: { value: CartSummaryPosition; label: string }[] = [
+  { value: "sticky", label: "Sticky" },
+  { value: "static", label: "Static" },
 ];
 
 /** The theme's `brand` color scale + gradient/shadow tokens — this section is a *live*
@@ -210,7 +287,8 @@ const ARCHIVE_HERO_LAYOUT_OPTIONS: { value: ArchiveHeroLayout; label: string }[]
 
 const POST_TOC_LAYOUT_OPTIONS: { value: PostTocLayout; label: string }[] = [
   { value: "current", label: "Sidebar (current)" },
-  { value: "hidden", label: "Hidden" },
+  { value: "rail-left", label: "Rail left" },
+  { value: "rail-right", label: "Rail right" },
   { value: "above", label: "Above content" },
 ];
 
@@ -232,66 +310,6 @@ const DISCUSSION_LAYOUT_OPTIONS: { value: DiscussionLayout; label: string }[] = 
   { value: "split-right", label: "Split (form right)" },
 ];
 
-type LivePageCard = {
-  icon: typeof Heart;
-  title: string;
-  description: string;
-  href: string;
-  switchLabel: string;
-};
-
-const LIVE_PAGE_SWITCHES: LivePageCard[] = [
-  {
-    icon: KeyRound,
-    title: "Auth forms",
-    description: "Split-screen (current), centered card, and full-bleed image-background alternatives for login/register/forgot-password.",
-    href: "/auth",
-    switchLabel: "Layout",
-  },
-  {
-    icon: BookMarked,
-    title: "Reading list",
-    description: "Saved-post cards (current) vs. a dense 2-column editorial list, newspaper-style.",
-    href: "/reading-list",
-    switchLabel: "Layout",
-  },
-  {
-    icon: Heart,
-    title: "Wishlist",
-    description: "Cycle saved products through every card style — default, minimal, editorial, gallery, variation, simple, and the legacy-inspired Expandable variant.",
-    href: "/wishlist",
-    switchLabel: "Card style",
-  },
-];
-
-/** Backend Control Center settings that look like Studio-worthy layout switches but
- *  are actually per-shortcode-instance attribute defaults (e.g. `[funkycommerce_cart
- *  layout="classic"]`) — the real live pages that render them read from an embedded
- *  WordPress shortcode via `useApplicationShortcode(...)`, completely independent of
- *  `storefrontConfig.layout`. Deliberately NOT duplicated here as global live toggles
- *  (that would silently do nothing on the live pages and misrepresent what the
- *  setting actually controls) — see `business/superfunky.pro/docs/customisation/
- *  shortcodes.md` for the authoritative per-shortcode attribute documentation. */
-type BackendOnlySetting = {
-  field: string;
-  description: string;
-  shortcode: string;
-};
-
-const BACKEND_ONLY_SETTINGS: BackendOnlySetting[] = [
-  { field: "homeHeroLayout", description: "Home page hero default layout.", shortcode: "Home page CMS blocks" },
-  { field: "shopProductCardVariant", description: "Shop archive default product card style.", shortcode: "Shop page CMS blocks" },
-  { field: "authLayout", description: "Login / register / forgot-password default layout.", shortcode: "[funkycommerce_auth] layout" },
-  { field: "readingListLayout", description: "Reading list default layout.", shortcode: "[funkycommerce_reading_list] layout" },
-  { field: "wishlistCardVariant", description: "Wishlist default product card style.", shortcode: "[funkycommerce_wishlist] card_variant" },
-  { field: "communityFeedLayout", description: "Community feed default layout.", shortcode: "[community-feed] layout" },
-  { field: "communityFeedLoadMode", description: "Community feed default load mode (paged / infinite).", shortcode: "[community-feed] load_mode" },
-  { field: "communityFeedPageSize", description: "Community feed default page size.", shortcode: "[community-feed] page_size" },
-  { field: "communityFeedFilters", description: "Community feed default filter visibility.", shortcode: "[community-feed] show_filters" },
-  { field: "cartLayout", description: "Cart page default layout.", shortcode: "[funkycommerce_cart] / [woocommerce_cart] layout" },
-  { field: "cartSummaryPosition", description: "Cart page default order-summary position.", shortcode: "[funkycommerce_cart] / [woocommerce_cart] summary-position" },
-];
-
 /**
  * Design-review control panel for the storefront's real-time layout switches — the
  * header/footer/checkout/archive/post/discussion switches here drive the *real*,
@@ -308,17 +326,15 @@ const BACKEND_ONLY_SETTINGS: BackendOnlySetting[] = [
  * backend's canonical configuration. There is currently no secure admin-authenticated
  * save API for these preferences, so none is invented here.
  *
- * Auth/Reading-List/Wishlist already carry their own switches directly on their live
- * pages, so this page links out to them instead of duplicating those controls. Some
- * Control Center fields are per-shortcode-instance attribute defaults rather than
- * global settings — those are listed informationally near the bottom instead of
- * being wired up as live global toggles (see `BACKEND_ONLY_SETTINGS` above).
+ * Every Control Center layout field is represented here. While Studio mode remains
+ * active, its in-memory values take precedence over both backend defaults and embedded
+ * shortcode presentation attributes; exiting or reloading restores backend authority.
  *
- * Access to this page (both the route and the "Layout Studio" link in Account →
- * Storefront controls) is gated server-side on the authenticated viewer's WordPress
- * `manage_options` capability — see `AdminCapabilityRoute` in `App.tsx`.
+ * This public presentation tool is intentionally excluded from search indexing and
+ * generated sitemaps by its route wrapper in `App.tsx`.
  */
 export function LayoutStudioMockupPage() {
+  const backendLayout = useNavigationData().data?.storefrontConfig.layout;
   const {
     showAnnouncementBar,
     setShowAnnouncementBar,
@@ -348,6 +364,8 @@ export function LayoutStudioMockupPage() {
     setShowHeaderWishlistLink,
     showHeaderCartIcon,
     setShowHeaderCartIcon,
+    showHeaderPublishButton,
+    setShowHeaderPublishButton,
     cartTriggerVariant,
     setCartTriggerVariant,
     showCartDrawerPromotedProduct,
@@ -404,6 +422,32 @@ export function LayoutStudioMockupPage() {
     setBrandGradientStyle,
     productPageLayout,
     setProductPageLayout,
+    relatedProductsColumns,
+    setRelatedProductsColumns,
+    showStudioRelatedProductsUnderMeta,
+    setShowStudioRelatedProductsUnderMeta,
+    homeHeroLayout,
+    setHomeHeroLayout,
+    shopProductCardVariant,
+    setShopProductCardVariant,
+    authLayout,
+    setAuthLayout,
+    readingListLayout,
+    setReadingListLayout,
+    wishlistCardVariant,
+    setWishlistCardVariant,
+    communityFeedLayout,
+    setCommunityFeedLayout,
+    communityFeedLoadMode,
+    setCommunityFeedLoadMode,
+    communityFeedPageSize,
+    setCommunityFeedPageSize,
+    communityFeedFilters,
+    setCommunityFeedFilters,
+    cartLayout,
+    setCartLayout,
+    cartSummaryPosition,
+    setCartSummaryPosition,
     checkoutStoreMode,
     setCheckoutStoreMode,
     checkoutCouponPosition,
@@ -430,6 +474,8 @@ export function LayoutStudioMockupPage() {
     setProductArchiveHeroLayout,
     postArchiveHeroLayout,
     setPostArchiveHeroLayout,
+    showArchiveDescriptionInHero,
+    setShowArchiveDescriptionInHero,
     postTocLayout,
     setPostTocLayout,
     postSharePosition,
@@ -438,7 +484,116 @@ export function LayoutStudioMockupPage() {
     setPostAuthorLayout,
     discussionLayout,
     setDiscussionLayout,
+    setLayoutPreviewActive,
   } = useLayoutPreferences();
+
+  useEffect(() => {
+    setLayoutPreviewActive(true);
+  }, [setLayoutPreviewActive]);
+
+  const exportConfiguration = () => {
+    if (!backendLayout) {
+      console.error("Layout Studio cannot export before the backend configuration has loaded.");
+      return;
+    }
+
+    const layout = {
+      ...backendLayout,
+      showAnnouncementBar,
+      announcementBarScrollEffect,
+      headerSticky,
+      headerSearchVariant,
+      headerLogoVariant,
+      showHeaderLogo,
+      showHeaderSearchIcon,
+      showHeaderLanguageSwitcher,
+      showHeaderCurrencySwitcher,
+      showHeaderDarkModeToggle,
+      showHeaderAccountLink,
+      showHeaderReadingListLink,
+      showHeaderWishlistLink,
+      showHeaderCartIcon,
+      showHeaderPublishButton,
+      cartTriggerVariant,
+      showCartDrawerPromotedProduct,
+      showFooter,
+      footerColumnsLayout,
+      footerNewsletterLayout,
+      showFooterNewsletter,
+      footerAssistantLayout,
+      footerLogoVariant,
+      footerBottomBarLayout,
+      footerExtraWrapperLayout,
+      showFooterLogo,
+      showFooterExtraWrapper,
+      showFooterSpotifyPlayer,
+      showFooterAssistantFrame,
+      showFooterPaymentMethods,
+      showFooterSocialLinks,
+      showFooterCopyright,
+      themeMaxWidthPx,
+      themeRadiusPx,
+      showBreadcrumbs,
+      showNewsletterPopup,
+      newsletterPopupVariant,
+      newsletterPopupCooldownDays,
+      brandPalette,
+      brandGradientStyle,
+      productPageLayout,
+      relatedProductsColumns,
+      showStudioRelatedProductsUnderMeta,
+      homeHeroLayout,
+      shopProductCardVariant,
+      authLayout,
+      readingListLayout,
+      wishlistCardVariant,
+      communityFeedLayout,
+      communityFeedLoadMode,
+      communityFeedPageSize,
+      communityFeedFilters,
+      cartLayout,
+      cartSummaryPosition,
+      checkoutStoreMode,
+      checkoutCouponPosition,
+      checkoutPaymentPosition,
+      checkoutSummaryPosition,
+      checkoutHideOptionalBillingFields,
+      checkoutHideOptionalShippingFields,
+      checkoutShowOrderNotes,
+      checkoutShowTerms,
+      checkoutShowPrivacy,
+      communityProfileHeaderLayout,
+      authorProfileHeaderLayout,
+      productArchiveHeroLayout,
+      postArchiveHeroLayout,
+      showArchiveDescriptionInHero,
+      postTocLayout,
+      postSharePosition,
+      postAuthorLayout,
+      discussionLayout,
+      ...Object.fromEntries(
+        PAYMENT_METHODS.map(({ key }) => [
+          `showFooterPayment${key.charAt(0).toUpperCase()}${key.slice(1)}`,
+          !hiddenFooterPaymentMethodKeys.includes(key),
+        ]),
+      ),
+      ...Object.fromEntries(
+        SOCIAL_LINKS.map(({ platform }) => [
+          `showFooterSocial${platform.charAt(0).toUpperCase()}${platform.slice(1)}`,
+          !hiddenFooterSocialLinkKeys.includes(platform),
+        ]),
+      ),
+    };
+    const blob = new Blob([`${JSON.stringify({ schemaVersion: backendLayout.schemaVersion, layout }, null, 2)}\n`], {
+      type: "application/json",
+    });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `funkycommerce-layout-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+  };
 
   return (
     <div className="grid gap-12">
@@ -457,6 +612,15 @@ export function LayoutStudioMockupPage() {
           backend or to any account, and reloading the page reverts to the Control Center's canonical configuration. A
           couple of switches already live on their own pages, so we link out to them instead of building a second copy here.
         </p>
+        <button
+          type="button"
+          onClick={exportConfiguration}
+          disabled={!backendLayout}
+          className="inline-flex w-fit items-center gap-1.5 rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Export config
+        </button>
       </section>
 
       <LayoutStudioSection
@@ -470,6 +634,17 @@ export function LayoutStudioMockupPage() {
           value={productPageLayout}
           onChange={setProductPageLayout}
           options={PRODUCT_PAGE_LAYOUT_OPTIONS}
+        />
+        <ViewSwitch
+          label="Related products columns"
+          value={relatedProductsColumns}
+          onChange={setRelatedProductsColumns}
+          options={RELATED_PRODUCTS_COLUMNS_OPTIONS}
+        />
+        <BoolSwitch
+          label="Related products under categories and brands"
+          value={showStudioRelatedProductsUnderMeta}
+          onChange={setShowStudioRelatedProductsUnderMeta}
         />
         <Link
           to="/shop"
@@ -760,6 +935,7 @@ export function LayoutStudioMockupPage() {
         <BoolSwitch label="Reading list" value={showHeaderReadingListLink} onChange={setShowHeaderReadingListLink} />
         <BoolSwitch label="Wishlist" value={showHeaderWishlistLink} onChange={setShowHeaderWishlistLink} />
         <BoolSwitch label="Cart" value={showHeaderCartIcon} onChange={setShowHeaderCartIcon} />
+        <BoolSwitch label="Community publish button" value={showHeaderPublishButton} onChange={setShowHeaderPublishButton} />
         <LiveChromeNotice text="Scroll up — the header's right-side icon row reflects your choices. The search toggle shows/hides the whole search feature regardless of style below." />
       </LayoutStudioSection>
 
@@ -961,6 +1137,11 @@ export function LayoutStudioMockupPage() {
           onChange={setProductArchiveHeroLayout}
           options={ARCHIVE_HERO_LAYOUT_OPTIONS}
         />
+        <BoolSwitch
+          label="Description excerpt in hero"
+          value={showArchiveDescriptionInHero}
+          onChange={setShowArchiveDescriptionInHero}
+        />
         <LiveChromeNotice text="Open any product category/tag/brand archive page to see it." />
       </LayoutStudioSection>
 
@@ -983,7 +1164,7 @@ export function LayoutStudioMockupPage() {
         icon={<MenuIcon className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Blog"
         title="Post table of contents"
-        description="Sidebar TOC (current), hidden entirely, or moved above the article content — applies to every blog post with headings."
+        description="Sidebar TOC (current), a convenient fixed rail on either side, or above the article content — applies to every blog post with headings."
       >
         <ViewSwitch label="TOC placement" value={postTocLayout} onChange={setPostTocLayout} options={POST_TOC_LAYOUT_OPTIONS} />
         <LiveChromeNotice text="Open any blog post with headings to see it." />
@@ -1019,75 +1200,52 @@ export function LayoutStudioMockupPage() {
         <LiveChromeNotice text="Open any blog post, product page, or community post/article to see it." />
       </LayoutStudioSection>
 
-      <section className="grid gap-6 rounded-4xl border border-zinc-200/80 bg-white/80 p-6 shadow-soft backdrop-blur sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/80">
-        <header className="grid gap-2 border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">
-            <MenuIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            Already switchable on their own pages
-          </div>
-          <h2 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">More layout switches</h2>
-          <p className="m-0 max-w-3xl text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-            These pages already carry a live view-switch control, so trying them here would just be a second copy — open the page and
-            look for the switch near the top instead.
-          </p>
-        </header>
+      <LayoutStudioSection
+        icon={<ImageIcon className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Home & shop"
+        title="Primary commerce layouts"
+        description="Global home hero and shop-card treatments. These override presentation attributes embedded in the CMS while Studio mode is active."
+      >
+        <ViewSwitch label="Home hero" value={homeHeroLayout} onChange={setHomeHeroLayout} options={HOME_HERO_LAYOUT_OPTIONS} />
+        <ViewSwitch label="Shop product cards" value={shopProductCardVariant} onChange={setShopProductCardVariant} options={PRODUCT_CARD_VARIANT_OPTIONS} />
+        <LiveChromeNotice text="Open the home or shop page to preview these settings." />
+      </LayoutStudioSection>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {LIVE_PAGE_SWITCHES.map((page) => (
-            <Link
-              key={page.href}
-              to={page.href}
-              className="group grid gap-2 rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-5 no-underline transition hover:border-brand-300 hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-brand-600"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-2 font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
-                  <page.icon className="h-4 w-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
-                  {page.title}
-                </span>
-                <ArrowRight
-                  className="h-4 w-4 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-400"
-                  aria-hidden="true"
-                />
-              </div>
-              <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{page.description}</p>
-              <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                {page.switchLabel} switch on the page
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <LayoutStudioSection
+        icon={<Users className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Accounts & saved content"
+        title="Customer page layouts"
+        description="Authentication, reading-list, and wishlist presentation shared by every visitor."
+      >
+        <ViewSwitch label="Authentication" value={authLayout} onChange={setAuthLayout} options={AUTH_LAYOUT_OPTIONS} />
+        <ViewSwitch label="Reading list" value={readingListLayout} onChange={setReadingListLayout} options={READING_LIST_LAYOUT_OPTIONS} />
+        <ViewSwitch label="Wishlist cards" value={wishlistCardVariant} onChange={setWishlistCardVariant} options={PRODUCT_CARD_VARIANT_OPTIONS} />
+        <LiveChromeNotice text="Open Auth, Reading list, or Wishlist to preview these settings." />
+      </LayoutStudioSection>
 
-      <section className="grid gap-4 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-        <header className="grid gap-1">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400 dark:text-zinc-500">
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-            Backend-only — Control Center / shortcode defaults
-          </div>
-          <p className="m-0 max-w-3xl">
-            These Control Center fields configure the <strong className="text-zinc-700 dark:text-zinc-200">default attributes</strong> of
-            a per-instance WordPress shortcode (or CMS block), not a global site setting — the live pages that "look like" they'd use
-            them actually read their layout from the embedded shortcode itself, so a live toggle here would silently do nothing.
-            Configure these in the backend Control Center, or override them per-instance via the shortcode's own attribute.
-          </p>
-        </header>
-        <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
-          {BACKEND_ONLY_SETTINGS.map((setting) => (
-            <li key={setting.field} className="grid gap-0.5 rounded-xl border border-zinc-200/80 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <code className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">{setting.field}</code>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{setting.description}</span>
-              <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">{setting.shortcode}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="m-0">
-          See the{" "}
-          <Link to="/shortcodes" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
-            shortcode library
-          </Link>{" "}
-          for the full list of supported shortcode attributes.
-        </p>
-      </section>
+      <LayoutStudioSection
+        icon={<LayoutGrid className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Community"
+        title="Community feed defaults"
+        description="The global feed structure, loading behavior, page size, and filter visibility."
+      >
+        <ViewSwitch label="Feed layout" value={communityFeedLayout} onChange={setCommunityFeedLayout} options={COMMUNITY_FEED_LAYOUT_OPTIONS} />
+        <ViewSwitch label="Loading" value={communityFeedLoadMode} onChange={setCommunityFeedLoadMode} options={COMMUNITY_FEED_LOAD_OPTIONS} />
+        <ViewSwitch label="Page size" value={communityFeedPageSize} onChange={setCommunityFeedPageSize} options={COMMUNITY_FEED_PAGE_SIZE_OPTIONS} />
+        <ViewSwitch label="Tag filters" value={communityFeedFilters} onChange={setCommunityFeedFilters} options={COMMUNITY_FEED_FILTER_OPTIONS} />
+        <LiveChromeNotice text="Open the Community feed to preview these settings." />
+      </LayoutStudioSection>
+
+      <LayoutStudioSection
+        icon={<ShoppingCartIcon className="h-4 w-4" aria-hidden="true" />}
+        eyebrow="Cart"
+        title="Cart page layout"
+        description="The cart composition and order-summary behavior applied globally."
+      >
+        <ViewSwitch label="Cart layout" value={cartLayout} onChange={setCartLayout} options={CART_LAYOUT_OPTIONS} />
+        <ViewSwitch label="Summary position" value={cartSummaryPosition} onChange={setCartSummaryPosition} options={CART_SUMMARY_POSITION_OPTIONS} />
+        <LiveChromeNotice text="Open the Cart page to preview these settings." />
+      </LayoutStudioSection>
     </div>
   );
 }

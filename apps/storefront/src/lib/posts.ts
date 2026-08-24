@@ -1,5 +1,11 @@
 import type { ProductReview } from "../pages/shared";
-import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import {
+  graphqlRequest,
+  STOREFRONT_BACKEND_PROFILE,
+  STOREFRONT_DEFAULT_LANGUAGE,
+  STOREFRONT_EXPECTED_LOCALES,
+} from "@funky/sdk";
+import { resolvePathLanguageCode } from "@funky/ui/src/locale/urlPaths.ts";
 import {
   missingGraphqlFieldRule,
   requestGraphqlWithCompatibility,
@@ -11,6 +17,7 @@ import {
   emptyThemeStyles,
   type CmsPageScript,
   type CmsPageSeo,
+  type CmsPublicRobots,
   type CmsPageTranslation,
   type RawCmsScript,
   type RawCmsSeo,
@@ -21,8 +28,7 @@ import { normalizeFeaturedImage, type CmsFeaturedImage, type RawFeaturedImage } 
 import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings";
 import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility";
 import {
-  createCorePostQuery,
-  shouldPreferCoreGraphqlQueries,
+  createProfilePostQuery,
 } from "./profileGraphqlCompatibility";
 
 export type CmsPostTerm = {
@@ -113,6 +119,7 @@ type PostByUriResult = {
     } | null;
     enqueuedScripts: { nodes: RawCmsScript[] } | null;
     seo: RawCmsSeo | null;
+    funkycommercePublicRobots?: CmsPublicRobots | null;
     themeStyles?: CmsThemeStyles | null;
   } | null;
 };
@@ -269,6 +276,7 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
         twitterDescription
         twitterTitle
       }
+      funkycommercePublicRobots { noindex nofollow }
       themeStyles {
         ${THEME_STYLES_FIELDS}
       }
@@ -286,6 +294,7 @@ const POST_COMPATIBILITY_RULES = [
   missingGraphqlFieldRule("language"),
   missingGraphqlFieldRule("translations"),
   missingGraphqlFieldRule("seo"),
+  missingGraphqlFieldRule("funkycommercePublicRobots"),
   unsupportedRenderedFormatRule,
 ] as const;
 
@@ -314,9 +323,7 @@ const POST_COMMENTS_QUERY = /* GraphQL */ `
 `;
 
 export async function getPostByUri(uri: string): Promise<CmsPost | null> {
-  const query = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
-    ? createCorePostQuery(POST_BY_URI_QUERY)
-    : POST_BY_URI_QUERY;
+  const query = createProfilePostQuery(POST_BY_URI_QUERY, STOREFRONT_BACKEND_PROFILE);
   const response = await requestGraphqlWithCompatibility<PostByUriResult>(
     graphqlRequest,
     query,
@@ -353,14 +360,14 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     modified: post.modified,
     wordCount,
     readingTimeMinutes: readingTime && readingTime > 0 ? Math.ceil(readingTime) : Math.max(1, Math.ceil(wordCount / 200)),
-    languageCode: post.language?.code?.toLowerCase() || "en",
+    languageCode: post.language?.code?.toLowerCase() || resolveContentLanguage(post.uri || uri),
     translations:
       post.translations?.flatMap((translation) =>
-        translation?.uri && translation.language?.code
+        translation?.uri
           ? [{
               databaseId: translation.databaseId,
               uri: translation.uri,
-              languageCode: translation.language.code.toLowerCase(),
+              languageCode: translation.language?.code?.toLowerCase() || resolveContentLanguage(translation.uri),
             }]
           : [],
       ) || [],
@@ -386,10 +393,19 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
         parentDatabaseId: comment.parentDatabaseId,
         rating: normalizeRating(comment.rating),
       })) || [],
-    seo: mapSeo(post.seo),
+    seo: mapSeo(post.seo, post.funkycommercePublicRobots),
     scripts: post.enqueuedScripts?.nodes.map(mapScript) || [],
     themeStyles: post.themeStyles || emptyThemeStyles(),
   };
+}
+
+function resolveContentLanguage(uri: string): string {
+  return resolvePathLanguageCode(
+    uri,
+    STOREFRONT_EXPECTED_LOCALES,
+    STOREFRONT_DEFAULT_LANGUAGE,
+    STOREFRONT_BACKEND_PROFILE === "blog",
+  );
 }
 
 async function loadRemainingPostComments(

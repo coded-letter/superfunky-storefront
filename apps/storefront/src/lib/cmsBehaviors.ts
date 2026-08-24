@@ -1,4 +1,5 @@
 import { submitFormSubmission, submitNewsletterSubmission } from "./submissions.ts";
+import { addDefaultCmsIconDimensions } from "./cmsIconSizing.mjs";
 
 export type CmsBehaviorId = keyof typeof CMS_BEHAVIOR_REGISTRY;
 
@@ -258,6 +259,7 @@ function isSafeShadow(value: string): boolean {
 
 export function sanitizeCmsHtml(html: string): string {
   if (!html) return "";
+  html = addDefaultCmsIconDimensions(html);
 
   if (typeof DOMParser === "undefined") {
     return html
@@ -281,21 +283,53 @@ export function sanitizeCmsHtml(html: string): string {
   let blockedAttributes = 0;
   let blockedStyleAttributes = 0;
 
-  let priorityImageAssigned = false;
-  root.querySelectorAll("img").forEach((image) => {
+  const images = Array.from(root.querySelectorAll("img"));
+  const priorityImage = images.find((image) => {
+    const source = image.getAttribute("src")?.trim();
+    const width = Number.parseFloat(image.getAttribute("width") || "");
+    const height = Number.parseFloat(image.getAttribute("height") || "");
+    return Boolean(source)
+      && !image.closest("footer")
+      && !/\.svg(?:[?#]|$)/i.test(source!)
+      && !(width > 0 && height > 0 && width <= 128 && height <= 128);
+  }) || images.find((image) => Boolean(image.getAttribute("src")?.trim()) && !image.closest("footer"));
+  images.forEach((image) => {
     const source = image.getAttribute("src");
     if (source !== null && !source.trim()) {
       image.remove();
       return;
     }
+    const width = Number.parseFloat(image.getAttribute("width") || "");
+    const height = Number.parseFloat(image.getAttribute("height") || "");
+    const isSmallImage = width > 0 && height > 0 && width <= 128 && height <= 128;
+    const optimizedSource = source
+      ? netlifyImageUrl(source, isSmallImage ? width : image === priorityImage ? 1280 : 1024)
+      : null;
+    if (optimizedSource) {
+      image.dataset.originalSrc = source!;
+      image.setAttribute("src", optimizedSource);
+      if (isSmallImage) {
+        image.removeAttribute("srcset");
+        image.removeAttribute("sizes");
+      } else {
+        image.setAttribute(
+          "srcset",
+          [480, 768, 1024, 1280, 1600]
+            .map((candidateWidth) => `${netlifyImageUrl(source!, candidateWidth)} ${candidateWidth}w`)
+            .join(", "),
+        );
+        if (!image.hasAttribute("sizes")) image.setAttribute("sizes", "100vw");
+      }
+    }
     if (!image.hasAttribute("alt")) image.setAttribute("alt", "");
-    image.setAttribute("decoding", "async");
-    if (source && !priorityImageAssigned && !image.closest("footer")) {
+    if (image === priorityImage) {
+      image.setAttribute("decoding", "sync");
       image.setAttribute("loading", "eager");
       image.setAttribute("fetchpriority", "high");
-      priorityImageAssigned = true;
-    } else if (!image.hasAttribute("loading")) {
+    } else {
+      image.setAttribute("decoding", "async");
       image.setAttribute("loading", "lazy");
+      image.removeAttribute("fetchpriority");
     }
   });
 
@@ -360,13 +394,50 @@ export function sanitizeCmsHtml(html: string): string {
   return root.innerHTML;
 }
 
+function netlifyImageUrl(source: string, width: number): string | null {
+  if (typeof window === "undefined") return null;
+  if (!/(?:^|\.)superfunky\.pro$|\.netlify\.app$/i.test(window.location.hostname)) return null;
+  let mediaUrl: URL;
+  try {
+    mediaUrl = new URL(source);
+  } catch {
+    return null;
+  }
+  const isWordPressUpload = /^(?:v[0-9]+|dev|blog|shop|sample)\.superfunky\.pro$/i.test(mediaUrl.hostname)
+    && mediaUrl.pathname.startsWith("/wp-content/uploads/")
+    && /\.(?:avif|jpe?g|png|webp)$/i.test(mediaUrl.pathname);
+  const isUnsplashImage = mediaUrl.hostname === "images.unsplash.com"
+    && /^\/photo-[a-z0-9-]+$/i.test(mediaUrl.pathname);
+  if (!isWordPressUpload && !isUnsplashImage) return null;
+  const parameters = new URLSearchParams({
+    url: mediaUrl.toString(),
+    w: String(Math.max(1, Math.min(1920, Math.round(width)))),
+    q: "75",
+  });
+  return `/.netlify/images?${parameters.toString()}`;
+}
+
 function isCmsGeometryWrapper(element: Element): boolean {
   return element.hasAttribute("data-funky-cms-wrapper")
     || element.classList.contains("container");
 }
 
 export function mountCmsBehaviors(container: HTMLElement): Cleanup {
-  const cleanups: Cleanup[] = [mountCmsCodeHighlighting(container)];
+  const cleanups: Cleanup[] = [mountCmsAutoplayVideos(container), mountCmsImageFallbacks(container)];
+
+  // Lazy-load prismjs only when the container has code blocks — keeps it out of the initial bundle.
+  if (container.querySelector("code, pre")) {
+    let disposed = false;
+    let pendingCleanup: Cleanup | null = null;
+    void import("./codeHighlighting.ts").then(({ mountCmsCodeHighlighting }) => {
+      if (disposed) return;
+      pendingCleanup = mountCmsCodeHighlighting(container);
+    });
+    cleanups.push(() => {
+      disposed = true;
+      pendingCleanup?.();
+    });
+  }
   const requests = new Map<HTMLElement, Set<string>>();
 
   const addRequest = (element: HTMLElement, id: string) => {
@@ -428,6 +499,82 @@ export function mountCmsBehaviors(container: HTMLElement): Cleanup {
   });
 
   return () => cleanups.splice(0).reverse().forEach((cleanup) => cleanup());
+}
+
+function mountCmsAutoplayVideos(container: HTMLElement): Cleanup {
+  const videos = Array.from(container.querySelectorAll<HTMLVideoElement>("video[autoplay]"));
+  if (!videos.length) return () => undefined;
+
+  const listenerCleanups: Cleanup[] = [];
+  const resumePlayback = (video: HTMLVideoElement) => {
+    if (!video.isConnected || !video.autoplay) return;
+    video.muted = true;
+    video.playsInline = true;
+    if (document.visibilityState === "hidden") return;
+
+    const playAttempt = video.play();
+    if (playAttempt && typeof playAttempt.catch === "function") {
+      void playAttempt.catch((error) => {
+        const source = video.currentSrc || video.src || "unknown";
+        const message = error instanceof Error ? error.message : String(error);
+        warnOnce(`autoplay-video:${source}`, `CMS autoplay video could not start (${message}).`);
+      });
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") return;
+    videos.forEach((video) => resumePlayback(video));
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("pageshow", onVisibilityChange);
+  listenerCleanups.push(() => {
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("pageshow", onVisibilityChange);
+  });
+
+  videos.forEach((video) => {
+    const onCanPlay = () => resumePlayback(video);
+    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("loadeddata", onCanPlay);
+    listenerCleanups.push(() => {
+      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("loadeddata", onCanPlay);
+    });
+  });
+
+  if (typeof IntersectionObserver !== "undefined") {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        if (!(entry.target instanceof HTMLVideoElement)) return;
+        resumePlayback(entry.target);
+      });
+    }, { rootMargin: "160px 0px" });
+    videos.forEach((video) => observer.observe(video));
+    listenerCleanups.push(() => observer.disconnect());
+  } else {
+    videos.forEach((video) => resumePlayback(video));
+  }
+
+  return () => listenerCleanups.splice(0).reverse().forEach((cleanup) => cleanup());
+}
+
+function mountCmsImageFallbacks(container: HTMLElement): Cleanup {
+  const handleError = (event: Event) => {
+    if (!(event.target instanceof HTMLImageElement)) return;
+    const image = event.target;
+    const originalSource = image.dataset.originalSrc;
+    if (!originalSource) return;
+
+    delete image.dataset.originalSrc;
+    image.removeAttribute("srcset");
+    image.removeAttribute("sizes");
+    image.src = originalSource;
+  };
+
+  container.addEventListener("error", handleError, true);
+  return () => container.removeEventListener("error", handleError, true);
 }
 
 function mountHomepageLocation(container: HTMLElement): Cleanup {
@@ -822,4 +969,3 @@ export const CMS_BEHAVIOR_REGISTRY = {
   "newsletter-form": mountNewsletterForm,
   "submission-form": mountSubmissionForm,
 } satisfies Record<string, BehaviorMount>;
-import { mountCmsCodeHighlighting } from "./codeHighlighting.ts";

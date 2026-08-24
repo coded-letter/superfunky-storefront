@@ -40,16 +40,49 @@ export function normalizeLanguagePath(
     : codes[0];
   const rest = routeSegments;
   const trailing = path.endsWith("/") && rest.length ? "/" : "";
-  return `/${selected}${rest.length ? `/${rest.join("/")}` : ""}${trailing}${suffix}`;
+  const prefix = selected === codes[0] ? "" : `/${selected}`;
+  if (!rest.length) return `${prefix || "/"}${suffix}`;
+  return `${prefix}/${rest.join("/")}${trailing}${suffix}`;
+}
+
+export function resolveLocalizedPageUri(
+  uri: string | null | undefined,
+  slug: string | null | undefined,
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): string | null {
+  if (uri) return normalizeLanguagePath(uri, languageCode, configuredLanguageCodes);
+  if (!slug) return null;
+  return normalizeLanguagePath(`/${slug}/`, languageCode, configuredLanguageCodes);
 }
 
 export function languageHomePath(
   languageCode: string,
   configuredLanguageCodes: readonly string[],
 ): string {
-  return usesLanguagePrefixes(configuredLanguageCodes)
-    ? normalizeLanguagePath("/", languageCode, configuredLanguageCodes)
-    : "/";
+  if (!usesLanguagePrefixes(configuredLanguageCodes)) return "/";
+  const normalizedLanguageCode = languageCode.trim().toLowerCase();
+  const defaultLanguageCode = configuredLanguageCodes[0]?.trim().toLowerCase();
+  return normalizedLanguageCode === defaultLanguageCode
+    ? "/"
+    : normalizeLanguagePath("/", normalizedLanguageCode, configuredLanguageCodes);
+}
+
+export function resolvePathLanguageCode(
+  value: string,
+  configuredLanguageCodes: readonly string[],
+  defaultLanguageCode: string,
+  allowUnconfiguredPrefix = false,
+): string {
+  const codes = [...new Set(configuredLanguageCodes.map((code) => code.trim().toLowerCase()).filter(Boolean))];
+  const [pathname] = splitPathSuffix(value);
+  const firstSegment = pathname.split("/").filter(Boolean)[0]?.toLowerCase();
+  return firstSegment && (
+    codes.includes(firstSegment)
+    || (allowUnconfiguredPrefix && /^[a-z]{2}(?:-[a-z0-9]+)*$/.test(firstSegment))
+  )
+    ? firstSegment
+    : defaultLanguageCode.trim().toLowerCase();
 }
 
 export type CanonicalLanguageRoute<RouteKey extends string = string> = {
@@ -65,7 +98,13 @@ export type CanonicalLanguageRouteResolution<RouteKey extends string = string> =
 
 function normalizeCanonicalPath(value: string): string {
   const [rawPath] = splitPathSuffix(value);
-  const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+  let decodedPath = rawPath;
+  try {
+    decodedPath = decodeURI(rawPath);
+  } catch {
+    decodedPath = rawPath;
+  }
+  const path = decodedPath.startsWith("/") ? decodedPath : `/${decodedPath}`;
   return path === "/" ? path : `${path.replace(/\/+$/, "")}/`;
 }
 
@@ -132,7 +171,7 @@ export function resolveLanguageUrlAction(
 ): LanguageUrlAction {
   const codes = [...new Set(configuredLanguageCodes.map((code) => code.trim().toLowerCase()).filter(Boolean))];
   const selected = languageCode.trim().toLowerCase();
-  const [pathname] = splitPathSuffix(currentUrl);
+  const [pathname, suffix] = splitPathSuffix(currentUrl);
   const segments = pathname.split("/").filter(Boolean);
   const first = segments[0]?.toLowerCase();
   const hasConfiguredPrefix = Boolean(first && codes.includes(first));
@@ -144,10 +183,21 @@ export function resolveLanguageUrlAction(
     if (first && codes.includes(first) && first !== selected) {
       return { type: "set-language", languageCode: first };
     }
+    if (!hasConfiguredPrefix && selected !== codes[0]) {
+      return { type: "set-language", languageCode: codes[0] };
+    }
   }
 
-  const target = normalizeLanguagePath(currentUrl, selected, codes);
-  if (!languageSelectionChanged && pathname !== "/" && !isLanguageIndependent) {
+  const target = routeSegments.length === 0
+    ? `${languageHomePath(selected, codes)}${suffix}`
+    : normalizeLanguagePath(currentUrl, selected, codes);
+  const hasDefaultLanguagePrefix = hasConfiguredPrefix && first === codes[0];
+  if (
+    !languageSelectionChanged
+    && pathname !== "/"
+    && !isLanguageIndependent
+    && !hasDefaultLanguagePrefix
+  ) {
     return null;
   }
   return target === currentUrl ? null : { type: "navigate", to: target };

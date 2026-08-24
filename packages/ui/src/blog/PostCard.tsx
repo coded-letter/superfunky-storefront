@@ -24,6 +24,7 @@ export type PostCardData = {
   /** Database ID of the WordPress post author — used to cross-reference with community
    * profiles when listing a member's articles on their profile page. */
   authorDatabaseId?: number;
+  languageCode?: string;
   author: { name: string; avatarUrl?: string; slug?: string; href?: string };
   wordCount: number;
   readingTimeMinutes?: number;

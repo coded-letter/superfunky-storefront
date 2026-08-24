@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useLanguage } from "./LanguageContext";
 import enStrings from "./en.json";
+import jaStrings from "./ja.json";
 import plStrings from "./pl.json";
 import { resolveUiString, type UiStringsMap } from "./uiStrings";
 
 const BUILTIN_STRINGS: Record<string, UiStringsMap> = {
   en: enStrings,
+  ja: jaStrings,
   pl: plStrings,
 };
 

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   missingGraphqlFieldRule,
   removeGraphqlFieldSelections,
+  removeNestedGraphqlFieldSelections,
   requestGraphqlWithCompatibility,
   type GraphqlFieldFallbackRequester,
 } from "./graphqlFieldFallback.ts";
@@ -59,6 +60,30 @@ test("field removal drops selections with multiline arguments as one unit", () =
   const compatibleQuery = removeGraphqlFieldSelections(query, "comments");
   assert.doesNotMatch(compatibleQuery, /\bcomments\b|first:\s*20|statusIn/);
   assert.match(compatibleQuery, /\bposts\(first: 10\)/);
+});
+
+test("nested field removal preserves the same field outside the requested parent", () => {
+  const compatibleQuery = removeNestedGraphqlFieldSelections(`
+    query Post {
+      post {
+        author {
+          node { name }
+        }
+        comments {
+          nodes {
+            content
+            author {
+              node { name }
+            }
+          }
+        }
+      }
+    }
+  `, "comments", "author");
+
+  assert.match(compatibleQuery, /\bpost\s*\{[\s\S]*\bauthor\s*\{/);
+  assert.doesNotMatch(compatibleQuery.match(/\bcomments\s*\{[\s\S]*$/)?.[0] || "", /\bauthor\s*\{/);
+  assert.match(compatibleQuery, /\bcomments\s*\{[\s\S]*\bcontent\b/);
 });
 
 for (const scenario of [

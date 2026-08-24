@@ -1,17 +1,13 @@
 import { BookOpen, Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import { PostCard, savedListEntityId, useReadArticles, useReadingList } from "@funky/ui";
+import { PostCard, savedListEntityId, useLayoutPreferences, useReadArticles, useReadingList } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useBlogData } from "../state/blogData";
 
-type ReadingListLayout = "cards" | "editorial-2col";
-
 export function ReadingListMockupPage() {
-  useEmbeddedApplicationShortcode();
-  const config = useApplicationShortcode(["funkycommerce_reading_list"], { layout: "cards" });
+  const { readingListLayout: layout } = useLayoutPreferences();
   const blogPath = useStorefrontPath("blog", "/blog");
   const { ids, clear, syncError } = useReadingList();
   const { has: isRead, toggle: toggleRead } = useReadArticles();
@@ -53,8 +49,6 @@ export function ReadingListMockupPage() {
     if (byTranslation) return [byTranslation];
     return [];
   });
-
-  const layout: ReadingListLayout = config.layout === "editorial-2col" ? "editorial-2col" : "cards";
 
   return (
     <div className="grid gap-6">

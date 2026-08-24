@@ -10,12 +10,27 @@ export type GraphqlResponse<T> = {
   data: T | null;
   errors?: {
     message: string;
+    path?: (string | number)[];
     extensions?: { debugMessage?: string };
   }[];
 };
 
 const MAX_CONCURRENT_GRAPHQL_REQUESTS = 2;
 const GRAPHQL_REQUEST_TIMEOUT_MS = 60_000;
+const NODE_ENV = (
+  globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }
+).process?.env;
+const SERVER_REQUEST_ORIGIN = typeof window === "undefined"
+  ? (() => {
+      const configured = NODE_ENV?.VITE_SITE_URL || NODE_ENV?.URL || NODE_ENV?.DEPLOY_PRIME_URL;
+      if (!configured) return null;
+      try {
+        return new URL(configured).origin;
+      } catch {
+        return null;
+      }
+    })()
+  : null;
 let activeGraphqlRequests = 0;
 const graphqlRequestQueue: (() => void)[] = [];
 
@@ -79,6 +94,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
+        ...(SERVER_REQUEST_ORIGIN ? { Origin: SERVER_REQUEST_ORIGIN } : {}),
         ...(authToken
           ? {
               Authorization: `Bearer ${authToken}`,
