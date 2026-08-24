@@ -38,6 +38,7 @@ test("adds the exact Woo Stripe BLIK code field", () => {
     buildStripePaymentData(billing, "pm_test_blik", {
       gatewayId: "stripe_blik",
       selectedPaymentType: "blik",
+      selectedCurrency: "pln",
       blikCode: "123456",
     }).map(({ key, value }) => [key, value]),
   );
@@ -45,6 +46,7 @@ test("adds the exact Woo Stripe BLIK code field", () => {
   assert.equal(values.get("wc-stripe-payment-method"), "pm_test_blik");
   assert.equal(values.get("payment_method"), "stripe_blik");
   assert.equal(values.get("wc-stripe-blik-code"), "123456");
+  assert.equal(values.get("funkycommerce_selected_currency"), "PLN");
 });
 
 test("maps billing data for Stripe.js without empty optional strings", () => {

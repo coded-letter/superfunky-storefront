@@ -14,6 +14,7 @@ test("builds the Store API checkout language and attribution bridge", () => {
     buildCheckoutExtensions({
       language: "PL",
       backendLanguage: "pl",
+      currency: "pln",
       captureKey: "fc1-test-capture-key-123456",
       entryUrl: "https://funkycommerce.netlify.app/pl/checkout/",
       referrer: "https://example.com/campaign",
@@ -24,6 +25,7 @@ test("builds the Store API checkout language and attribution bridge", () => {
       [CHECKOUT_CONTEXT_NAMESPACE]: {
         language: "pl",
         backend_language: "pl",
+        currency: "PLN",
         account_username: "",
         marketing_consent: false,
         marketing_consent_label: "",
@@ -64,6 +66,7 @@ test("checkout payload preserves language, order notes, and a different shipping
   const payload = buildStoreCheckoutPayload(billing, "cod", {
     language: "pl",
     backendLanguage: "PL",
+    selectedCurrency: "PLN",
     createAccount: true,
     accountUsername: "ada.lovelace",
     customerPassword: "correct-horse-battery-staple",
@@ -85,6 +88,7 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.shipping_address?.address_1, "2 Shipping Lane");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].language, "pl");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].backend_language, "PL");
+  assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].currency, "PLN");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].account_username, "ada.lovelace");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].marketing_consent, true);
   assert.equal(

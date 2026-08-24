@@ -69,6 +69,18 @@ test("downloadable-order emails link account and guest customers to headless acc
   assert.match(accountSource, /woocommerce_email_after_order_table/);
 });
 
+test("external files are server-fetched with CORS support and bounded upstream requests", () => {
+  assert.match(accountSource, /function funkycommerce_force_external_download_proxy/);
+  assert.match(accountSource, /woocommerce_file_download_method/);
+  assert.match(accountSource, /return 'force'/);
+  assert.match(accountSource, /function funkycommerce_rate_limit_external_download/);
+  assert.match(accountSource, /woocommerce_download_product_filepath/);
+  assert.match(accountSource, /funkycommerce_external_download_rate_limit/);
+  assert.match(accountSource, /array\( 'response' => 429 \)/);
+  assert.match(accountSource, /Access-Control-Allow-Origin/);
+  assert.match(accountSource, /Access-Control-Expose-Headers: Content-Disposition, Content-Length, Content-Type, Retry-After/);
+});
+
 test("the account shortcode accepts the downloads hash tab", () => {
   assert.match(functionsSource, /dashboard', 'orders', 'downloads', 'addresses', 'community/);
   assert.match(functionsSource, /dashboard,orders,downloads,addresses,community/);

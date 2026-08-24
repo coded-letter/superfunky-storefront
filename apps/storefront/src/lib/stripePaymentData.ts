@@ -34,6 +34,7 @@ export function buildStripePaymentData(
     gatewayId?: "stripe" | "stripe_blik";
     blikCode?: string;
     selectedPaymentType?: string;
+    selectedCurrency?: string;
   },
 ): Array<{ key: string; value: string }> {
   const data = [
@@ -55,6 +56,12 @@ export function buildStripePaymentData(
     data.push({
       key: "wc_stripe_selected_upe_payment_type",
       value: options.selectedPaymentType,
+    });
+  }
+  if (options?.selectedCurrency) {
+    data.push({
+      key: "funkycommerce_selected_currency",
+      value: options.selectedCurrency.trim().toUpperCase(),
     });
   }
   if (options?.blikCode) {

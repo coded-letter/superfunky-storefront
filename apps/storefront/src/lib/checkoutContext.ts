@@ -6,6 +6,7 @@ export const CHECKOUT_CONTEXT_NAMESPACE = "funkycommerce/checkout";
 export type CheckoutContextInput = {
   language: string;
   backendLanguage: string;
+  currency?: string;
   accountUsername?: string;
   marketingConsent?: boolean;
   marketingConsentLabel?: string;
@@ -37,6 +38,7 @@ export function buildCheckoutExtensions(
     [CHECKOUT_CONTEXT_NAMESPACE]: {
       language: normalizeLanguage(context.language, context.backendLanguage),
       backend_language: trimmed(context.backendLanguage, 40),
+      currency: trimmed(context.currency, 3).toUpperCase(),
       account_username: trimmed(context.accountUsername, 60),
       marketing_consent: context.marketingConsent === true,
       marketing_consent_label: trimmed(context.marketingConsentLabel, 250),
@@ -113,6 +115,7 @@ export function buildStoreCheckoutPayload(
     extensions: buildCheckoutExtensions({
       language: options?.language || "en",
       backendLanguage: options?.backendLanguage || options?.language || "en",
+      currency: options?.selectedCurrency,
       accountUsername: options?.createAccount ? options.accountUsername : undefined,
       marketingConsent: options?.subscribeToNewsletter,
       marketingConsentLabel: options?.marketingConsentLabel,

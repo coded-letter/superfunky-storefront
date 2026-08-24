@@ -53,6 +53,9 @@ const PAYMENT_GATEWAYS_QUERY = /* GraphQL */ `
       }
     }
     funkycommerceStorefrontConfig {
+      payments {
+        blikEnabled
+      }
       cryptoAssets {
         code
         label
@@ -64,11 +67,18 @@ const PAYMENT_GATEWAYS_QUERY = /* GraphQL */ `
     }
   }
 `;
+const LEGACY_PAYMENT_GATEWAYS_QUERY = PAYMENT_GATEWAYS_QUERY.replace(
+  /\n\s+payments \{\s+blikEnabled\s+\}/,
+  "",
+);
 
 export type { CryptoAsset } from "./paymentGatewayCache";
 type PaymentGatewaysResult = {
   paymentGateways: { nodes: PaymentGatewayNode[] } | null;
   funkycommerceStorefrontConfig: {
+    payments?: {
+      blikEnabled: boolean;
+    };
     cryptoAssets: CryptoAsset[];
   } | null;
 };
@@ -76,6 +86,7 @@ type PaymentGatewaysResult = {
 type PaymentGatewaySnapshot = {
   ids: Set<string>;
   gateways: Map<string, PaymentGatewayNode>;
+  blikEnabled: boolean;
   cryptoAssets: CryptoAsset[];
 };
 
@@ -90,6 +101,7 @@ function snapshotFromSeed(seed: PaymentGatewayCacheSeed): PaymentGatewaySnapshot
   return {
     ids: new Set(seed.gateways.map(({ id }) => id)),
     gateways: new Map(seed.gateways.map((gateway) => [gateway.id, gateway])),
+    blikEnabled: seed.blikEnabled,
     cryptoAssets: seed.cryptoAssets,
   };
 }
@@ -143,6 +155,7 @@ function persistGatewaySnapshot(snapshot: PaymentGatewaySnapshot, cachedAt: numb
   const payload: PersistedPaymentGatewayCache = {
     cachedAt,
     gateways: Array.from(snapshot.gateways.values()),
+    blikEnabled: snapshot.blikEnabled,
     cryptoAssets: snapshot.cryptoAssets,
   };
   try {
@@ -157,13 +170,23 @@ let cachedGatewaySnapshot = persistedGatewayCache?.snapshot || readPrerenderedGa
 let cachedGatewayAt = persistedGatewayCache?.cachedAt || 0;
 let inFlight: Promise<PaymentGatewaySnapshot> | null = null;
 
+async function requestEnabledGatewayData() {
+  const result = await graphqlRequest<PaymentGatewaysResult>(PAYMENT_GATEWAYS_QUERY);
+  const needsLegacyConfig = result.errors?.some(({ message }) =>
+    /Cannot query field ["']?(?:payments|blikEnabled)/i.test(message),
+  );
+  return needsLegacyConfig
+    ? graphqlRequest<PaymentGatewaysResult>(LEGACY_PAYMENT_GATEWAYS_QUERY)
+    : result;
+}
+
 function fetchEnabledGatewaySnapshot(): Promise<PaymentGatewaySnapshot> {
   if (cachedGatewaySnapshot && Date.now() - cachedGatewayAt < PAYMENT_GATEWAY_FRESH_MS) {
     return Promise.resolve(cachedGatewaySnapshot);
   }
   if (inFlight) return inFlight;
 
-  inFlight = graphqlRequest<PaymentGatewaysResult>(PAYMENT_GATEWAYS_QUERY).then(({ data, errors }) => {
+  inFlight = requestEnabledGatewayData().then(({ data, errors }) => {
     if (errors?.length) {
       throw new Error(errors.map(({ message }) => message).join("; "));
     }
@@ -174,6 +197,7 @@ function fetchEnabledGatewaySnapshot(): Promise<PaymentGatewaySnapshot> {
     const snapshot = {
       ids: new Set(gatewayNodes.map((node) => node.id)),
       gateways: new Map(gatewayNodes.map((node) => [node.id, node])),
+      blikEnabled: data?.funkycommerceStorefrontConfig?.payments?.blikEnabled === true,
       cryptoAssets: data?.funkycommerceStorefrontConfig?.cryptoAssets ?? [],
     };
     cachedGatewaySnapshot = snapshot;
@@ -191,7 +215,7 @@ export type PaymentGatewayAvailability = {
    * Payment Element only submits for real once this is true (otherwise the checkout
    * page shows its existing "not connected" fallback). */
   isStripeGatewayEnabled: boolean;
-  /** True if WooCommerce exposes its distinct `stripe_blik` gateway (PLN only). */
+  /** True when selected PLN, backend BLIK presentation, and the main Stripe gateway agree. */
   isBlikAvailable: boolean;
   /** True if FunkyCommerce Crypto Wallet is enabled on the backend and has assets configured. */
   isCryptoAvailable: boolean;
@@ -216,7 +240,10 @@ function paymentGatewayAvailability(
   );
   return {
     isStripeGatewayEnabled: snapshot?.ids.has("stripe") ?? false,
-    isBlikAvailable: currencyCode === "PLN" && (snapshot?.ids.has("stripe_blik") ?? false),
+    isBlikAvailable:
+      currencyCode === "PLN" &&
+      (snapshot?.blikEnabled ?? false) &&
+      (snapshot?.ids.has("stripe") ?? false),
     isCryptoAvailable:
       (snapshot?.ids.has("funkycommerce_crypto") ?? false) &&
       cryptoAssets.length > 0,
@@ -240,8 +267,9 @@ export function getCachedPaymentGatewayAvailability(currencyCode?: string): Paym
  * (public, confirmed working on the live backend — lists whichever gateways are
  * actually enabled in wp-admin, so this never drifts out of sync with the real store
  * configuration). Resolves to "not enabled" immediately when no backend is configured.
- * BLIK is a distinct Woo Stripe gateway and must never be inferred from PLN + card Stripe:
- * its plugin/account/currency availability is represented by the `stripe_blik` node.
+ * BLIK presentation is controlled by the theme backend and requires selected PLN plus
+ * the main Stripe gateway. This avoids WooCommerce's base-currency availability check
+ * hiding BLIK from a visitor who explicitly selected PLN on the frontend.
  * For Crypto, checks the real gateway plus whether at least one wallet asset is configured. */
 export function usePaymentGateways(currencyCode?: string): PaymentGatewayAvailability {
   const [state, setState] = useState<PaymentGatewayAvailability>(() =>
@@ -300,6 +328,7 @@ export type CheckoutSubmissionOptions = {
   cryptoAssetCode?: string;
   stripePaymentMethodId?: string;
   stripePaymentType?: string;
+  selectedCurrency?: string;
   blikCode?: string;
 };
 
@@ -548,6 +577,7 @@ export async function submitCheckoutWithAccount(
           gatewayId: paymentMethod,
           blikCode: paymentMethod === "stripe_blik" ? options.blikCode : undefined,
           selectedPaymentType: options.stripePaymentType,
+          selectedCurrency: paymentMethod === "stripe_blik" ? options.selectedCurrency : undefined,
         })
       : undefined;
 

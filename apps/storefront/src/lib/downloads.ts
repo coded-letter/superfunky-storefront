@@ -26,6 +26,41 @@ export type OrderDownloadAccess = {
   downloadPermitted: boolean;
 };
 
+function downloadFileName(contentDisposition: string | null, fallback: string): string {
+  const encoded = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = contentDisposition?.match(/filename="([^"]+)"/i)?.[1];
+  let candidate = fallback;
+  try {
+    candidate = encoded ? decodeURIComponent(encoded) : quoted || fallback;
+  } catch {
+    candidate = quoted || fallback;
+  }
+  return candidate.replaceAll("\\", "-").replaceAll("/", "-").trim() || "download";
+}
+
+export async function fetchOrderDownloadFile(
+  download: OrderDownload,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await fetchImpl(download.url, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const retryAfter = response.headers.get("Retry-After");
+    throw new HttpRequestError(
+      response.status === 429
+        ? `Too many download attempts. Try again${retryAfter ? ` in ${retryAfter} seconds` : " shortly"}.`
+        : `File download failed with status ${response.status}.`,
+      response.status,
+    );
+  }
+  return {
+    blob: await response.blob(),
+    fileName: downloadFileName(response.headers.get("Content-Disposition"), download.fileName),
+  };
+}
+
 export async function getOrderDownloadAccess(input: {
   orderId: number;
   orderKey?: string;
