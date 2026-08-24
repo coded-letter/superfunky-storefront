@@ -1389,7 +1389,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="interaction">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }

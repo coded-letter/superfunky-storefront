@@ -87,6 +87,15 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.doesNotMatch(appSource, /\}, 180\);\s*\};\s*const observer/);
 });
 
+test("client landing pages retain an idle hydration path without interactive controls", () => {
+  assert.match(prerenderSource, /data-prerender-activation="idle"/);
+  assert.match(mainSource, /const prerenderActivationMode = prerenderRoot/);
+  assert.match(mainSource, /if \(prerenderActivationMode === "idle"\)/);
+  assert.match(mainSource, /requestIdleCallback\(requestReactActivation, \{ timeout: 500 \}\)/);
+  assert.match(mainSource, /DOMContentLoaded", scheduleIdleActivation/);
+  assert.doesNotMatch(mainSource, /addEventListener\("load", scheduleIdleActivation/);
+});
+
 test("route loading covers the viewport while application styles settle", () => {
   assert.match(appSource, /fixed inset-0 z-\[2147483646\] grid min-h-\[100dvh\]/);
   assert.match(appSource, /bg-\[rgb\(var\(--theme-background,250_250_250\)\)\]/);
