@@ -380,10 +380,6 @@ function RouteDataProviders({ children, enabled }: { children: ReactNode; enable
     return () => observer.disconnect();
   }, [enabled, generatedPayload, pathname]);
 
-  if (isGeneratedHome && generatedPayload && !Object.values(requirements).some(Boolean)) {
-    return children;
-  }
-
   return (
     <CommerceDataProvider enabled={enabled && requirements.commerce}>
       <CommunityDataProvider

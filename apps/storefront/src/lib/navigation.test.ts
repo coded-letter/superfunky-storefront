@@ -64,7 +64,7 @@ test("optional language discovery cannot invalidate layout configuration", () =>
     /if \(isNavigationCompatibilityError\(errors\)\) \{\s*return mapNavigationLanguages\(await getOptionalPolylangRestLanguages\(\)\)/,
   );
   assert.match(navigationSource, /STOREFRONT_BACKEND_PROFILE === "shell"/);
-  assert.match(navigationDataSource, /navigation-data:v13/);
+  assert.match(navigationDataSource, /navigation-data:v14/);
   assert.match(navigationDataSource, /lastResolvedData/);
   assert.match(navigationDataSource, /canRenderChildren = !enabled \|\| Boolean\(state\.data\) \|\| !rawState\.isLoading/);
   assert.doesNotMatch(navigationDataSource, /useFastNavigationMenus|fastMenus/);
@@ -77,7 +77,8 @@ test("optional language discovery cannot invalidate layout configuration", () =>
   assert.match(navigationSource, /showFixed: false/);
   assert.match(navigationSource, /throw new Error\(\s*`AI assistant configuration was unavailable:/);
   assert.match(navigationSource, /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)/);
-  assert.match(navigationDataSource, /navigation-assistant:v1/);
+  assert.match(navigationDataSource, /navigation-assistant:v2/);
+  assert.match(navigationSource, /assistant: "message-circle"/);
 });
 
 before(() => {

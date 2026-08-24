@@ -69,8 +69,8 @@ export function ProfileHeader({
     return (
       <header className="sf-profile-header relative grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800">
         <div className="relative flex flex-col items-center gap-4 bg-gradient-to-br from-brand-600 via-brand-500 to-fuchsia-600 px-6 pb-16 pt-10 text-center sm:px-10 sm:pt-12">
-          {coverUrl || avatarUrl ? (
-            <ResponsiveImage src={coverUrl || avatarUrl || ""} alt="" priority sizes="100vw" aria-hidden="true" className={`absolute inset-0 h-full w-full object-cover opacity-40 ${coverUrl ? "" : "blur-md"}`} />
+          {coverUrl ? (
+            <ResponsiveImage src={coverUrl} alt="" priority sizes="100vw" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-40" />
           ) : null}
           <div className="absolute left-4 top-4 sm:left-6 sm:top-6">
             <span className="rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">{backLink}</span>
@@ -99,8 +99,8 @@ export function ProfileHeader({
     return (
       <header className="sf-profile-header grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800">
         <div className="relative h-36 bg-brand-gradient sm:h-44">
-          {coverUrl || avatarUrl ? (
-            <ResponsiveImage src={coverUrl || avatarUrl || ""} alt="" priority sizes="100vw" aria-hidden="true" className={`h-full w-full object-cover ${coverUrl ? "" : "opacity-50 blur-sm"}`} />
+          {coverUrl ? (
+            <ResponsiveImage src={coverUrl} alt="" priority sizes="100vw" aria-hidden="true" className="h-full w-full object-cover" />
           ) : null}
           <div className="absolute left-4 top-4 sm:left-6 sm:top-6">{backLink}</div>
         </div>
@@ -158,8 +158,8 @@ export function ProfileHeader({
     return (
       <header className="sf-profile-header grid overflow-hidden rounded-3xl border border-zinc-200/80 shadow-soft dark:border-zinc-800 lg:grid-cols-[minmax(0,0.85fr),minmax(0,1.15fr)]">
         <div className="relative min-h-[14rem] lg:min-h-full">
-          {coverUrl || avatarUrl ? (
-            <ResponsiveImage src={coverUrl || avatarUrl || ""} alt="" priority sizes="(min-width: 1024px) 42vw, 100vw" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover" />
+          {coverUrl ? (
+            <ResponsiveImage src={coverUrl} alt="" priority sizes="(min-width: 1024px) 42vw, 100vw" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-500 to-fuchsia-600" aria-hidden="true" />
           )}

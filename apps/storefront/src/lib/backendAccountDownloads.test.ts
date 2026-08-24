@@ -16,7 +16,7 @@ test("account orders expose only WooCommerce-granted signed downloads", () => {
   assert.match(accountSource, /function funkycommerce_order_downloads/);
   assert.match(accountSource, /! \$order->is_download_permitted\(\)/);
   assert.match(accountSource, /\$order->get_downloadable_items\(\)/);
-  assert.match(accountSource, /'url'\s*=>\s*esc_url_raw/);
+  assert.match(accountSource, /'url'\s*=>\s*\$url/);
   assert.doesNotMatch(accountSource, /get_file_download_path/);
 });
 
@@ -37,6 +37,28 @@ test("guest download access validates order key and billing email", () => {
     /hash_equals\(\s*strtolower\(\s*\(string\) \$order->get_billing_email\(\)\s*\),\s*strtolower\(\s*\$email\s*\)\s*\)/,
   );
   assert.match(accountSource, /funkycommerce_download_forbidden/);
+  assert.match(accountSource, /sf_guest_expires/);
+  assert.match(accountSource, /sf_guest_token/);
+  assert.match(accountSource, /function funkycommerce_guest_download_signature/);
+  assert.match(accountSource, /pre_option_woocommerce_downloads_require_login/);
+  assert.match(accountSource, /0 !== \(int\) \$order->get_customer_id\(\)/);
+  assert.match(accountSource, /function funkycommerce_guest_download_access_is_current/);
+  assert.match(
+    accountSource,
+    /function funkycommerce_guest_download_access_is_current[\s\S]*?\n\}\n\n\/\*\*[\s\S]*?function funkycommerce_guest_download_signature/,
+  );
+  assert.match(accountSource, /7 \* DAY_IN_SECONDS/);
+  assert.match(accountSource, /get_date_completed\(\) \?: \$order->get_date_paid\(\) \?: \$order->get_date_created\(\)/);
+  assert.match(accountSource, /hash_equals\( \$expected, \$token \)/);
+  assert.match(accountSource, /funkycommerce_order_downloads\( \$order, \$guest_access \)/);
+  assert.match(accountSource, /function funkycommerce_issue_guest_download_access_token/);
+  assert.match(accountSource, /_funkycommerce_guest_download_tokens/);
+  assert.match(accountSource, /array_slice\( \$tokens, -5 \)/);
+  assert.match(accountSource, /foreach \( \(array\) \$order->get_meta\( '_funkycommerce_guest_download_tokens'/);
+  assert.match(accountSource, /function funkycommerce_guest_download_access_token_is_valid/);
+  assert.match(accountSource, /'access_token'\s*=>\s*\$access_token/);
+  assert.doesNotMatch(accountSource, /'email'\s*=>\s*\$order->get_billing_email\(\)/);
+  assert.match(accountSource, /Cache-Control', 'no-store, private'/);
 });
 
 test("downloadable-order emails link account and guest customers to headless access", () => {

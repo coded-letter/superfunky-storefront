@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+.storefront-recent-orders {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(5.5rem, calc(1rem + env(safe-area-inset-bottom)));
+  z-index: 55;
+  width: min(21rem, calc(100vw - 2rem));
+  border: 1px solid rgb(228 228 231 / 0.9);
+  border-radius: 0.875rem;
+  background: rgb(255 255 255 / 0.96);
+  box-shadow: 0 16px 40px rgb(24 24 27 / 0.14);
+  color: rgb(39 39 42);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.45;
+  padding: 0.8rem 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0.5rem, 0);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.dark .storefront-recent-orders {
+  border-color: rgb(63 63 70 / 0.9);
+  background: rgb(24 24 27 / 0.96);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.34);
+  color: rgb(244 244 245);
+}
+
+.storefront-recent-orders[data-visible="true"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storefront-recent-orders {
+    transition: none;
+  }
+}
+
 .shortcode-prerender-fallback--content { min-height: 15rem; }
 .shortcode-prerender-fallback--application { min-height: 20rem; }
 .shortcode-prerender-fallback--hero { min-height: 22.5rem; }

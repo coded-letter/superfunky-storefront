@@ -132,6 +132,28 @@ export function seedIncrementalData<T>(cacheKey: string, value: T): void {
   memoryCache.set(storageKey, value);
 }
 
+export function invalidateIncrementalDataPrefix(cacheKeyPrefix: string): void {
+  const storagePrefix = storageKeyFor(cacheKeyPrefix);
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith(storagePrefix)) memoryCache.delete(key);
+  }
+  for (const key of artifactMetadata.keys()) {
+    if (key.startsWith(storagePrefix)) artifactMetadata.delete(key);
+  }
+  if (typeof window === "undefined") return;
+  try {
+    const keys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+      .filter((key): key is string => Boolean(key));
+    for (const key of keys) {
+      if (key.startsWith(storagePrefix) || key.startsWith(metadataKeyFor(storagePrefix))) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // In-memory invalidation still prevents stale data in the active session.
+  }
+}
+
 export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayloadV1 | null {
   const result = validateStorefrontHydrationPayload(input);
   if (!result.ok) {
@@ -144,14 +166,15 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
   for (const entry of result.value.entries) {
     const compatible = entry.cacheKey.startsWith("artifact-route:v1:")
       || entry.cacheKey.startsWith("artifact-navigation:v1:")
-      || entry.cacheKey.startsWith("navigation-data:v13:")
-      || entry.cacheKey.startsWith("navigation-assistant:v1:")
+      || entry.cacheKey.startsWith("navigation-data:v14:")
+      || entry.cacheKey.startsWith("navigation-assistant:v2:")
       || entry.cacheKey.startsWith("storefront-route-registry:v6:")
       || entry.cacheKey.startsWith("commerce-data:v4:")
       || entry.cacheKey.startsWith("blog-data:v4:")
       || entry.cacheKey.startsWith("blog-data:summary:v1:")
-      || entry.cacheKey.startsWith("community:v9:")
+      || entry.cacheKey.startsWith("community:v10:")
       || entry.cacheKey.startsWith("community:feed:v1:")
+      || entry.cacheKey.startsWith("author:v2:")
       || entry.cacheKey.startsWith("page:/")
       || entry.cacheKey.startsWith("content-page-by-uri:v1:/")
       || entry.cacheKey.startsWith("content-node:v2:/")

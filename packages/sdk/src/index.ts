@@ -17,3 +17,4 @@ export {
   hasOnlyMissingGraphqlFields,
   type GraphqlResponse,
 } from "./graphqlClient.ts";
+export { invalidateIncrementalDataPrefix } from "./incrementalData.ts";

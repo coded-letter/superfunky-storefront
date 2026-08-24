@@ -115,15 +115,12 @@ test("community posts tolerate backends without optional localization fields", (
   assert.match(communitySource, /replace\(\/\\\(\\s\*\\\$language:\\s\*LanguageCodeFilterEnum/);
   assert.match(communitySource, /replace\(\/\\\$language:\\s\*LanguageCodeFilterEnum/);
   assert.match(communitySource, /replace\(\/,\\s\*where:\\s\*\\\{\\s\*language:\\s\*\\\$language/);
-  // The nested `translations { ... language { code } }` strip must run before the
-  // generic standalone `language { code }` strip, otherwise the generic pass eats the
-  // nested field first and leaves a dangling `translations { databaseId uri }` behind
-  // that still doesn't exist on schemas without Polylang support (see the regression
-  // tests in communityLanguage.test.ts).
   assert.match(
     communitySource,
-    /replace\(\/\\n\\s\*translations\\s\*\\\{\\s\*databaseId\\s\*uri\\s\*language\\s\*\\\{\\s\*code\\s\*\\\}\\s\*\\\}\\s\*\/g, "\\n"\)\s*\n\s*\.replace\(\/\\n\\s\*language\\s\*\\\{\\s\*code\\s\*\\\}\\s\*\/g, "\\n"\)/,
+    /removeGraphqlFieldSelections\(\s*removeGraphqlFieldSelections\(withoutLocalizationArguments, "translations"\),\s*"language"/,
   );
+  assert.match(communitySource, /Cannot query field "\(\?:srcSet\|sizes\)" on type "FunkycommerceCommunityMedia"/);
+  assert.match(communitySource, /removeGraphqlFieldSelections\(compatibleQuery, "srcSet"\)/);
   assert.match(communitySource, /Cannot query field "\(\?:language\|translations\)" on type/);
   assert.match(communitySource, /Unknown type "LanguageCodeFilterEnum"/);
   assert.match(
@@ -238,6 +235,10 @@ test("community editor and detail gallery support mixed media editing", () => {
   assert.doesNotMatch(gallerySource, /autoPlay=|loop=/);
   assert.match(gallerySource, /<source src=\{activeMedia\.url\} type=\{activeMedia\.mimeType\}/);
   assert.match(gallerySource, /srcSet=\{activeMedia\.srcSet\}/);
+  assert.match(communitySource, /media \{[\s\S]*srcSet[\s\S]*sizes/);
+  assert.match(communitySource, /srcSet: item\.srcSet \|\| undefined/);
+  assert.match(backendSource, /wp_get_attachment_image_srcset\( \$attachment_id, 'large' \)/);
+  assert.match(backendSource, /wp_get_attachment_image_sizes\( \$attachment_id, 'large' \)/);
   assert.match(gallerySource, /variant === "feed" \? "object-cover" : "object-contain"/);
   assert.match(gallerySource, /object-center/);
   assert.match(socialPostCardSource, /closest\("a, button, input, textarea, select"\)/);
