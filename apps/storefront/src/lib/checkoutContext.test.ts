@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCheckoutExtensions, buildStoreCheckoutPayload, CHECKOUT_CONTEXT_NAMESPACE } from "./checkoutContext.ts";
+import {
+  buildCheckoutExtensions,
+  buildStoreCheckoutPayload,
+  CHECKOUT_CONTEXT_NAMESPACE,
+  withDigitalCheckoutAddress,
+} from "./checkoutContext.ts";
+import { buildStripePaymentData, toStripeBillingDetails } from "./stripePaymentData.ts";
 import { validateCheckoutForm } from "./validation.ts";
 
 test("builds the Store API checkout language and attribution bridge", () => {
@@ -89,27 +95,39 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.customer_password, "correct-horse-battery-staple");
 });
 
-test("digital checkout supplies hidden WooCommerce address placeholders", () => {
+test("digital checkout supplies required Store API and Stripe address placeholders", () => {
+  const billing = {
+    firstName: "Ada",
+    lastName: "Lovelace",
+    addressLine1: "",
+    city: "",
+    postcode: "",
+    countryCode: "PL",
+    email: "ada@example.com",
+    phone: "+48 123 456 789",
+  };
+  const paymentBilling = withDigitalCheckoutAddress(billing);
   const payload = buildStoreCheckoutPayload(
-    {
-      firstName: "Ada",
-      lastName: "Lovelace",
-      addressLine1: "",
-      city: "",
-      postcode: "",
-      countryCode: "PL",
-      email: "ada@example.com",
-      phone: "+48 123 456 789",
-    },
+    billing,
     "funkycommerce_crypto",
     { digitalOrder: true },
   );
+  const stripePaymentData = new Map(
+    buildStripePaymentData(paymentBilling, "pm_digital").map(({ key, value }) => [key, value]),
+  );
+  const stripeBilling = toStripeBillingDetails(paymentBilling);
 
   assert.equal(payload.billing_address.address_1, "Digital delivery");
   assert.equal(payload.billing_address.city, "Digital order");
   assert.equal(payload.billing_address.postcode, "00000");
   assert.equal(payload.billing_address.country, "PL");
   assert.deepEqual(payload.shipping_address, payload.billing_address);
+  assert.equal(stripePaymentData.get("billing_address_1"), "Digital delivery");
+  assert.equal(stripePaymentData.get("billing_city"), "Digital order");
+  assert.equal(stripePaymentData.get("billing_postcode"), "00000");
+  assert.equal(stripeBilling.address.line1, "Digital delivery");
+  assert.equal(stripeBilling.address.city, "Digital order");
+  assert.equal(stripeBilling.address.postal_code, "00000");
 });
 
 test("physical checkout does not invent missing address fields", () => {
