@@ -20,6 +20,7 @@ export type CompatibleBrandingQueryResult = {
 export function resolveCompatibleBranding(
   data: CompatibleBrandingQueryResult | null | undefined,
   defaults: CompatibleBranding,
+  preserved?: Partial<CompatibleBranding> | null,
 ): CompatibleBranding {
   const branding = data?.storefrontConfig?.branding;
   const siteTitle = data?.generalSettings?.title?.trim() || "";
@@ -28,11 +29,34 @@ export function resolveCompatibleBranding(
     typeof value === "string" ? value.trim() : "";
 
   return {
-    storeName: configuredValue(branding?.storeName) || siteTitle || defaults.storeName,
-    companyName: configuredValue(branding?.companyName) || siteTitle || defaults.companyName,
-    tagline: configuredValue(branding?.tagline) || siteTagline || defaults.tagline,
-    logoUrl: configuredValue(branding?.logoUrl) || null,
-    iconUrl: configuredValue(branding?.iconUrl) || null,
-    promoHtml: typeof branding?.promoHtml === "string" ? branding.promoHtml : "",
+    storeName:
+      configuredValue(branding?.storeName)
+      || configuredValue(preserved?.storeName)
+      || siteTitle
+      || defaults.storeName,
+    companyName:
+      configuredValue(branding?.companyName)
+      || configuredValue(preserved?.companyName)
+      || siteTitle
+      || defaults.companyName,
+    tagline:
+      configuredValue(branding?.tagline)
+      || configuredValue(preserved?.tagline)
+      || siteTagline
+      || defaults.tagline,
+    logoUrl:
+      configuredValue(branding?.logoUrl)
+      || configuredValue(preserved?.logoUrl)
+      || defaults.logoUrl,
+    iconUrl:
+      configuredValue(branding?.iconUrl)
+      || configuredValue(preserved?.iconUrl)
+      || defaults.iconUrl,
+    promoHtml:
+      typeof branding?.promoHtml === "string"
+        ? branding.promoHtml
+        : typeof preserved?.promoHtml === "string"
+          ? preserved.promoHtml
+          : defaults.promoHtml,
   };
 }

@@ -54,3 +54,39 @@ test("free-profile branding falls back to core site identity", () => {
     },
   );
 });
+
+test("compatibility branding preserves an existing custom identity before global defaults", () => {
+  assert.deepEqual(
+    resolveCompatibleBranding(
+      {
+        generalSettings: { title: "Core shop", description: "Core tagline" },
+        storefrontConfig: {
+          branding: {
+            storeName: "",
+            companyName: "",
+            tagline: "",
+            logoUrl: "",
+            iconUrl: "",
+          },
+        },
+      },
+      defaults,
+      {
+        storeName: "Existing shop",
+        companyName: "Existing company",
+        tagline: "Existing tagline",
+        logoUrl: "https://cms.example.test/existing-logo.svg",
+        iconUrl: "https://cms.example.test/existing-icon.png",
+        promoHtml: "<strong>Existing promotion</strong>",
+      },
+    ),
+    {
+      storeName: "Existing shop",
+      companyName: "Existing company",
+      tagline: "Existing tagline",
+      logoUrl: "https://cms.example.test/existing-logo.svg",
+      iconUrl: "https://cms.example.test/existing-icon.png",
+      promoHtml: "<strong>Existing promotion</strong>",
+    },
+  );
+});
