@@ -146,6 +146,8 @@
   "order_success.cta.track": "Śledź zamówienie",
   "order_success.cta.orders": "Zobacz moje zamówienia",
   "order_success.cta.private": "Otwórz prywatną stronę zamówienia",
+  "order_success.cta.pdf": "Zapisz rachunek jako PDF",
+  "order_success.cta.pdf_hint": "Otwiera okno drukowania przeglądarki, w którym możesz zapisać rachunek jako PDF.",
   "order_success.cta.help": "Uzyskaj pomoc dotyczącą zamówienia",
   "order_success.promo": "Dziękujemy za ponowne zakupy — oto 15% zniżki na następne zamówienie.",
   "order_success.support": "Pytania dotyczące zamówienia?",

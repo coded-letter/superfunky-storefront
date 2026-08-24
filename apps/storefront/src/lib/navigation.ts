@@ -276,6 +276,8 @@ export type StorefrontConfiguration = {
     enabled: boolean;
     itemCount: number;
     intervalSeconds: number;
+    quietSeconds: number;
+    openLinksInNewTab: boolean;
   };
   features: {
     promo: boolean;
@@ -301,6 +303,8 @@ export type StorefrontConfiguration = {
     darkTheme: PrismDarkTheme;
   };
   checkout: {
+    accountMode: "guest" | "optional" | "required";
+    distractionFree: boolean;
     heading: string;
     intro: string;
     trustMessage: string;
@@ -491,6 +495,8 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     enabled: false,
     itemCount: 5,
     intervalSeconds: 10,
+    quietSeconds: 8,
+    openLinksInNewTab: true,
   },
   features: {
     promo: true,
@@ -516,6 +522,8 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     darkTheme: "one-dark",
   },
   checkout: {
+    accountMode: "optional",
+    distractionFree: false,
     heading: "Secure checkout",
     intro: "Complete your details and choose a payment method to place your order.",
     trustMessage: "Encrypted payment · Clear totals · Secure processing",
@@ -584,6 +592,13 @@ const NAVIGATION_QUERY = /* GraphQL */ `
           label
         }
       }
+      recentOrders {
+        enabled
+        itemCount
+        intervalSeconds
+        quietSeconds
+        openLinksInNewTab
+      }
       features {
         promo
         search
@@ -609,6 +624,8 @@ const NAVIGATION_QUERY = /* GraphQL */ `
       }
       stripeCustomerPortalUrl
       checkout {
+        accountMode
+        distractionFree
         heading
         intro
         trustMessage
@@ -1329,6 +1346,8 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
       enabled: configuration.recentOrders?.enabled === true,
       itemCount: clampConfigurationInteger(configuration.recentOrders?.itemCount, 1, 10, 5),
       intervalSeconds: clampConfigurationInteger(configuration.recentOrders?.intervalSeconds, 3, 300, 10),
+      quietSeconds: clampConfigurationInteger(configuration.recentOrders?.quietSeconds, 2, 300, 8),
+      openLinksInNewTab: configuration.recentOrders?.openLinksInNewTab !== false,
     },
     features: {
       ...DEFAULT_STOREFRONT_CONFIGURATION.features,
@@ -1351,7 +1370,14 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
         ? configuration.codeHighlighting.darkTheme
         : DEFAULT_STOREFRONT_CONFIGURATION.codeHighlighting.darkTheme,
     },
-    checkout: { ...DEFAULT_STOREFRONT_CONFIGURATION.checkout, ...configuration.checkout },
+    checkout: {
+      ...DEFAULT_STOREFRONT_CONFIGURATION.checkout,
+      ...configuration.checkout,
+      accountMode: ["guest", "optional", "required"].includes(configuration.checkout?.accountMode)
+        ? configuration.checkout.accountMode
+        : DEFAULT_STOREFRONT_CONFIGURATION.checkout.accountMode,
+      distractionFree: configuration.checkout?.distractionFree === true,
+    },
     layout: normalizeStorefrontLayoutConfiguration(configuration.layout),
   };
 }

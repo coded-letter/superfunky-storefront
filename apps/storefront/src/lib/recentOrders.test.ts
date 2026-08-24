@@ -50,6 +50,7 @@ test("recent orders expose public product links and only reserve chatbot space w
     "recent_orders_item_count",
     "recent_orders_interval_seconds",
     "recent_orders_quiet_seconds",
+    "recent_orders_links_new_tab",
   ]) {
     assert.match(
       controlCenterSchema,
@@ -91,6 +92,8 @@ test("recent orders preserve the visible order and interval across reload-style 
   assert.equal(notifier.dataset.chatbotOffset, "false");
   const productLink = notifier.querySelector<HTMLAnchorElement>(".storefront-recent-orders__product");
   assert.equal(productLink?.getAttribute("href"), "/product/gallery-plugin/");
+  assert.equal(productLink?.target, "_blank");
+  assert.equal(productLink?.rel, "noopener noreferrer");
   const chatbotRoot = document.createElement("div");
   chatbotRoot.id = "funkycommerce-ai-assistant-root";
   document.body.append(chatbotRoot);
@@ -108,10 +111,52 @@ test("recent orders preserve the visible order and interval across reload-style 
     quietSeconds: 2,
     itemCount: 2,
   });
+
   assert.match(notifier.parentElement?.textContent || document.body.textContent || "", /George bought Premium theme/);
   const changedCadenceState = JSON.parse(localStorage.getItem("storefront:recent-orders:v2") || "{}");
   assert.equal(changedCadenceState.cycleMs, 5_000);
   cadenceChangedStop();
+  dom.window.close();
+});
+
+test("recent orders can be dismissed for the browser session and hide on checkout navigation", async () => {
+  const dom = new JSDOM("<!doctype html><html lang=\"en\"><body></body></html>", {
+    url: "https://store.example/",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    localStorage: dom.window.localStorage,
+    fetch: async () => new Response(JSON.stringify({ orders }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  });
+  const config = {
+    enabled: true,
+    endpoint: "https://api.example/wp-json/funkycommerce/v1/recent-orders",
+    intervalSeconds: 10,
+    quietSeconds: 8,
+    itemCount: 2,
+    openLinksInNewTab: false,
+  };
+
+  const stop = await startRecentOrdersNotifier(config);
+  const notifier = document.getElementById("storefront-recent-orders");
+  assert.ok(notifier);
+  const productLink = notifier.querySelector<HTMLAnchorElement>(".storefront-recent-orders__product");
+  assert.equal(productLink?.target, "");
+  document.documentElement.dataset.storefrontCheckout = "true";
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+  assert.equal(notifier.hidden, true);
+  delete document.documentElement.dataset.storefrontCheckout;
+  notifier.querySelector<HTMLButtonElement>(".storefront-recent-orders__dismiss")?.click();
+  assert.equal(document.getElementById("storefront-recent-orders"), null);
+  assert.equal(dom.window.sessionStorage.getItem("storefront:recent-orders:dismissed:v1"), "true");
+
+  stop();
+  await startRecentOrdersNotifier(config);
+  assert.equal(document.getElementById("storefront-recent-orders"), null);
   dom.window.close();
 });
 

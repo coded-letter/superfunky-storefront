@@ -146,6 +146,8 @@
   "order_success.cta.track": "注文を追跡",
   "order_success.cta.orders": "注文履歴を見る",
   "order_success.cta.private": "非公開の注文ページを開く",
+  "order_success.cta.pdf": "領収書をPDFで保存",
+  "order_success.cta.pdf_hint": "ブラウザーの印刷画面を開き、この領収書をPDFとして保存できます。",
   "order_success.cta.help": "注文について問い合わせる",
   "order_success.promo": "いつもご利用いただきありがとうございます。次回のご注文が15%オフになります。",
   "order_success.support": "ご注文についてご不明な点がありますか？",

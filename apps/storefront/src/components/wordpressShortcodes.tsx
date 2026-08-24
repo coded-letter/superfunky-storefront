@@ -17,7 +17,7 @@ import {
   type ProductCardVariant,
   type SocialFeedLayout,
 } from "@funky/ui";
-import { AlertTriangle, CheckCircle2, Download, LifeBuoy, Mail, MapPin, Package, Star, Truck, UserCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, LifeBuoy, Mail, MapPin, Package, Printer, Star, Truck, UserCircle2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { getOrderById, type AccountOrder } from "../lib/account";
@@ -1158,7 +1158,7 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
     ) {
       return (
         <ShortcodeSection title={t("order_success.section_digital")}>
-          <div className="grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
+          <div className="storefront-order-receipt grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8" data-order-receipt>
             <div className="grid gap-2 text-center">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
                 <Download className="h-7 w-7" aria-hidden="true" />
@@ -1179,7 +1179,11 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
             <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
               Guest access to this secure order page remains available for 7 days after order completion.
             </p>
-            <div className="flex flex-wrap justify-center gap-3">
+            <div className="storefront-order-receipt__actions flex flex-wrap justify-center gap-3">
+              <button type="button" onClick={() => window.print()} title={t("order_success.cta.pdf_hint")} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200">
+                <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("order_success.cta.pdf")}
+              </button>
               <Link to={shopPath} className="rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 no-underline dark:border-zinc-700 dark:text-zinc-200">
                 {t("order_success.cta.shopping")}
               </Link>
@@ -1223,7 +1227,7 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
 
   return (
     <ShortcodeSection title={t(resolvedMode === "digital" ? "order_success.section_digital" : "order_success.section")}>
-      <div className="grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
+      <div className="storefront-order-receipt grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8" data-order-receipt>
         <div className="grid gap-2 text-center">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
             {resolvedMode === "digital" ? <Download className="h-7 w-7" aria-hidden="true" /> : <CheckCircle2 className="h-7 w-7" aria-hidden="true" />}
@@ -1321,7 +1325,11 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
           </OrderDataCard>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-3">
+        <div className="storefront-order-receipt__actions flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={() => window.print()} title={t("order_success.cta.pdf_hint")} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200">
+            <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("order_success.cta.pdf")}
+          </button>
           <Link to={shopPath} className="rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 no-underline dark:border-zinc-700 dark:text-zinc-200">
             {t("order_success.cta.shopping")}
           </Link>

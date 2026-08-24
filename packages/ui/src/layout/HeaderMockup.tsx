@@ -108,6 +108,7 @@ export type HeaderMockupProps = {
   headerIconMedia?: HeaderIconMediaConfiguration;
   primaryNavigation?: HeaderNavItem[];
   mobileNavigation?: HeaderNavItem[];
+  hideNavigation?: boolean;
   showSearch?: boolean;
   searchVariant?: HeaderSearchVariant;
   search?: SearchAutocompleteProps["search"];
@@ -232,6 +233,7 @@ export function HeaderMockup({
   headerIconMedia,
   primaryNavigation = DEFAULT_PRIMARY_NAVIGATION,
   mobileNavigation,
+  hideNavigation = false,
   showSearch = true,
   searchVariant = "full-width",
   search,
@@ -271,7 +273,11 @@ export function HeaderMockup({
     setHasMountedMobileMenu(true);
     setIsMenuOpen(true);
   };
-  const resolvedMobileNavigation = mobileNavigation?.length ? mobileNavigation : primaryNavigation;
+  const resolvedMobileNavigation = hideNavigation
+    ? []
+    : mobileNavigation?.length
+      ? mobileNavigation
+      : primaryNavigation;
   const location = useLocation();
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -536,7 +542,8 @@ export function HeaderMockup({
               </div>
             ) : null}
 
-            <button
+            {!hideNavigation ? (
+              <button
               type="button"
               data-storefront-control="menu"
               className={`${iconButtonClass} lg:hidden`}
@@ -546,11 +553,12 @@ export function HeaderMockup({
               aria-controls={hasMountedMobileMenu ? "storefront-mobile-menu" : undefined}
             >
               <HeaderActionIcon name={headerIcons?.menu} mediaUrl={headerIconMedia?.menu} fallback={Menu} />
-            </button>
+              </button>
+            ) : null}
           </div>
         </div>
 
-        <div className="hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block">
+        {!hideNavigation ? <div className="hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block">
           {/* `flex-wrap` (not `overflow-x-auto`) on purpose: per the CSS spec, setting only
               `overflow-x` to a non-visible value forces the browser to compute `overflow-y`
               as `auto` too — which was silently clipping/scroll-cutting the "Shop" dropdown
@@ -579,7 +587,7 @@ export function HeaderMockup({
               ),
             )}
           </nav>
-        </div>
+        </div> : null}
       </div>
       </header>
 
@@ -591,7 +599,7 @@ export function HeaderMockup({
         <div style={{ height: headerHeight }} className="shrink-0" aria-hidden="true" />
       ) : null}
 
-      {hasMountedMobileMenu ? (
+      {hasMountedMobileMenu && !hideNavigation ? (
         <MobileDrawer
           isOpen={isMenuOpen}
           onClose={() => setIsMenuOpen(false)}

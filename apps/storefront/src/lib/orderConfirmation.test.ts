@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createOrderConfirmation,
@@ -8,6 +9,9 @@ import {
   saveOrderConfirmation,
 } from "./orderConfirmation.ts";
 import { localizedOrderStatus } from "./orderPresentation.ts";
+
+const orderSuccessSource = readFileSync(new URL("../components/wordpressShortcodes.tsx", import.meta.url), "utf8");
+const storefrontStyles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
 const checkoutOrder = {
   order_id: 1042,
@@ -87,6 +91,13 @@ test("labels digital delivery without inventing a shipping charge", () => {
     tax: 2,
     total: 12,
     coupons: [],
+  });
+
+  test("order confirmations expose an accessible print-to-PDF receipt action", () => {
+    assert.match(orderSuccessSource, /data-order-receipt/);
+    assert.match(orderSuccessSource, /onClick=\{\(\) => window\.print\(\)\}/);
+    assert.match(orderSuccessSource, /order_success\.cta\.pdf_hint/);
+    assert.match(storefrontStyles, /@media print[\s\S]*\.storefront-order-receipt__actions[\s\S]*display: none/);
   });
 
   assert.equal(confirmation.totals.shipping, "Digital delivery");

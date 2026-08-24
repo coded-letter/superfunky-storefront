@@ -3,6 +3,7 @@ export type RecentOrdersNotifierConfig = {
   itemCount: number;
   intervalSeconds: number;
   quietSeconds: number;
+  openLinksInNewTab?: boolean;
   endpoint: string;
 };
 
@@ -20,6 +21,7 @@ type PersistedRecentOrderState = {
 };
 
 const STORAGE_KEY = "storefront:recent-orders:v2";
+const DISMISSAL_KEY = "storefront:recent-orders:dismissed:v1";
 let activeNotifier: { signature: string; stop: () => void } | null = null;
 
 type ListFormatPart = { type: "element" | "literal"; value: string };
@@ -117,7 +119,12 @@ function storefrontProductHref(url: string | undefined) {
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
-function renderOrderItems(container: HTMLElement, order: RecentOrder, language: string) {
+function renderOrderItems(
+  container: HTMLElement,
+  order: RecentOrder,
+  language: string,
+  openLinksInNewTab: boolean,
+) {
   const labels = order.items.map(({ name, quantity }) => quantity > 1 ? `${quantity} × ${name}` : name);
   const parts = createListFormatter(language).formatToParts(labels);
   let itemIndex = 0;
@@ -136,11 +143,20 @@ function renderOrderItems(container: HTMLElement, order: RecentOrder, language: 
     link.className = "storefront-recent-orders__product";
     link.href = href;
     link.textContent = part.value;
+    if (openLinksInNewTab) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
     container.append(link);
   }
 }
 
-function renderOrder(element: HTMLElement, order: RecentOrder) {
+function renderOrder(
+  element: HTMLElement,
+  order: RecentOrder,
+  openLinksInNewTab: boolean,
+  onDismiss: () => void,
+) {
   const language = document.documentElement.lang || "en";
   const isJapanese = language.toLowerCase().startsWith("ja");
   const lead = isJapanese
@@ -152,7 +168,7 @@ function renderOrder(element: HTMLElement, order: RecentOrder) {
 
   const itemList = document.createElement("span");
   itemList.className = "storefront-recent-orders__items";
-  renderOrderItems(itemList, order, language);
+  renderOrderItems(itemList, order, language, openLinksInNewTab);
   message.append(itemList);
   if (isJapanese) message.append(document.createTextNode("を購入しました"));
 
@@ -164,7 +180,13 @@ function renderOrder(element: HTMLElement, order: RecentOrder) {
   const content = document.createElement("div");
   content.className = "storefront-recent-orders__content";
   content.append(message, time);
-  element.replaceChildren(content);
+  const dismissButton = document.createElement("button");
+  dismissButton.type = "button";
+  dismissButton.className = "storefront-recent-orders__dismiss";
+  dismissButton.setAttribute("aria-label", "Dismiss recent order notifications");
+  dismissButton.textContent = "×";
+  dismissButton.addEventListener("click", onDismiss);
+  element.replaceChildren(content, dismissButton);
   element.setAttribute("aria-label", formatOrderMessage(order));
 }
 
@@ -197,14 +219,29 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
   if (activeNotifier?.signature === signature) return activeNotifier.stop;
   activeNotifier?.stop();
   if (!config.enabled) return () => undefined;
+  try {
+    if (window.sessionStorage.getItem(DISMISSAL_KEY) === "true") return () => undefined;
+  } catch (error) {
+    console.warn("Recent-order dismissal preference is unavailable.", error);
+  }
 
   const controller = new AbortController();
   let hideTimer = 0;
   let hideTransitionTimer = 0;
   let cycleTimer = 0;
   const element = createNotifierElement();
-  const chatbotObserver = new window.MutationObserver(() => syncChatbotOffset(element));
+  const chatbotObserver = new window.MutationObserver(() => {
+    syncChatbotOffset(element);
+    if (document.documentElement.dataset.storefrontCheckout === "true") {
+      element.dataset.visible = "false";
+      element.hidden = true;
+    }
+  });
   chatbotObserver.observe(document.body, { childList: true, subtree: true });
+  chatbotObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-storefront-checkout"],
+  });
   const stop = () => {
     controller.abort();
     chatbotObserver.disconnect();
@@ -213,6 +250,14 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
     window.clearTimeout(cycleTimer);
     element.remove();
     if (activeNotifier?.stop === stop) activeNotifier = null;
+  };
+  const dismiss = () => {
+    try {
+      window.sessionStorage.setItem(DISMISSAL_KEY, "true");
+    } catch (error) {
+      console.warn("Recent-order dismissal preference could not be saved.", error);
+    }
+    stop();
   };
   activeNotifier = { signature, stop };
 
@@ -260,8 +305,8 @@ export async function startRecentOrdersNotifier(input: RecentOrdersNotifierConfi
     const now = Date.now();
     const displayEndsAt = nextAt - quietMs;
     writePersistedState({ orderId: order.id, nextAt, cycleMs });
-    if (now < displayEndsAt) {
-      renderOrder(element, order);
+    if (now < displayEndsAt && document.documentElement.dataset.storefrontCheckout !== "true") {
+      renderOrder(element, order, config.openLinksInNewTab !== false, dismiss);
       element.hidden = false;
       element.dataset.visible = "true";
       hideTimer = window.setTimeout(() => {

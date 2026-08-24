@@ -146,6 +146,8 @@
   "order_success.cta.track": "Track my order",
   "order_success.cta.orders": "View my orders",
   "order_success.cta.private": "Open private order page",
+  "order_success.cta.pdf": "Save receipt as PDF",
+  "order_success.cta.pdf_hint": "Opens your browser print dialog, where you can save this receipt as a PDF.",
   "order_success.cta.help": "Get order help",
   "order_success.promo": "Thanks for being a returning customer — here's 15% off your next order.",
   "order_success.support": "Questions about your order?",

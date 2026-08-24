@@ -82,7 +82,9 @@ const SitemapPage = lazy(() => import("./pages/SitemapPage").then((module) => ({
 
 function ConnectedStorefrontChrome() {
   const { data, isLoading: navigationLoading, error: navigationError } = useNavigationData();
+  const location = useLocation();
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
+  const { path: checkoutPath } = useResolvedStorefrontPath("checkout", "/checkout", languageCode);
   const t = useT();
   const { showToast } = useToast();
   const { viewer, refresh: refreshCommunity } = useCommunityData();
@@ -155,20 +157,35 @@ function ConnectedStorefrontChrome() {
     root.dataset.cmsCodeLightTheme = highlighting?.lightTheme || "one-light";
     root.dataset.cmsCodeDarkTheme = highlighting?.darkTheme || "one-dark";
   }, [data?.storefrontConfig.codeHighlighting]);
-  // Keep the built-in storefront mock navigation as the fallback when a minimal
-  // backend does not expose WordPress menu data. The UI package already defines a
-  // sensible default nav, so we only pass backend menu arrays when they contain
-  // actual content; otherwise the mock menu remains visible.
-  const headerNavigation = Array.isArray(data?.header) && data.header.length ? data.header : undefined;
+  const homePath = languageHomePath(languageCode, configuredLanguageCodes);
+  const homeNavigation = [{ label: t("nav.home"), href: homePath }];
+  const currentPath = normalizeBrowserPath(location.pathname);
+  const isCheckoutRoute = currentPath === normalizeBrowserPath(checkoutPath);
+  const hideCheckoutNavigation = isCheckoutRoute && data?.storefrontConfig.checkout.distractionFree === true;
+  useEffect(() => {
+    if (isCheckoutRoute) {
+      document.documentElement.dataset.storefrontCheckout = "true";
+    } else {
+      delete document.documentElement.dataset.storefrontCheckout;
+    }
+    return () => {
+      delete document.documentElement.dataset.storefrontCheckout;
+    };
+  }, [isCheckoutRoute]);
+  const headerNavigation = Array.isArray(data?.header) && data.header.length
+    ? data.header
+    : isBackendConfigured
+      ? homeNavigation
+      : undefined;
   const mobileNavigation = Array.isArray(data?.mobile) && data.mobile.length
     ? data.mobile
     : headerNavigation;
-  const footerColumns = Array.isArray(data?.footer) && data.footer.length ? data.footer : undefined;
+  const footerColumns = Array.isArray(data?.footer) && data.footer.length
+    ? data.footer
+    : isBackendConfigured
+      ? [{ title: t("nav.home"), links: homeNavigation }]
+      : undefined;
   const assistant = useAiShoppingAssistantSurfaces(data?.storefrontConfig);
-  // Compute the language-aware home path so the logo link goes directly to the
-  // correct home without triggering a redirect. "/" is kept for fallback languages
-  // that don't have an explicit /:lang home route yet.
-  const homePath = languageHomePath(languageCode, configuredLanguageCodes);
   const canPublishCommunityPosts = viewer?.capabilities.includes("publish_community_posts") ?? false;
   const publishAction = showHeaderPublishButton && canPublishCommunityPosts ? (
     <button
@@ -185,9 +202,10 @@ function ConnectedStorefrontChrome() {
     <>
       <StorefrontChromeMockup
         featuredProduct={isBackendConfigured ? undefined : MOCK_PRODUCTS[0]}
-        primaryNavigation={headerNavigation}
-        mobileNavigation={mobileNavigation}
-        footerColumns={footerColumns}
+        primaryNavigation={hideCheckoutNavigation ? [] : headerNavigation}
+        mobileNavigation={hideCheckoutNavigation ? [] : mobileNavigation}
+        footerColumns={hideCheckoutNavigation ? [] : footerColumns}
+        hideNavigation={hideCheckoutNavigation}
         search={search}
         onNewsletterSubscribe={isBackendConfigured ? subscribeToNewsletter : undefined}
         homePath={homePath}

@@ -172,18 +172,21 @@ export function CheckoutMockupPage() {
   const checkoutPresentation = navigationData?.storefrontConfig.checkout;
   const marketingConsentLabel = checkoutPresentation?.marketingLabel || DEFAULT_MARKETING_CONSENT_LABEL;
 
-  // Guest checkout setting from config (default: true, allow guests)
-  const allowGuestCheckout = config["allow-guest-checkout"] !== "false";
-  // If guest checkout is disabled, account creation is required
-  const requireAccountCreation = !allowGuestCheckout && !isLoggedIn;
+  const accountMode = checkoutPresentation?.accountMode
+    ?? (config["allow-guest-checkout"] === "false" ? "required" : "optional");
+  const requireAccountCreation = accountMode === "required" && !isLoggedIn;
 
   const [createAccount, setCreateAccount] = useState(requireAccountCreation);
   const [accountUsername, setAccountUsername] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [marketingConsent, setMarketingConsent] = useState(false);
   useEffect(() => {
-    if (requireAccountCreation) setCreateAccount(true);
-  }, [requireAccountCreation]);
+    if (accountMode === "required") {
+      setCreateAccount(true);
+    } else if (accountMode === "guest") {
+      setCreateAccount(false);
+    }
+  }, [accountMode]);
   const [abandonedCartConsentAccepted, setAbandonedCartConsentAccepted] = useState(false);
   const [shipToDifferentAddress, setShipToDifferentAddress] = useState(false);
   const [couponVisible, setCouponVisible] = useState(true);
@@ -757,11 +760,13 @@ export function CheckoutMockupPage() {
     });
 
     let accountLoginError: string | undefined;
-    if (shouldCreateAccount && result.order) {
+    if (shouldCreateAccount) {
       try {
         const auth = await login(normalizedUsername, accountPassword);
-        const customerId = await claimCheckoutOrder(result.order, billingEmail, auth.authToken);
-        result = { ...result, order: { ...result.order, customer_id: customerId } };
+        if (result.order) {
+          const customerId = await claimCheckoutOrder(result.order, billingEmail, auth.authToken);
+          result = { ...result, order: { ...result.order, customer_id: customerId } };
+        }
       } catch (error) {
         accountLoginError = error instanceof Error ? error.message : "Automatic account setup failed.";
       }
@@ -1280,7 +1285,7 @@ export function CheckoutMockupPage() {
 
           {couponPosition === "inline" ? couponSection : null}
 
-          {!isLoggedIn && allowGuestCheckout ? (
+          {!isLoggedIn && accountMode === "optional" ? (
             <CheckoutSection title="Account">
               <label className="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 <input
@@ -1330,7 +1335,7 @@ export function CheckoutMockupPage() {
                 <span>{marketingConsentLabel}</span>
               </label>
             </CheckoutSection>
-          ) : !isLoggedIn ? (
+          ) : !isLoggedIn && accountMode === "required" ? (
             <CheckoutSection title="Account">
               <div className="grid gap-4 md:grid-cols-2">
                 <InputMock

@@ -30,7 +30,7 @@ test("account profile payload defers expensive WooCommerce order loading until o
   );
 });
 
-test("guest download access validates order key and billing email", () => {
+test("seven-day download access validates order key and billing email for guest and checkout-created customers", () => {
   assert.match(accountSource, /hash_equals\(\s*\(string\) \$order->get_order_key\(\), \$order_key\s*\)/);
   assert.match(
     accountSource,
@@ -41,7 +41,9 @@ test("guest download access validates order key and billing email", () => {
   assert.match(accountSource, /sf_guest_token/);
   assert.match(accountSource, /function funkycommerce_guest_download_signature/);
   assert.match(accountSource, /pre_option_woocommerce_downloads_require_login/);
-  assert.match(accountSource, /0 !== \(int\) \$order->get_customer_id\(\)/);
+  const accessWindow = accountSource.match(/function funkycommerce_guest_download_access_is_current[\s\S]*?\n\}/);
+  assert.ok(accessWindow);
+  assert.doesNotMatch(accessWindow[0], /get_customer_id/);
   assert.match(accountSource, /function funkycommerce_guest_download_access_is_current/);
   assert.match(
     accountSource,

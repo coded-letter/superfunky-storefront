@@ -129,6 +129,7 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
       itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
       intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
       quietSeconds: Number(prerenderedChrome.dataset.recentOrdersQuiet),
+      openLinksInNewTab: prerenderedChrome.dataset.recentOrdersNewTab !== "false",
       endpoint,
     })
     .catch((error) => {
