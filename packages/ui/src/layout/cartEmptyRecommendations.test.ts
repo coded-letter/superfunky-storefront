@@ -132,6 +132,18 @@ test("variable recommendation options prevent impossible combinations without ch
 });
 
 test("multiple recommendations use a horizontally scrollable snap rail", () => {
-  assert.match(recommendationsSource, /snap-x snap-mandatory gap-3 overflow-x-auto/);
+  assert.match(recommendationsSource, /mx-auto w-full max-w-xs overflow-hidden/);
+  assert.match(
+    recommendationsSource,
+    /snap-x snap-mandatory items-start gap-3 overflow-x-auto overflow-y-hidden overscroll-x-contain/,
+  );
+  assert.match(recommendationsSource, /w-full min-w-full max-w-72 shrink-0 snap-center/);
   assert.match(recommendationsSource, /products\.map\(\(product\)/);
+});
+
+test("purchasable recommendations expose bounded quantity controls", () => {
+  assert.match(recommendationsSource, /const \[quantity, setQuantity\] = useState\(1\)/);
+  assert.match(recommendationsSource, /Math\.max\(1, current - 1\)/);
+  assert.match(recommendationsSource, /Math\.min\(99, current \+ 1\)/);
+  assert.match(recommendationsSource, /addItem\([\s\S]*quantity,[\s\S]*\);/);
 });

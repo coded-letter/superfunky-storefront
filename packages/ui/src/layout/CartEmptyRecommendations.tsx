@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Minus, Plus } from "lucide-react";
 import type { ProductCardData } from "../catalog/ProductCard";
 import { useT } from "../locale";
 import { useCart } from "../state";
@@ -29,6 +30,7 @@ function PromotedProductCard({
     defaultVariation?.attributes ?? {},
   );
   const [justAdded, setJustAdded] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const selectedVariation = useMemo(
     () => resolveCartRecommendationVariation(product, selectedOptions),
     [product, selectedOptions],
@@ -65,21 +67,25 @@ function PromotedProductCard({
 
   const addToCart = () => {
     if (!canAdd) return;
-    addItem({
-      id: selectedVariation?.id || product.id,
-      backendProductId: product.databaseId,
-      backendVariationId: selectedVariation?.databaseId,
-      variationAttributes: selectedVariation?.attributes,
-      variantLabel: selectedVariation
-        ? Object.entries(selectedVariation.attributes)
-            .map(([label, value]) => `${label}: ${value}`)
-            .join(" · ")
-        : undefined,
-      name: product.name,
-      imageUrl: resolvedImageUrl,
-      priceLabel: resolvedPriceLabel,
-      priceAmount: resolvedPriceAmount,
-    });
+    addItem(
+      {
+        id: selectedVariation?.id || product.id,
+        backendProductId: product.databaseId,
+        backendVariationId: selectedVariation?.databaseId,
+        variationAttributes: selectedVariation?.attributes,
+        variantLabel: selectedVariation
+          ? Object.entries(selectedVariation.attributes)
+              .map(([label, value]) => `${label}: ${value}`)
+              .join(" · ")
+          : undefined,
+        name: product.name,
+        imageUrl: resolvedImageUrl,
+        priceLabel: resolvedPriceLabel,
+        priceAmount: resolvedPriceAmount,
+      },
+      quantity,
+    );
+    setQuantity(1);
     setJustAdded(true);
   };
 
@@ -88,7 +94,7 @@ function PromotedProductCard({
     : t("product.cta.learn_more");
 
   return (
-    <article className="flex min-w-[88%] snap-start flex-col rounded-2xl border border-zinc-100 bg-zinc-50/60 p-3 text-left dark:border-zinc-800/80 dark:bg-zinc-900/40">
+    <article className="flex w-full min-w-full max-w-72 shrink-0 snap-center flex-col rounded-2xl border border-zinc-100 bg-zinc-50/60 p-3 text-left dark:border-zinc-800/80 dark:bg-zinc-900/40">
       <Link
         to={getCartRecommendationHref(product)}
         onClick={onNavigate}
@@ -150,13 +156,38 @@ function PromotedProductCard({
       ) : null}
 
       {canAdd ? (
-        <button
-          type="button"
-          onClick={addToCart}
-          className="mt-3 w-full rounded-full bg-brand-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
-        >
-          {justAdded ? t("cart.added") : t("cart.add")}
-        </button>
+        <div className="mt-3 flex items-center gap-2">
+          <div className="inline-flex shrink-0 items-center rounded-full border border-zinc-200 bg-white p-0.5 dark:border-zinc-700 dark:bg-zinc-950">
+            <button
+              type="button"
+              onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+              disabled={quantity === 1}
+              aria-label={`Decrease quantity of ${product.name}`}
+              className="inline-grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <span className="min-w-6 text-center text-xs font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+              {quantity}
+            </span>
+            <button
+              type="button"
+              onClick={() => setQuantity((current) => Math.min(99, current + 1))}
+              disabled={quantity === 99}
+              aria-label={`Increase quantity of ${product.name}`}
+              className="inline-grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={addToCart}
+            className="min-w-0 flex-1 rounded-full bg-brand-gradient px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
+          >
+            {justAdded ? t("cart.added") : t("cart.add")}
+          </button>
+        </div>
       ) : (
         <Link
           to={getCartRecommendationHref(product)}
@@ -178,11 +209,11 @@ export function CartEmptyRecommendations({
   if (!products.length) return null;
 
   return (
-    <section className="w-full">
+    <section className="mx-auto w-full max-w-xs overflow-hidden">
       <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
         {t("cart.you_might_like")}
       </p>
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+      <div className="flex w-full snap-x snap-mandatory items-start gap-3 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 pb-2">
         {products.map((product) => (
           <PromotedProductCard key={product.id} product={product} onNavigate={onNavigate} />
         ))}
