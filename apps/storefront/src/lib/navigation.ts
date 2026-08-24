@@ -939,6 +939,29 @@ const NAVIGATION_COMPATIBILITY_FIELDS = [
  "LanguageCodeFilterEnum",
 ] as const;
 
+const NAVIGATION_ROLLING_LEAF_FIELDS = [
+  "quietSeconds",
+  "openLinksInNewTab",
+  "accountMode",
+  "distractionFree",
+] as const;
+
+export function omitUnsupportedNavigationLeafFields(
+  query: string,
+  errors: { message: string }[] | undefined,
+): string | null {
+  const supportedFallbackFields = new Set<string>(NAVIGATION_ROLLING_LEAF_FIELDS);
+  const unsupported = new Set<string>();
+  for (const { message } of errors ?? []) {
+    const match = message.match(/(?:Cannot query field|Field) "(\w+)"/i);
+    if (match && supportedFallbackFields.has(match[1])) unsupported.add(match[1]);
+  }
+  if (!unsupported.size) return null;
+
+  const lines = query.split("\n").filter((line) => !unsupported.has(line.trim()));
+  return lines.length < query.split("\n").length ? lines.join("\n") : null;
+}
+
 export function omitUnsupportedLayoutFields(
   query: string,
   errors: { message: string }[] | undefined,
@@ -1002,6 +1025,10 @@ type PolylangRestLanguage = {
   is_default?: boolean;
 };
 
+type WordPressRestIndex = {
+  namespaces?: unknown;
+};
+
 function mapNavigationLanguages(languages: StorefrontLanguagesQueryResult["languages"]): LanguageOption[] {
   return mapBackendLanguages(languages || []).map((language) => ({
     ...language,
@@ -1012,6 +1039,19 @@ function mapNavigationLanguages(languages: StorefrontLanguagesQueryResult["langu
 async function getPolylangRestLanguages(
   signal?: AbortSignal,
 ): Promise<StorefrontLanguagesQueryResult["languages"]> {
+  const restIndexResponse = await fetch(
+    new URL("/wp-json/", BACKEND_ORIGIN),
+    signal ? { signal } : undefined,
+  );
+  if (!restIndexResponse.ok) {
+    throw new Error(`WordPress REST namespace discovery failed with status ${restIndexResponse.status}`);
+  }
+  const restIndex: WordPressRestIndex = await restIndexResponse.json();
+  if (!Array.isArray(restIndex.namespaces)) {
+    throw new Error("WordPress REST index returned an invalid namespace payload");
+  }
+  if (!restIndex.namespaces.some((namespace) => namespace === "pll/v1")) return [];
+
   const response = await fetch(
     new URL("/wp-json/pll/v1/languages", BACKEND_ORIGIN),
     signal ? { signal } : undefined,
@@ -1134,12 +1174,19 @@ export async function getNavigationData(languageCode: string): Promise<CmsNaviga
     getStorefrontLanguages(),
   ]);
 
-  const compatibleLayoutQuery = omitUnsupportedLayoutFields(NAVIGATION_QUERY, navigationResponse.errors);
-  if (compatibleLayoutQuery) {
-    navigationResponse = await graphqlRequest<NavigationQueryResult>(compatibleLayoutQuery, variables);
+  let compatibleNavigationQuery =
+    omitUnsupportedLayoutFields(NAVIGATION_QUERY, navigationResponse.errors)
+    ?? NAVIGATION_QUERY;
+  compatibleNavigationQuery =
+    omitUnsupportedNavigationLeafFields(compatibleNavigationQuery, navigationResponse.errors)
+    ?? compatibleNavigationQuery;
+  if (compatibleNavigationQuery !== NAVIGATION_QUERY) {
+    navigationResponse = await graphqlRequest<NavigationQueryResult>(compatibleNavigationQuery, variables);
   }
 
   if (isNavigationCompatibilityError(navigationResponse.errors)) {
+    const preservedData = navigationResponse.data;
+    const preservedConfiguration = preservedData?.storefrontConfig;
     const brandingFallback = await graphqlRequest<CompatibleBrandingQueryResult>(
       COMPATIBLE_BRANDING_QUERY,
       { language: languageCode.toLowerCase() },
@@ -1152,11 +1199,14 @@ export async function getNavigationData(languageCode: string): Promise<CmsNaviga
     }
     navigationResponse = {
       data: {
+        ...(preservedData ?? EMPTY_NAVIGATION_RESULT),
         storefrontConfig: {
           ...DEFAULT_STOREFRONT_CONFIGURATION,
+          ...(preservedConfiguration ?? {}),
           branding: resolveCompatibleBranding(
             brandingFallback.data,
             DEFAULT_STOREFRONT_CONFIGURATION.branding,
+            preservedConfiguration?.branding,
           ),
         },
       },

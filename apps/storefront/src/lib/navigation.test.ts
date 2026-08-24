@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import {
   hasOnlyMenuSchemaCompatibilityErrors,
   mapBestAvailableMenu,
+  omitUnsupportedNavigationLeafFields,
   omitUnsupportedLayoutFields,
   parseUiStrings,
   scoreMenu,
@@ -72,11 +73,45 @@ test("layout GraphQL compatibility retries can omit unsupported child fields wit
   assert.doesNotMatch(withoutLayout, /layout\s*\{/);
 });
 
+test("navigation compatibility retries omit optional fields missing from a rolling backend", () => {
+  const query = `
+    storefrontConfig {
+      recentOrders {
+        enabled
+        quietSeconds
+        openLinksInNewTab
+      }
+      checkout {
+        accountMode
+        distractionFree
+        heading
+      }
+    }
+  `;
+  const compatible = omitUnsupportedNavigationLeafFields(query, [
+    { message: 'Cannot query field "quietSeconds" on type "FunkyCommerceRecentOrders".' },
+    { message: 'Cannot query field "openLinksInNewTab" on type "FunkyCommerceRecentOrders".' },
+    { message: 'Cannot query field "accountMode" on type "FunkyCommerceCheckoutPresentation".' },
+    { message: 'Cannot query field "distractionFree" on type "FunkyCommerceCheckoutPresentation".' },
+  ]);
+
+  assert.ok(compatible);
+  assert.match(compatible, /enabled/);
+  assert.match(compatible, /heading/);
+  assert.doesNotMatch(compatible, /quietSeconds|openLinksInNewTab|accountMode|distractionFree/);
+  assert.equal(
+    omitUnsupportedNavigationLeafFields(query, [{ message: 'Cannot query field "heading" on type "Other".' }]),
+    null,
+  );
+});
+
 test("optional language discovery cannot invalidate layout configuration", () => {
   const navigationQuery = navigationSource.match(/const NAVIGATION_QUERY[\s\S]*?const COMPATIBLE_NAVIGATION_QUERY/)?.[0] ?? "";
   assert.doesNotMatch(navigationQuery, /languages\s*\{/);
   assert.match(navigationSource, /getStorefrontLanguages\(\)/);
   assert.match(navigationSource, /getPolylangRestLanguages\(AbortSignal\.timeout\(3_000\)\)/);
+  assert.match(navigationSource, /new URL\("\/wp-json\/", BACKEND_ORIGIN\)/);
+  assert.match(navigationSource, /restIndex\.namespaces\.some\(\(namespace\) => namespace === "pll\/v1"\)/);
   assert.doesNotMatch(navigationSource, /const \[graphqlResponse, restLanguageResult\] = await Promise\.all\(/);
   assert.match(
     navigationSource,
