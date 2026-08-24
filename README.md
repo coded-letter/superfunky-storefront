@@ -106,7 +106,7 @@ composition while those public boundaries expand without duplicating implementat
 
 ```bash
 pnpm dev          # start the storefront
-pnpm test         # run the complete test suite
+pnpm test         # run the standalone public boundary suite
 pnpm build        # create the production storefront and static route inventory
 ```
 
