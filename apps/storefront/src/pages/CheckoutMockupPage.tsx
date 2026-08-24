@@ -1354,6 +1354,7 @@ export function CheckoutMockupPage() {
             </CheckoutSection>
           ) : !isLoggedIn && accountMode === "required" ? (
             <CheckoutSection title={t("checkout.account.title")}>
+              <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("checkout.guest_notice")}</p>
               <div className="grid gap-4 md:grid-cols-2">
                 <InputMock
                   label={t("checkout.field.username")}

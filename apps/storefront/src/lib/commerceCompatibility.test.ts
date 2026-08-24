@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -15,11 +16,54 @@ import {
   requestOptionalCommerceRoot,
   type CommerceGraphqlRequester,
 } from "./commerceGraphqlCompatibility.ts";
-import { PRODUCT_LIST_CARD_FIELDS } from "./commerce.ts";
+import {
+  FEATURED_PRODUCT_QUERY,
+  PRODUCT_LIST_CARD_FIELDS,
+  mapProductCard,
+  type RawProductCard,
+} from "./commerce.ts";
+
+const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
 test("catalog product cards request gallery images for the gallery variant", () => {
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages\s*\(\s*first:\s*12\s*\)/);
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages[\s\S]*\bsourceUrl\b/);
+});
+
+test("featured WooCommerce products are preserved for the empty-cart promotion", () => {
+  const product: RawProductCard = {
+    __typename: "SimpleProduct",
+    id: "featured-product",
+    databaseId: 4970,
+    slug: "featured-product",
+    uri: "/product/featured-product/",
+    name: "Featured product",
+    shortDescription: null,
+    engagementRating: {
+      average: null,
+      count: 0,
+      guestCount: 0,
+      authoredCount: 0,
+      histogram: [0, 0, 0, 0, 0],
+    },
+    featured: true,
+    onSale: false,
+    image: null,
+    galleryImages: null,
+    productCategories: null,
+    productTags: null,
+    productBrands: null,
+    price: "€10.00",
+    regularPrice: "€10.00",
+    salePrice: null,
+    stockStatus: "IN_STOCK",
+    stockQuantity: 1,
+  };
+
+  assert.equal(mapProductCard(product).featured, true);
+  assert.match(FEATURED_PRODUCT_QUERY, /products\(first: 1, where: \{ featured: true, language: \$language \}\)/);
+  assert.match(appSource, /getFeaturedProduct\(languageBackendCode\)/);
+  assert.match(appSource, /featuredProduct=\{isBackendConfigured \? featuredProduct \?\? undefined : MOCK_PRODUCTS\[0\]\}/);
 });
 
 test("product detail fallback removes optional fields without losing core commerce data", () => {

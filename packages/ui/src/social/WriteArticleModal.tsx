@@ -186,8 +186,8 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
         translationOfId: selectedTranslation?.databaseId,
       });
       showToast({
-        title: isEditing ? "Article updated" : "Article published",
-        description: isEditing ? "Your changes are now live." : "It now appears in the site journal.",
+        title: isEditing ? t("community.article.updated") : t("community.article.published"),
+        description: isEditing ? t("community.changes_live") : t("community.article.live"),
         tone: "success",
       });
       onClose();
@@ -200,15 +200,15 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
 
   const handleDelete = async () => {
     if (!initialPost || !onDelete || isSubmitting || isDeleting) return;
-    if (!window.confirm("Permanently delete this article? This action cannot be undone.")) return;
+    if (!window.confirm(t("community.article.delete_confirm"))) return;
     setIsDeleting(true);
     setSubmitError(null);
     try {
       await onDelete(initialPost.postId);
-      showToast({ title: "Article deleted", description: "The article has been removed.", tone: "success" });
+      showToast({ title: t("community.article.deleted"), description: t("community.article.deleted_body"), tone: "success" });
       onClose();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The article could not be deleted.");
+      setSubmitError(error instanceof Error ? error.message : t("community.article.delete_error"));
     } finally {
       setIsDeleting(false);
     }
@@ -222,7 +222,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
       className="sf-write-article-modal fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={isEditing ? "Edit article" : "Write a new article"}
+      aria-label={isEditing ? t("community.article.edit_title") : t("community.article.create_title")}
       onClick={onClose}
     >
       <div
@@ -232,18 +232,18 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("community.modal.close")}
           className="absolute right-4 top-4 inline-grid h-9 w-9 place-items-center rounded-full bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
 
         <div className="grid gap-1 pr-8">
-          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{isEditing ? "Edit article" : "Write a new article"}</h2>
+          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{isEditing ? t("community.article.edit_title") : t("community.article.create_title")}</h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
             {isEditing
-              ? "Update the details below — changes publish immediately to the site journal."
-              : "Collaborator accounts can publish this article directly to the site journal."}
+              ? t("community.article.edit_description")
+              : t("community.article.create_description")}
           </p>
         </div>
 
@@ -251,7 +251,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
           {/* Main column: the article's own content. */}
           <div className="grid gap-5">
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Title</span>
+              <span>{t("community.field.title")}</span>
               <input
                 type="text"
                 value={title}
@@ -262,7 +262,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
             </label>
 
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Slug</span>
+              <span>{t("community.field.slug")}</span>
               <input
                 type="text"
                 value={slug}
@@ -276,7 +276,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
             </label>
 
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Excerpt</span>
+              <span>{t("community.field.excerpt")}</span>
               <textarea
                 value={excerpt}
                 onChange={(event) => setExcerpt(event.target.value)}
@@ -287,7 +287,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
             </label>
 
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Body</span>
+              <span>{t("community.field.body")}</span>
               <textarea
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
@@ -434,7 +434,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
           >
             <PencilLine className="h-4 w-4" aria-hidden="true" />
-            {isSubmitting ? (isEditing ? "Saving…" : "Publishing…") : isEditing ? "Save changes" : "Publish"}
+            {isSubmitting ? (isEditing ? t("community.saving") : t("community.publishing")) : isEditing ? t("community.save_changes") : t("community.publish")}
           </button>
           {initialPost && onDelete ? (
             <button
@@ -444,7 +444,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
               className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
-              {isDeleting ? "Deleting…" : "Delete"}
+              {isDeleting ? t("community.deleting") : t("community.delete")}
             </button>
           ) : null}
         </div>

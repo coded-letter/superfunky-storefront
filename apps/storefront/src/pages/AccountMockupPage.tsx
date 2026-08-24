@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -103,6 +103,10 @@ export function AccountMockupPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const t = useT();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const config = useApplicationShortcode(["funkycommerce_account", "woocommerce_my_account"], {
@@ -173,7 +177,7 @@ export function AccountMockupPage() {
         }
       })
       .catch((error) => {
-        if (!cancelled) setAccountState({ data: null, isLoading: false, error: error instanceof Error ? error : new Error("The account could not be loaded") });
+        if (!cancelled) setAccountState({ data: null, isLoading: false, error: error instanceof Error ? error : new Error(tRef.current("error.account_load")) });
       });
     return () => {
       cancelled = true;
@@ -295,7 +299,7 @@ export function AccountMockupPage() {
             /> : null}
             {allowedTabs.includes("downloads") ? <SidebarTab
               icon={<Download className="h-4 w-4" aria-hidden="true" />}
-              label="Downloads"
+              label={t("account.tab.downloads")}
               isActive={activeTab === "downloads"}
               onClick={() => selectTab("downloads")}
             /> : null}
@@ -362,72 +366,53 @@ export function AccountMockupPage() {
 
 const GUEST_ACCOUNT_CONTENT: Record<AccountTab, { eyebrow: string; title: string; description: string; benefits: string[] }> = {
   dashboard: {
-    eyebrow: "Your personal storefront",
-    title: "Bring your account experience together",
-    description: "Sign in to see your verified profile and private customer tools.",
-    benefits: ["Review your profile and account status", "See orders and saved delivery details together", "Discover publishing tools enabled for your role"],
+    eyebrow: "account.guest.benefit1_eyebrow",
+    title: "account.guest.benefit1_title",
+    description: "account.guest.benefit1_description",
+    benefits: ["account.guest.benefit1_item1", "account.guest.benefit1_item2", "account.guest.benefit1_item3"],
   },
   orders: {
-    eyebrow: "Private order history",
-    title: "Track every purchase in one place",
-    description: "Your order history is private. Sign in to review real order statuses, totals, products, and variation details.",
-    benefits: ["See current fulfilment status", "Review line items and variations", "Keep past purchases available for reference"],
+    eyebrow: "account.guest.benefit2_eyebrow",
+    title: "account.guest.benefit2_title",
+    description: "account.guest.benefit2_description",
+    benefits: ["account.guest.benefit2_item1", "account.guest.benefit2_item2", "account.guest.benefit2_item3"],
   },
   downloads: {
-    eyebrow: "Secure digital library",
-    title: "Keep purchased files available",
-    description: "Sign in to access the downloads available to your account.",
-    benefits: ["Use signed download links", "Review expiry and remaining limits", "Keep purchases tied to your account"],
+    eyebrow: "account.guest.benefit5_eyebrow",
+    title: "account.guest.benefit5_title",
+    description: "account.guest.benefit5_description",
+    benefits: ["account.guest.benefit5_item1", "account.guest.benefit5_item2", "account.guest.benefit5_item3"],
   },
   addresses: {
-    eyebrow: "Faster checkout",
-    title: "Save billing and shipping details",
-    description: "Create an account to securely manage your customer profile and checkout addresses.",
-    benefits: ["Edit billing and shipping separately", "Reuse accurate customer details", "Keep address data private to your account"],
+    eyebrow: "account.guest.benefit3_eyebrow",
+    title: "account.guest.benefit3_title",
+    description: "account.guest.benefit3_description",
+    benefits: ["account.guest.benefit3_item1", "account.guest.benefit3_item2", "account.guest.benefit3_item3"],
   },
   community: {
-    eyebrow: "Community and marketplace",
-    title: "Unlock the tools assigned to your role",
-    description: "Sign in to manage your public profile and access Creator, Collaborator, or administrator publishing actions when permitted.",
-    benefits: ["Control public profile visibility", "Publish community posts when eligible", "List products and write articles when eligible"],
+    eyebrow: "account.guest.benefit4_eyebrow",
+    title: "account.guest.benefit4_title",
+    description: "account.guest.benefit4_description",
+    benefits: ["account.guest.benefit4_item1", "account.guest.benefit4_item2", "account.guest.benefit4_item3"],
   },
 };
 
 function GuestAccountPanel({ tab, authLoginPath, authRegisterPath }: { tab: AccountTab; authLoginPath: string; authRegisterPath: string }) {
   const t = useT();
   const content = GUEST_ACCOUNT_CONTENT[tab];
-  const translatedContentByTab: Partial<Record<AccountTab, { eyebrow: string; title: string }>> = {
-    dashboard: {
-      eyebrow: t("account.guest.benefit1_eyebrow"),
-      title: t("account.guest.benefit1_title"),
-    },
-    orders: {
-      eyebrow: t("account.guest.benefit2_eyebrow"),
-      title: t("account.guest.benefit2_title"),
-    },
-    addresses: {
-      eyebrow: t("account.guest.benefit3_eyebrow"),
-      title: t("account.guest.benefit3_title"),
-    },
-    community: {
-      eyebrow: t("account.guest.benefit4_eyebrow"),
-      title: t("account.guest.benefit4_title"),
-    },
-  };
-  const translatedContent = translatedContentByTab[tab];
   return (
     <div className="overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <div className="bg-brand-gradient px-6 py-8 text-white sm:px-8">
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{translatedContent?.eyebrow ?? content.eyebrow}</p>
-        <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{translatedContent?.title ?? content.title}</h1>
-        <p className="mb-0 mt-3 max-w-2xl text-sm leading-relaxed text-white/85">{content.description}</p>
+        <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{t(content.eyebrow)}</p>
+        <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{t(content.title)}</h1>
+        <p className="mb-0 mt-3 max-w-2xl text-sm leading-relaxed text-white/85">{t(content.description)}</p>
       </div>
       <div className="grid gap-6 p-6 sm:p-8">
         <ul className="grid gap-3 p-0 sm:grid-cols-3">
           {content.benefits.map((benefit) => (
             <li key={benefit} className="flex list-none items-start gap-2 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />
-              <span>{benefit}</span>
+              <span>{t(benefit)}</span>
             </li>
           ))}
         </ul>
@@ -675,7 +660,7 @@ function DashboardPanel({
                         : "cursor-pointer hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-500 dark:hover:text-brand-300"
                     }`}>
                       <Upload className="h-3 w-3" aria-hidden="true" />
-                      {isAvatarSaving ? "Saving avatar…" : avatarUrl ? "Change avatar" : "Add avatar"}
+                      {isAvatarSaving ? t("account.avatar.saving") : avatarUrl ? t("account.avatar.change") : t("account.avatar.add")}
                       <input
                         type="file"
                         accept="image/png,image/jpeg,image/gif,image/webp"
@@ -693,10 +678,10 @@ function DashboardPanel({
                       className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-rose-600 transition hover:text-rose-500 disabled:cursor-wait disabled:opacity-60 dark:text-rose-400"
                     >
                       <Trash2 className="h-3 w-3" aria-hidden="true" />
-                      Remove avatar
+                      {t("account.avatar.remove")}
                     </button>
                   ) : null}
-                  <span>Max file size 690KB</span>
+                  <span>{t("account.avatar.max_size")}</span>
                 </div>
               ) : null}
             </div>
@@ -717,8 +702,8 @@ function DashboardPanel({
               {account.emailVerified
                 ? t("account.verified")
                 : account.emailVerificationRequired
-                  ? "Email verification required"
-                  : "Email verification optional"}
+                  ? t("account.email.verification_required")
+                  : t("account.email.verification_optional")}
             </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -728,7 +713,7 @@ function DashboardPanel({
               }`}
             >
               <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-              {profile.newsletterSubscribed ? "Subscribed to newsletter" : "Not subscribed to newsletter"}
+              {profile.newsletterSubscribed ? t("account.newsletter.subscribed") : t("account.newsletter.not_subscribed")}
             </span>
           </div>
         </div>
@@ -748,9 +733,9 @@ function DashboardPanel({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Orders placed" value={(account?.orders.length || 0).toString()} />
-        <StatCard label="Saved addresses" value={[account?.billingAddress.address1, account?.shippingAddress.address1].filter(Boolean).length.toString()} />
-        <StatCard label="Publishing role" value={account?.role || "Member"} />
+        <StatCard label={t("account.stat.orders_placed")} value={(account?.orders.length || 0).toString()} />
+        <StatCard label={t("account.stat.saved_addresses")} value={[account?.billingAddress.address1, account?.shippingAddress.address1].filter(Boolean).length.toString()} />
+        <StatCard label={t("account.stat.publishing_role")} value={account?.role || t("account.role.member")} />
       </div>
 
       <section className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900">

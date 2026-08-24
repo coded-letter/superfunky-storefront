@@ -384,6 +384,7 @@ function CarouselShortcode({ attributes }: ShortcodeProps) {
 }
 
 function GridShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data: commerce, isLoading: commerceLoading, error: commerceError } = useCommerceData();
   const { data: blog, isLoading: blogLoading, error: blogError } = useBlogData();
   const { data: community, isLoading: communityLoading, error: communityError } = useCommunityData();
@@ -394,7 +395,7 @@ function GridShortcode({ attributes }: ShortcodeProps) {
   const subtitle = attributes.subtitle || "";
 
   if (type === "product") {
-    if (commerceLoading) return <ContentLoadingState compact label="Loading product grid" />;
+    if (commerceLoading) return <ContentLoadingState compact label={t("loading.product")} />;
     if (commerceError) return <ShortcodeStatus message={commerceError.message} isError />;
     const products = withCollectionOffset(filterProducts(commerce?.products || [], attributes), attributes.offset);
     if (!products.length) return <ShortcodeStatus message="No products matched this grid." />;
@@ -511,6 +512,7 @@ function TagsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function ProductTagsShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data, isLoading, error } = useCommerceData();
   const { configuredLanguageCodes, languageCode } = useLanguage();
   const include = csv(attributes.include);
@@ -523,7 +525,7 @@ function ProductTagsShortcode({ attributes }: ShortcodeProps) {
     attributes.offset,
     toInteger(attributes.limit, 24, 1, 100),
   );
-  if (isLoading) return <ContentLoadingState compact label="Loading product tags" />;
+  if (isLoading) return <ContentLoadingState compact label={t("loading.product")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
   if (!tags.length) return <ShortcodeStatus message="No product tags matched this shortcode." />;
   return (
@@ -572,6 +574,7 @@ function AuthorsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function ReviewsShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data, isLoading, error } = useCommerceData();
   const { discussionLayout } = useLayoutPreferences();
   const reviews = withCollectionOffset(
@@ -582,7 +585,7 @@ function ReviewsShortcode({ attributes }: ShortcodeProps) {
   );
   const layout = oneOf(attributes.layout, ["grid-4", "grid-3", "grid-5", "masonry", "compact"], "grid-4");
 
-  if (isLoading) return <ContentLoadingState compact label="Loading product reviews" />;
+  if (isLoading) return <ContentLoadingState compact label={t("loading.product")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
   if (!reviews.length) return <ShortcodeStatus message="No approved product reviews matched this shortcode." />;
 
@@ -669,6 +672,7 @@ function CommentsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function CommunityFeedShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const [searchParams] = useSearchParams();
   const { data, isLoading, error } = useCommunityData();
   const { languageCode } = useLanguage();
@@ -698,7 +702,7 @@ function CommunityFeedShortcode({ attributes }: ShortcodeProps) {
     : toBoolean(attributes["show-filters"]);
   const deepLinkTag = searchParams.get("tag");
 
-  if (isLoading) return <ContentLoadingState compact label="Loading community feed" />;
+  if (isLoading) return <ContentLoadingState compact label={t("loading.community_feed")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
   if (!posts.length) return <ShortcodeStatus message="No community posts matched this shortcode." />;
 

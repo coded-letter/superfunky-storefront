@@ -39,6 +39,8 @@ import {
 import { searchStorefront } from "./lib/search";
 import { submitNewsletterSubmission } from "./lib/submissions";
 import { isBackendConfigured, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { useIncrementalData } from "@funky/sdk/react";
+import { getFeaturedProduct } from "./lib/commerce";
 import { mountCmsScripts } from "./lib/pageScripts";
 import { getExistingSubscription, getPushPreferences, subscribeToPush, unsubscribeFromPush } from "./lib/push";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -88,7 +90,12 @@ function ConnectedStorefrontChrome() {
   const t = useT();
   const { showToast } = useToast();
   const { viewer, refresh: refreshCommunity } = useCommunityData();
-  const { showHeaderPublishButton } = useLayoutPreferences();
+  const { showCartDrawerPromotedProduct, showHeaderPublishButton } = useLayoutPreferences();
+  const { data: featuredProduct } = useIncrementalData(
+    `cart-featured-product:v1:${languageCode}`,
+    () => getFeaturedProduct(languageBackendCode),
+    isBackendConfigured && showCartDrawerPromotedProduct,
+  );
   const [isCommunityPublishOpen, setIsCommunityPublishOpen] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
@@ -201,7 +208,7 @@ function ConnectedStorefrontChrome() {
   return (
     <>
       <StorefrontChromeMockup
-        featuredProduct={isBackendConfigured ? undefined : MOCK_PRODUCTS[0]}
+        featuredProduct={isBackendConfigured ? featuredProduct ?? undefined : MOCK_PRODUCTS[0]}
         primaryNavigation={hideCheckoutNavigation ? [] : headerNavigation}
         mobileNavigation={hideCheckoutNavigation ? [] : mobileNavigation}
         footerColumns={hideCheckoutNavigation ? [] : footerColumns}

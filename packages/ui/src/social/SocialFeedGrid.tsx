@@ -4,23 +4,11 @@ import { SocialPostCard, type SocialPostCardData } from "./SocialPostCard";
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
 import { useTagInterests } from "../state";
+import { useT } from "../locale";
 
 export type SocialFeedLayout = "masonry" | "grid-3" | "grid-4" | "list" | "compact";
 export type SocialFeedLoadMode = "manual" | "infinite";
 type SocialFeedSort = "newest" | "oldest" | "popular";
-
-const LOAD_MODE_OPTIONS = [
-  { value: "manual" as const, label: "Load more", icon: LayoutList },
-  { value: "infinite" as const, label: "Infinite scroll", icon: RefreshCw },
-];
-
-const LAYOUT_OPTIONS: { value: SocialFeedLayout; label: string }[] = [
-  { value: "masonry", label: "Masonry" },
-  { value: "grid-3", label: "3 columns" },
-  { value: "grid-4", label: "4 columns" },
-  { value: "list", label: "List" },
-  { value: "compact", label: "Compact grid (profile-style)" },
-];
 
 const LAYOUT_ICON: Record<SocialFeedLayout, typeof LayoutGrid> = {
   masonry: LayoutGrid,
@@ -61,7 +49,7 @@ export type SocialFeedGridProps = {
  * optional tag filter unique to this feed.
  */
 export function SocialFeedGrid({
-  title = "Community feed",
+  title,
   subtitle,
   posts,
   pageSize = 12,
@@ -69,10 +57,24 @@ export function SocialFeedGrid({
   initialSelectedTags = [],
   defaultLayout = "masonry",
   defaultLoadMode = "manual",
-  emptyMessage = "No posts yet — be the first to share something here.",
+  emptyMessage,
   toolbarEnd,
   onToggleLike,
 }: SocialFeedGridProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("filters.default_title_social");
+  const resolvedEmptyMessage = emptyMessage ?? t("filters.default_empty_social");
+  const LOAD_MODE_OPTIONS = [
+    { value: "manual" as const, label: t("filters.load_more"), icon: LayoutList },
+    { value: "infinite" as const, label: t("filters.load_mode_infinite"), icon: RefreshCw },
+  ];
+  const LAYOUT_OPTIONS: { value: SocialFeedLayout; label: string }[] = [
+    { value: "masonry", label: t("filters.layout_masonry") },
+    { value: "grid-3", label: t("filters.layout_grid3") },
+    { value: "grid-4", label: t("filters.layout_grid4") },
+    { value: "list", label: t("filters.layout_list") },
+    { value: "compact", label: t("filters.layout_compact") },
+  ];
   const [layout, setLayout] = useState<SocialFeedLayout>(defaultLayout);
   const [loadMode, setLoadMode] = useState<SocialFeedLoadMode>(defaultLoadMode);
   const [query, setQuery] = useState("");
@@ -149,20 +151,20 @@ export function SocialFeedGrid({
     <section ref={sectionRef} className="sf-social-feed grid gap-5 scroll-mt-24">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div className="grid gap-1">
-          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
+          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{resolvedTitle}</h2>
           {subtitle ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            Showing <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visiblePosts.length}</span> of {filteredPosts.length}
+            {t("filters.showing_label")} <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visiblePosts.length}</span> {t("filters.showing_suffix", { total: filteredPosts.length })}
           </p>
-          <ViewSwitch label="Browse" options={LOAD_MODE_OPTIONS} value={loadMode} onChange={setLoadMode} />
+          <ViewSwitch label={t("filters.browse")} options={LOAD_MODE_OPTIONS} value={loadMode} onChange={setLoadMode} />
           <label className="hidden items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 sm:inline-flex">
             {(() => {
               const Icon = LAYOUT_ICON[layout];
               return <Icon className="h-3.5 w-3.5" aria-hidden="true" />;
             })()}
-            Layout
+            {t("filters.layout_label")}
             <select
               value={layout}
               onChange={(event) => handleLayoutChange(event.target.value as SocialFeedLayout)}
@@ -180,20 +182,20 @@ export function SocialFeedGrid({
       </header>
 
       {availableTags.length ? (
-        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={`${title} filters`}>
-          <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setVisibleCount(pageSize); }} placeholder="Search feed" aria-label="Search feed" className={filterControlClass} />
+        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={t("filters.aria_label", { title: resolvedTitle })}>
+          <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setVisibleCount(pageSize); }} placeholder={t("filters.search_feed")} aria-label={t("filters.search_feed")} className={filterControlClass} />
           {authors.length > 1 ? (
-            <select value={author} onChange={(event) => { setAuthor(event.target.value); setVisibleCount(pageSize); }} aria-label="Filter by author" className={filterControlClass}>
-              <option value="">All authors</option>
+            <select value={author} onChange={(event) => { setAuthor(event.target.value); setVisibleCount(pageSize); }} aria-label={t("filters.author_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_authors")}</option>
               {authors.map(([handle, name]) => <option key={handle} value={handle}>{name}</option>)}
             </select>
           ) : null}
-          <select value={sortBy} onChange={(event) => { setSortBy(event.target.value as SocialFeedSort); setVisibleCount(pageSize); }} aria-label="Sort feed" className={filterControlClass}>
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="popular">Most liked</option>
+          <select value={sortBy} onChange={(event) => { setSortBy(event.target.value as SocialFeedSort); setVisibleCount(pageSize); }} aria-label={t("filters.sort_feed_aria")} className={filterControlClass}>
+            <option value="newest">{t("filters.sort_newest")}</option>
+            <option value="oldest">{t("filters.sort_oldest")}</option>
+            <option value="popular">{t("filters.sort_popular")}</option>
           </select>
-          <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Interested in</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{t("filters.interested_in")}</span>
           {availableTags.map((tag) => {
             const isActive = activeTagFilter.includes(tag);
             return (
@@ -222,7 +224,7 @@ export function SocialFeedGrid({
               }}
               className="text-xs font-semibold text-zinc-400 underline-offset-2 hover:text-brand-600 hover:underline dark:text-zinc-500 dark:hover:text-brand-400"
             >
-              Clear filters
+              {t("filters.clear")}
             </button>
           ) : null}
         </div>
@@ -230,7 +232,7 @@ export function SocialFeedGrid({
 
       {!filteredPosts.length ? (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          {emptyMessage}
+          {resolvedEmptyMessage}
         </p>
       ) : (
         <>
@@ -252,7 +254,7 @@ export function SocialFeedGrid({
               onClick={() => setVisibleCount((count) => count + pageSize)}
               className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 shadow-soft transition hover:-translate-y-0.5 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
             >
-              Load more
+              {t("filters.load_more")}
             </button>
           ) : null}
 
@@ -260,10 +262,10 @@ export function SocialFeedGrid({
             <div ref={sentinelRef} className="flex h-10 items-center justify-center">
               {hasMore ? (
                 <span className="inline-flex items-center gap-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading more…
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> {t("filters.loading_more")}
                 </span>
               ) : filteredPosts.length > pageSize ? (
-                <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">You&apos;ve reached the end.</span>
+                <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">{t("filters.end_reached")}</span>
               ) : null}
             </div>
           ) : null}

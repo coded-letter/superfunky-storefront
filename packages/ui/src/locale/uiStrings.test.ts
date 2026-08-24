@@ -41,3 +41,19 @@ test("versioned locale values round-trip through the Control Center without esca
     assert.equal(Object.values(strings).some((value) => value.includes('"')), false);
   }
 });
+
+test("dynamic UI-string key maps stay inside the versioned contract", () => {
+  const english = readLocale("en");
+  const sources = [
+    readFileSync(new URL("../layout/CookieConsentBanner.tsx", import.meta.url), "utf8"),
+    readFileSync(new URL("../../../../apps/storefront/src/pages/AccountMockupPage.tsx", import.meta.url), "utf8"),
+  ];
+  const dynamicKeys = sources.flatMap((source) =>
+    Array.from(source.matchAll(/"(cookie\.(?:category|manager)\.[a-z0-9_.-]+|account\.guest\.[a-z0-9_.-]+)"/g), (match) => match[1]),
+  );
+
+  assert.ok(dynamicKeys.length > 0);
+  for (const key of dynamicKeys) {
+    assert.equal(typeof english[key], "string", `${key} must exist in the English UI-string contract`);
+  }
+});

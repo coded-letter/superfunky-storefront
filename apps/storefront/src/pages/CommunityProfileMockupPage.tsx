@@ -351,7 +351,7 @@ export function CommunityProfileMockupPage() {
   if (!user && (error || profileError)) {
     return (
       <section role="alert" className="mx-auto grid max-w-lg gap-3 rounded-3xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/60 dark:bg-red-950/30">
-        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Community profile unavailable</h1>
+        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t("community.profile.unavailable")}</h1>
         <p className="m-0 text-sm text-red-700 dark:text-red-300">{(profileError || error)?.message}</p>
       </section>
     );
@@ -372,18 +372,18 @@ export function CommunityProfileMockupPage() {
       {!user.isPublic ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
           <Lock className="h-3 w-3" aria-hidden="true" />
-          Private
+          {t("community.profile.private_badge")}
         </span>
       ) : null}
       {isCreator || isCollaborator ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
           <Sparkles className="h-3 w-3" aria-hidden="true" />
-          {isCollaborator ? "Collaborator" : "Creator"}
+          {isCollaborator ? t("community.role.collaborator") : t("community.role.creator")}
         </span>
       ) : null}
       {isOwnProfile ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-900/60 dark:text-brand-300">
-          That's you
+          {t("community.profile.own_badge")}
         </span>
       ) : null}
     </>
@@ -397,7 +397,7 @@ export function CommunityProfileMockupPage() {
         className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
-        Share a post
+        {t("community.share")}
       </button>
     ) : null
   ) : followersEnabled ? (
@@ -414,17 +414,17 @@ export function CommunityProfileMockupPage() {
       {effectiveRelationship === "accepted" ? (
         <>
           <UserCheck className="h-4 w-4" aria-hidden="true" />
-          Following
+          {t("community.follow.following")}
         </>
       ) : effectiveRelationship === "pending" ? (
         <>
           <UserCheck className="h-4 w-4" aria-hidden="true" />
-          Requested
+          {t("community.follow.requested")}
         </>
       ) : (
         <>
           <UserPlus className="h-4 w-4" aria-hidden="true" />
-          Follow
+          {t("community.follow.cta")}
         </>
       )}
     </button>
@@ -432,11 +432,11 @@ export function CommunityProfileMockupPage() {
 
   const statsNode = (
     <>
-      <ProfileStat value={feedPosts.length} label="Posts" />
-      {hasPublishingTabs ? <ProfileStat value={creatorArticles.length} label="Articles" /> : null}
-      {followersEnabled ? <ProfileStat value={effectiveFollowerCount} label="Followers" /> : null}
-      {followersEnabled ? <ProfileStat value={user.followingCount} label="Following" /> : null}
-      {hasPublishingTabs ? <ProfileStat value={creatorProducts.length} label="Listings" /> : null}
+      <ProfileStat value={feedPosts.length} label={t("community.stat.posts")} />
+      {hasPublishingTabs ? <ProfileStat value={creatorArticles.length} label={t("community.stat.articles")} /> : null}
+      {followersEnabled ? <ProfileStat value={effectiveFollowerCount} label={t("community.stat.followers")} /> : null}
+      {followersEnabled ? <ProfileStat value={user.followingCount} label={t("community.stat.following")} /> : null}
+      {hasPublishingTabs ? <ProfileStat value={creatorProducts.length} label={t("community.stat.listings")} /> : null}
     </>
   );
 
@@ -446,7 +446,7 @@ export function CommunityProfileMockupPage() {
       className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-zinc-500 no-underline transition hover:text-brand-600 dark:text-zinc-400 dark:hover:text-brand-400"
     >
       <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-      Community feed
+      {t("community.feed.title")}
     </Link>
   );
 
@@ -455,9 +455,9 @@ export function CommunityProfileMockupPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumbs
           items={[
-            { label: "Home", href: "/" },
-            { label: "Community", href: "/community" },
-            ...(isCreator || isCollaborator ? [{ label: "Community authors", href: "/community-author" }] : []),
+            { label: t("nav.home"), href: "/" },
+            { label: t("community.title"), href: "/community" },
+            ...(isCreator || isCollaborator ? [{ label: t("community.authors"), href: "/community-author" }] : []),
             { label: user.displayName },
           ]}
         />
@@ -480,11 +480,11 @@ export function CommunityProfileMockupPage() {
 
       {canViewFeed && (hasPublishingTabs || followersEnabled) ? (
         <div role="tablist" aria-label={t("community.profile.sections")} className="flex flex-wrap gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
-          <ProfileTabButton label={`Posts (${feedPosts.length})`} isActive={activeTab === "posts"} onClick={() => selectTab("posts")} />
-          {hasPublishingTabs ? <ProfileTabButton label={`Shop (${creatorProducts.length})`} isActive={activeTab === "shop"} onClick={() => selectTab("shop")} /> : null}
-          {hasPublishingTabs ? <ProfileTabButton label={`Articles (${creatorArticles.length})`} isActive={activeTab === "articles"} onClick={() => selectTab("articles")} /> : null}
-          {followersEnabled ? <ProfileTabButton label={`Followers (${effectiveFollowerCount})`} isActive={activeTab === "followers"} onClick={() => selectTab("followers")} /> : null}
-          {followersEnabled ? <ProfileTabButton label={`Following (${user.followingCount})`} isActive={activeTab === "following"} onClick={() => selectTab("following")} /> : null}
+          <ProfileTabButton label={t("community.tab.posts", { count: feedPosts.length })} isActive={activeTab === "posts"} onClick={() => selectTab("posts")} />
+          {hasPublishingTabs ? <ProfileTabButton label={t("community.tab.shop", { count: creatorProducts.length })} isActive={activeTab === "shop"} onClick={() => selectTab("shop")} /> : null}
+          {hasPublishingTabs ? <ProfileTabButton label={t("community.tab.articles", { count: creatorArticles.length })} isActive={activeTab === "articles"} onClick={() => selectTab("articles")} /> : null}
+          {followersEnabled ? <ProfileTabButton label={t("community.tab.followers", { count: effectiveFollowerCount })} isActive={activeTab === "followers"} onClick={() => selectTab("followers")} /> : null}
+          {followersEnabled ? <ProfileTabButton label={t("community.tab.following", { count: user.followingCount })} isActive={activeTab === "following"} onClick={() => selectTab("following")} /> : null}
         </div>
       ) : null}
 
@@ -493,7 +493,7 @@ export function CommunityProfileMockupPage() {
           <span className="grid h-12 w-12 place-items-center rounded-full bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
             <Lock className="h-5 w-5" aria-hidden="true" />
           </span>
-          <p className="m-0 font-semibold text-zinc-700 dark:text-zinc-200">This profile is private</p>
+          <p className="m-0 font-semibold text-zinc-700 dark:text-zinc-200">{t("community.profile.private")}</p>
           <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
             {effectiveRelationship === "pending"
               ? `Your request to follow @${user.handle} is waiting for approval.`
@@ -517,32 +517,32 @@ export function CommunityProfileMockupPage() {
           />
           {currentProfileData?.followingFeed.length ? (
             <SocialFeedGrid
-              title="Posts from followed profiles"
+              title={t("community.feed.following_title")}
               posts={currentProfileData.followingFeed}
               pageSize={12}
               defaultLayout="grid-3"
               onToggleLike={(post) => toggleCommunityPostLike(Number(post.id))}
             />
-          ) : <EmptyTabNotice text="No posts from followed profiles yet." />}
+          ) : <EmptyTabNotice text={t("community.feed.empty_following")} />}
         </div>
       ) : hasPublishingTabs && activeTab === "shop" ? (
         <div className="grid gap-5">
           {isOwnProfile ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Your shop</h2>
+              <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{t("community.shop.title")}</h2>
               <button
                 type="button"
                 onClick={() => setIsListProductOpen(true)}
                 className="inline-flex items-center gap-2 rounded-full bg-brand-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
               >
                 <PlusCircle className="h-4 w-4" aria-hidden="true" />
-                List a product
+                {t("community.list_product")}
               </button>
             </div>
           ) : null}
           {isOwnProfile && ownProducts.length ? (
             <div className="grid gap-2 rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-              <p className="m-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Manage your listings</p>
+              <p className="m-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t("community.shop.manage")}</p>
               {ownProducts.map((product) => (
                 <div key={product.id} className="flex items-center justify-between gap-3 text-sm">
                   <span className="truncate text-zinc-700 dark:text-zinc-200">{product.name}</span>
@@ -552,7 +552,7 @@ export function CommunityProfileMockupPage() {
                     className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Remove
+                    {t("community.remove")}
                   </button>
                 </div>
               ))}
@@ -579,27 +579,27 @@ export function CommunityProfileMockupPage() {
               ) : null}
             </div>
           ) : (
-            <EmptyTabNotice text="No listings yet." />
+            <EmptyTabNotice text={t("community.shop.empty")} />
           )}
         </div>
       ) : hasPublishingTabs && activeTab === "articles" ? (
         <div className="grid gap-5">
           {isOwnProfile ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Your articles</h2>
+              <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{t("community.articles.title")}</h2>
               <button
                 type="button"
                 onClick={() => setIsWriteArticleOpen(true)}
                 className="inline-flex items-center gap-2 rounded-full bg-brand-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
               >
                 <PenSquare className="h-4 w-4" aria-hidden="true" />
-                Write an article
+                {t("community.write")}
               </button>
             </div>
           ) : null}
           {isOwnProfile && ownArticles.length ? (
             <div className="grid gap-2 rounded-2xl border border-zinc-200/80 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-              <p className="m-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Manage your articles</p>
+              <p className="m-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t("community.articles.manage")}</p>
               {ownArticles.map((article) => (
                 <div key={article.id} className="flex items-center justify-between gap-3 text-sm">
                   <span className="truncate text-zinc-700 dark:text-zinc-200">{article.title}</span>
@@ -609,7 +609,7 @@ export function CommunityProfileMockupPage() {
                     className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Remove
+                    {t("community.remove")}
                   </button>
                 </div>
               ))}
@@ -636,7 +636,7 @@ export function CommunityProfileMockupPage() {
               ) : null}
             </div>
           ) : (
-            <EmptyTabNotice text="No articles yet." />
+            <EmptyTabNotice text={t("community.articles.empty")} />
           )}
         </div>
       ) : feedPosts.length ? (
@@ -649,7 +649,7 @@ export function CommunityProfileMockupPage() {
         />
       ) : (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          No posts yet.
+          {t("community.posts.empty")}
         </p>
       )}
 

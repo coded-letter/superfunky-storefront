@@ -216,7 +216,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
       const previews = await Promise.all(files.map(readImage));
       setImagePreviews((current) => [...current, ...previews].slice(0, 8));
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "An image could not be read.");
+      setSubmitError(error instanceof Error ? error.message : t("community.product.image_read_error"));
     }
     event.target.value = "";
   };
@@ -228,7 +228,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
       const readFiles = await Promise.all(files.map(readDownloadableFile));
       setDownloadableFiles((current) => [...current, ...readFiles].slice(0, 5));
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "A file could not be read.");
+      setSubmitError(error instanceof Error ? error.message : t("community.product.file_read_error"));
     }
     event.target.value = "";
   };
@@ -326,8 +326,8 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         }),
       });
       showToast({
-        title: isEditing ? "Product updated" : "Product listed",
-        description: isEditing ? "Your changes are now live." : "It now appears in your shop and the community marketplace.",
+        title: isEditing ? t("community.product.updated") : t("community.product.published"),
+        description: isEditing ? t("community.changes_live") : t("community.product.live"),
         tone: "success",
       });
       onClose();
@@ -345,7 +345,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
       className="sf-list-product-modal fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={isEditing ? "Edit product" : "List a new product"}
+      aria-label={isEditing ? t("community.product.edit_title") : t("community.product.create_title")}
       onClick={onClose}
     >
       <div
@@ -355,18 +355,18 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("community.modal.close")}
           className="absolute right-4 top-4 inline-grid h-9 w-9 place-items-center rounded-full bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
 
         <div className="grid gap-1 pr-8">
-          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{isEditing ? "Edit product" : "List a new product"}</h2>
+          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{isEditing ? t("community.product.edit_title") : t("community.product.create_title")}</h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
             {isEditing
-              ? "Update the details below — changes publish immediately to your marketplace shop."
-              : "Collaborator accounts can publish this product directly to their marketplace shop."}
+              ? t("community.product.edit_description")
+              : t("community.product.create_description")}
           </p>
         </div>
 
@@ -374,7 +374,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
           <label className="grid min-h-36 cursor-pointer place-items-center overflow-hidden rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-center transition hover:border-brand-300 dark:border-zinc-700 dark:bg-zinc-950">
             <span className="grid place-items-center gap-2 p-6 text-zinc-400 dark:text-zinc-500">
               <ImagePlus className="h-8 w-8" aria-hidden="true" />
-              <span className="text-sm font-semibold">{imagePreviews.length ? "Add more product images" : "Choose product images"}</span>
+              <span className="text-sm font-semibold">{imagePreviews.length ? t("community.product.media.add_more") : t("community.product.media.choose")}</span>
               <span className="text-xs">Up to 8 JPG, PNG, GIF, or WebP files · first image is featured</span>
             </span>
             <input multiple type="file" accept="image/png, image/jpeg, image/gif, image/webp" onChange={handleImageChange} className="sr-only" />
@@ -400,7 +400,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </div>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Product name</span>
+          <span>{t("community.product.field.name")}</span>
           <input
             type="text"
             value={name}
@@ -411,7 +411,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </label>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Brand</span>
+          <span>{t("community.product.field.brand")}</span>
           <input
             type="text"
             value={brand}
@@ -447,7 +447,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </div>
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Subtitle</span>
+          <span>{t("community.product.field.subtitle")}</span>
           <input
             type="text"
             value={subtitle}
@@ -458,7 +458,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </label>
 
         <div className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Product type</span>
+          <span>{t("community.product.field.type")}</span>
           <div className="grid grid-cols-3 gap-2 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
             {(["simple", "variable", "external"] as const).map((type) => (
               <button
@@ -575,7 +575,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </div> : productType === "external" ? (
           <div className="grid gap-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-700">
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>External product URL</span>
+              <span>{t("community.product.field.external_url")}</span>
               <input
                 type="url"
                 required
@@ -586,7 +586,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
               />
             </label>
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Button text</span>
+              <span>{t("community.product.field.button_text")}</span>
               <input
                 type="text"
                 value={buttonText}
@@ -600,7 +600,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
 
         <div className="grid grid-cols-2 gap-4">
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-            <span>SKU</span>
+            <span>{t("community.product.field.sku")}</span>
             <input
               type="text"
               value={sku}
@@ -611,7 +611,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
           </label>
           {productType === "simple" ? (
             <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-              <span>Stock quantity</span>
+              <span>{t("community.product.field.stock")}</span>
               <input
                 type="number"
                 min="0"
@@ -649,7 +649,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         </div> : null}
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Category</span>
+          <span>{t("community.product.field.category")}</span>
           <input
             type="text"
             value={category}
@@ -797,7 +797,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
         ) : null}
 
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>Description</span>
+          <span>{t("community.field.description")}</span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
@@ -815,7 +815,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
           className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
         >
           <Store className="h-4 w-4" aria-hidden="true" />
-          {isSubmitting ? (isEditing ? "Saving…" : "Publishing…") : isEditing ? "Save changes" : "List product"}
+          {isSubmitting ? (isEditing ? t("community.saving") : t("community.publishing")) : isEditing ? t("community.save_changes") : t("community.product.submit")}
         </button>
       </div>
     </div>,

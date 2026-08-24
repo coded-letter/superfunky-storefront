@@ -55,20 +55,20 @@ export function ReadingListMockupPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-5 dark:border-zinc-800">
         <div className="grid gap-1">
-          <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Reading list</h1>
+          <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t("nav.reading_list")}</h1>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            {ids.length} saved {ids.length === 1 ? "article" : "articles"}
-            {cap ? ` of ${cap}` : ""} · {isLoggedIn ? "synced to your account" : "persisted locally in this browser"}.
+            {t("reading_list.count", { count: ids.length, item: ids.length === 1 ? t("reading_list.item_singular") : t("reading_list.item_plural") })}
+            {cap ? ` ${t("reading_list.cap_suffix", { cap })}` : ""} · {isLoggedIn ? t("reading_list.sync_synced") : t("reading_list.sync_local")}.
           </p>
-          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">Sign in</Link> to sync your reading list across devices.</p> : null}
+          {!isLoggedIn ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400"><Link to="/login" className="font-semibold text-brand-600 dark:text-brand-300">{t("auth.login.cta")}</Link> {t("reading_list.sign_in_suffix")}</p> : null}
         </div>
       </div>
 
-      {syncError ? <SavedCollectionStatus message={`Your reading list could not be synced: ${syncError}`} /> : null}
-      {capError ? <SavedCollectionStatus message={`Your reading-list limit could not be loaded: ${capError}`} /> : null}
+      {syncError ? <SavedCollectionStatus message={t("reading_list.sync_error", { error: syncError })} /> : null}
+      {capError ? <SavedCollectionStatus message={t("reading_list.cap_error", { error: capError })} /> : null}
       {ids.length > 0 && isLoading ? <ContentLoadingState compact label={t("reading_list.loading")} /> : null}
       {ids.length > 0 && error ? (
-        <SavedCollectionStatus message={`Your saved articles could not be loaded: ${error.message}`} />
+        <SavedCollectionStatus message={t("reading_list.load_error", { message: error.message })} />
       ) : null}
       {!isLoading && !error && ids.length === 0 ? (
         <div className="grid justify-items-center gap-4 rounded-3xl border border-dashed border-zinc-300 bg-white p-12 text-center dark:border-zinc-700 dark:bg-zinc-900">
@@ -78,14 +78,14 @@ export function ReadingListMockupPage() {
           <div className="grid gap-1">
             <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("reading_list.empty")}</h2>
             <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-              Use the bookmark button on any article in the blog to save it for later reading.
+              {t("reading_list.empty_hint")}
             </p>
           </div>
           <Link
             to={blogPath}
             className="rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
           >
-            Browse the blog
+            {t("reading_list.browse_blog")}
           </Link>
         </div>
       ) : !isLoading && !error && savedPosts.length > 0 && layout === "editorial-2col" ? (
@@ -102,10 +102,10 @@ export function ReadingListMockupPage() {
                           <span
                             className="inline-block h-2 w-2 shrink-0 rounded-full bg-brand-500 shadow-glow"
                             aria-hidden="true"
-                            title="Unread"
+                            title={t("reading_list.unread_title")}
                           />
                         ) : null}
-                        {post.categories?.[0]?.name ?? "Journal"}
+                        {post.categories?.[0]?.name ?? t("reading_list.category_fallback")}
                       </span>
                       <button
                         type="button"
@@ -115,10 +115,10 @@ export function ReadingListMockupPage() {
                       >
                         {read ? (
                           <>
-                            <Check className="h-3 w-3" aria-hidden="true" /> Read
+                            <Check className="h-3 w-3" aria-hidden="true" /> {t("reading_list.read")}
                           </>
                         ) : (
-                          "Mark as read"
+                          t("reading_list.mark_read")
                         )}
                       </button>
                     </div>
@@ -135,7 +135,7 @@ export function ReadingListMockupPage() {
                     <p className="m-0 line-clamp-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{post.excerpt}</p>
                     <span className="text-xs text-zinc-400 dark:text-zinc-500">
                       {post.author.name}
-                      {post.readingTimeMinutes ? ` · ${post.readingTimeMinutes} min read` : ""}
+                      {post.readingTimeMinutes ? ` · ${t("reading_list.reading_time", { minutes: post.readingTimeMinutes })}` : ""}
                     </span>
                   </div>
                 );

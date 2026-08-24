@@ -276,6 +276,10 @@ type CatalogTagsResult = {
   productTags: { nodes: RawTerm[] } | null;
 };
 
+type FeaturedProductResult = {
+  products: { nodes: RawProductCard[] } | null;
+};
+
 type ProductBrandDirectoryResult = {
   productBrands: {
     nodes: RawTerm[];
@@ -414,6 +418,24 @@ const PRODUCT_CARD_FRAGMENT = /* GraphQL */ `
   fragment StorefrontProductCard on Product {
     ${PRODUCT_CARD_FIELDS}
   }
+`;
+
+export const FEATURED_PRODUCT_QUERY = /* GraphQL */ `
+  query StorefrontFeaturedProduct($language: LanguageCodeFilterEnum!) {
+    products(first: 1, where: { featured: true, language: $language }) {
+      nodes { ...StorefrontProductCard }
+    }
+  }
+  ${PRODUCT_CARD_FRAGMENT}
+`;
+
+export const COMPATIBLE_FEATURED_PRODUCT_QUERY = /* GraphQL */ `
+  query StorefrontFeaturedProductCompatible {
+    products(first: 1, where: { featured: true }) {
+      nodes { ...StorefrontProductCard }
+    }
+  }
+  ${PRODUCT_CARD_FRAGMENT}
 `;
 
 export const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
@@ -1034,6 +1056,18 @@ export async function getCommerceCatalog(languageCode: string, backendLanguageCo
   };
 }
 
+export async function getFeaturedProduct(backendLanguageCode: string): Promise<CmsProductCard | null> {
+  const data = await requestCommerceWithFallback<FeaturedProductResult>(
+    graphqlRequest,
+    FEATURED_PRODUCT_QUERY,
+    COMPATIBLE_FEATURED_PRODUCT_QUERY,
+    { language: backendLanguageCode },
+    isMissingProductOptionalFieldSchemaError,
+    shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE),
+  );
+  return data?.products?.nodes[0] ? mapProductCard(data.products.nodes[0]) : null;
+}
+
 export async function getProductBrandDirectory(
   languageCode = COMMERCE_SOURCE_LANGUAGE,
   backendLanguageCode = COMMERCE_SOURCE_LANGUAGE.toUpperCase(),
@@ -1389,6 +1423,7 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
   return {
     id: product.id,
     databaseId: product.databaseId,
+    featured: product.featured === true,
     href: product.uri || (product.slug ? `/product/${product.slug}/` : undefined),
     slug: product.slug || "",
     uri: product.uri || (product.slug ? `/product/${product.slug}/` : ""),

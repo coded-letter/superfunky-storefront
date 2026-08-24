@@ -233,6 +233,7 @@ html[data-storefront-checkout="true"] .storefront-recent-orders {
   inline-size: 100% !important;
   max-width: none;
   object-fit: cover !important;
+  object-position: center !important;
 }
 
 .shortcode-prerender-hero__overlay {

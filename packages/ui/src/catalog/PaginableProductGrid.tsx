@@ -4,14 +4,10 @@ import { ProductCard, type ProductCardData, type ProductCardVariant } from "./Pr
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
 import { createPaginationSequenceKey } from "../hooks/paginationState";
+import { useT } from "../locale";
 
 export type ProductGridVariant = "standard" | "compact" | "editorial";
 type LoadMode = "pages" | "infinite";
-
-const LOAD_MODE_OPTIONS = [
-  { value: "pages" as const, label: "Pages", icon: LayoutList },
-  { value: "infinite" as const, label: "Infinite scroll", icon: RefreshCw },
-];
 
 export type PaginableProductGridProps = {
   title?: string;
@@ -28,7 +24,7 @@ export type PaginableProductGridProps = {
 type ProductSort = "featured" | "price-asc" | "price-desc" | "rating" | "name";
 
 export function PaginableProductGrid({
-  title = "Products",
+  title,
   subtitle,
   products,
   pageSize = 8,
@@ -38,6 +34,12 @@ export function PaginableProductGrid({
   toolbarEnd,
   showFilters = true,
 }: PaginableProductGridProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("filters.default_title_products");
+  const LOAD_MODE_OPTIONS = [
+    { value: "pages" as const, label: t("filters.load_mode_pages"), icon: LayoutList },
+    { value: "infinite" as const, label: t("filters.load_mode_infinite"), icon: RefreshCw },
+  ];
   const [loadMode, setLoadMode] = useState<LoadMode>("pages");
   const [currentPage, setCurrentPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(pageSize);
@@ -120,52 +122,52 @@ export function PaginableProductGrid({
     <section ref={sectionRef} className="sf-product-grid grid gap-5 scroll-mt-24">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div className="grid gap-1">
-          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
+          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{resolvedTitle}</h2>
           {subtitle ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            Showing <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> of {filteredProducts.length}
+            {t("filters.showing_label")} <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> {t("filters.showing_suffix", { total: filteredProducts.length })}
           </p>
-          <ViewSwitch label="Browse" options={LOAD_MODE_OPTIONS} value={loadMode} onChange={handleModeChange} />
+          <ViewSwitch label={t("filters.browse")} options={LOAD_MODE_OPTIONS} value={loadMode} onChange={handleModeChange} />
           {toolbarEnd}
         </div>
       </header>
 
       {showFilters ? (
-        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={`${title} filters`}>
+        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={t("filters.aria_label", { title: resolvedTitle })}>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search products"
-            aria-label="Search products"
+            placeholder={t("filters.search_products")}
+            aria-label={t("filters.search_products")}
             className={filterControlClass}
           />
           {categories.length > 1 ? (
-            <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category" className={filterControlClass}>
-              <option value="">All categories</option>
+            <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label={t("filters.category_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_categories")}</option>
               {categories.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           ) : null}
           {brands.length > 1 ? (
-            <select value={brand} onChange={(event) => setBrand(event.target.value)} aria-label="Filter by brand" className={filterControlClass}>
-              <option value="">All brands</option>
+            <select value={brand} onChange={(event) => setBrand(event.target.value)} aria-label={t("filters.brand_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_brands")}</option>
               {brands.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           ) : null}
-          <select value={minimumRating} onChange={(event) => setMinimumRating(Number(event.target.value))} aria-label="Filter by minimum rating" className={filterControlClass}>
-            <option value={0}>Any rating</option>
-            <option value={3}>3+ stars</option>
-            <option value={4}>4+ stars</option>
-            <option value={4.5}>4.5+ stars</option>
+          <select value={minimumRating} onChange={(event) => setMinimumRating(Number(event.target.value))} aria-label={t("filters.rating_aria")} className={filterControlClass}>
+            <option value={0}>{t("filters.rating_any")}</option>
+            <option value={3}>{t("filters.rating_3")}</option>
+            <option value={4}>{t("filters.rating_4")}</option>
+            <option value={4.5}>{t("filters.rating_45")}</option>
           </select>
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as ProductSort)} aria-label="Sort products" className={filterControlClass}>
-            <option value="featured">Featured</option>
-            <option value="price-asc">Price: low to high</option>
-            <option value="price-desc">Price: high to low</option>
-            <option value="rating">Highest rated</option>
-            <option value="name">Name</option>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as ProductSort)} aria-label={t("filters.sort_products_aria")} className={filterControlClass}>
+            <option value="featured">{t("filters.sort_featured")}</option>
+            <option value="price-asc">{t("filters.sort_price_asc")}</option>
+            <option value="price-desc">{t("filters.sort_price_desc")}</option>
+            <option value="rating">{t("filters.sort_rating")}</option>
+            <option value="name">{t("filters.sort_name")}</option>
           </select>
           {query || category || brand || minimumRating > 0 || sortBy !== "featured" ? (
             <button
@@ -179,7 +181,7 @@ export function PaginableProductGrid({
               }}
               className="px-2 text-xs font-semibold text-zinc-500 underline-offset-2 hover:text-brand-600 hover:underline dark:text-zinc-400"
             >
-              Clear filters
+              {t("filters.clear")}
             </button>
           ) : null}
         </div>
@@ -200,19 +202,19 @@ export function PaginableProductGrid({
         </div>
       ) : (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          No products match these filters.
+          {t("filters.no_products_match")}
         </p>
       )}
 
       {loadMode === "pages" && totalPages > 1 ? (
-        <nav aria-label={`${title} pagination`} className="flex flex-wrap justify-center gap-1.5 pt-2">
+        <nav aria-label={t("filters.pagination_aria", { title: resolvedTitle })} className="flex flex-wrap justify-center gap-1.5 pt-2">
           <button
             type="button"
             onClick={() => changePage(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             className={`${pageButtonClass} px-3.5`}
           >
-            ← Prev
+            {t("filters.prev")}
           </button>
 
           {pageNumbers.map((pageNumber) => (
@@ -238,7 +240,7 @@ export function PaginableProductGrid({
             disabled={currentPage === totalPages}
             className={`${pageButtonClass} px-3.5`}
           >
-            Next →
+            {t("filters.next")}
           </button>
         </nav>
       ) : null}
@@ -247,10 +249,10 @@ export function PaginableProductGrid({
         <div ref={sentinelRef} className="flex h-10 items-center justify-center">
           {hasMoreInfinite ? (
             <span className="inline-flex items-center gap-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading more…
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> {t("filters.loading_more")}
             </span>
           ) : filteredProducts.length > pageSize ? (
-            <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">You&apos;ve reached the end.</span>
+            <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">{t("filters.end_reached")}</span>
           ) : null}
         </div>
       ) : null}

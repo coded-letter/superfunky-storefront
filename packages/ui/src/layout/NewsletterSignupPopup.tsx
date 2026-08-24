@@ -29,8 +29,8 @@ function writePopupState(next: PopupState) {
 
 export function NewsletterSignupPopup({
   onSubscribe,
-  title = "Be the first to know when the next favorite drops.",
-  description = "Join our insider list for early access, private offers, and curated stories from the Superfunky world.",
+  title,
+  description,
   privacyConsentLabel,
 }: {
   onSubscribe?: (email: string) => Promise<void>;
@@ -39,6 +39,8 @@ export function NewsletterSignupPopup({
   privacyConsentLabel?: string;
 }) {
   const t = useT();
+  const resolvedTitle = title ?? t("newsletter.default_title");
+  const resolvedDescription = description ?? t("newsletter.default_body");
   const resolvedPrivacyConsentLabel = privacyConsentLabel ?? t("newsletter.consent");
   const { playAction } = useSoundUX();
   const { showNewsletterPopup, newsletterPopupVariant, newsletterPopupCooldownDays } = useLayoutPreferences();
@@ -258,7 +260,7 @@ export function NewsletterSignupPopup({
 
     if (!agreed) {
       playAction("error");
-      setError("Please accept the privacy note to continue.");
+      setError(t("newsletter.consent"));
       return;
     }
 
@@ -295,12 +297,12 @@ export function NewsletterSignupPopup({
     <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[9px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500 sm:mt-6 sm:text-[10px] sm:tracking-[0.24em]">
       <span className="inline-flex items-center gap-1.5">
         <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span>Privacy respected</span>
+        <span>{t("newsletter.trust.privacy")}</span>
       </span>
       <span className="opacity-70">·</span>
-      <span>No spam</span>
+      <span>{t("newsletter.trust.no_spam")}</span>
       <span className="opacity-70">·</span>
-      <span>Easy unsubscribe</span>
+      <span>{t("newsletter.trust.easy_unsubscribe")}</span>
     </div>
   );
 
@@ -311,7 +313,7 @@ export function NewsletterSignupPopup({
       </div>
       <h4 className="font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("newsletter.subscribed")}</h4>
       <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-        Thanks for subscribing — expect a first look at our next drop and exclusive updates soon.
+        {t("newsletter.subscribed_body")}
       </p>
     </div>
   );
@@ -362,7 +364,7 @@ export function NewsletterSignupPopup({
           onClick={() => closePopup("dismissed")}
           className="text-sm font-semibold text-zinc-500 transition hover:text-brand-600 dark:text-zinc-400 dark:hover:text-brand-300"
         >
-          Maybe later
+          {t("newsletter.maybe_later")}
         </button>
       </div>
     </form>
@@ -372,7 +374,7 @@ export function NewsletterSignupPopup({
     <button
       type="button"
       onClick={() => closePopup("dismissed")}
-      aria-label="Close newsletter signup"
+      aria-label={t("nav.close_newsletter")}
       className="absolute right-4 top-4 z-10 inline-grid h-9 w-9 place-items-center rounded-full border border-zinc-200 bg-white/90 text-zinc-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-400 dark:hover:border-brand-500 dark:hover:text-brand-300"
     >
       <X className="h-4 w-4" aria-hidden="true" />
@@ -395,13 +397,13 @@ export function NewsletterSignupPopup({
           {closeButton}
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
             <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>Stay in the loop</span>
+            <span>{t("newsletter.eyebrow")}</span>
           </div>
           <h3 className="mt-3 font-display text-lg font-semibold leading-tight text-zinc-900 dark:text-zinc-100">
-            {title}
+            {resolvedTitle}
           </h3>
           <p className="m-0 mt-1.5 text-[13px] leading-5 text-zinc-500 dark:text-zinc-400">
-            {description}
+            {resolvedDescription}
           </p>
           {isSubscribed ? subscribedPanel : subscribeForm}
         </div>
@@ -433,10 +435,10 @@ export function NewsletterSignupPopup({
               <Sparkles className="h-6 w-6" aria-hidden="true" />
             </div>
             <h3 className="mt-4 font-display text-2xl font-bold leading-tight text-zinc-900 dark:text-zinc-100">
-              {title}
+              {resolvedTitle}
             </h3>
             <p className="m-0 mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              {description}
+              {resolvedDescription}
             </p>
             {isSubscribed ? subscribedPanel : subscribeForm}
             <div className="flex justify-center">{trustRow}</div>
@@ -479,8 +481,8 @@ export function NewsletterSignupPopup({
                             <ImagePlus className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden="true" />
                           </div>
                           <div className="space-y-1 px-4 sm:px-6">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500 sm:text-sm">Image placeholder</p>
-                            <p className="text-[11px] leading-5 text-zinc-500 sm:text-xs">Drop in a full-bleed product or editorial image here.</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500 sm:text-sm">{t("newsletter.image_placeholder_title")}</p>
+                            <p className="text-[11px] leading-5 text-zinc-500 sm:text-xs">{t("newsletter.image_placeholder_body")}</p>
                           </div>
                         </div>
                       </div>
@@ -495,14 +497,14 @@ export function NewsletterSignupPopup({
             <div className="space-y-3 sm:space-y-5">
               <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300 sm:text-[11px] sm:tracking-[0.24em]">
                 <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span className="break-words">Stay in the loop</span>
+                <span className="break-words">{t("newsletter.eyebrow")}</span>
               </div>
               <div className="space-y-2 sm:space-y-3">
                 <h3 className="max-w-[18rem] font-display text-[1.35rem] font-semibold leading-[1.05] text-zinc-900 sm:max-w-none sm:text-3xl sm:leading-[0.95] dark:text-zinc-100">
-                  {title}
+                  {resolvedTitle}
                 </h3>
                 <p className="m-0 max-w-xl text-[13px] leading-6 text-zinc-600 sm:text-[15px] sm:leading-7 dark:text-zinc-400">
-                  {description}
+                  {resolvedDescription}
                 </p>
               </div>
             </div>

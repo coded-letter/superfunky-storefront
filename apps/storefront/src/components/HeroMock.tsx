@@ -137,7 +137,7 @@ export function HeroMock({
             priority
             sizes="100vw"
             draggable={false}
-            className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-cover opacity-35"
+            className="pointer-events-none absolute inset-0 block !h-full !w-full max-w-none scale-105 object-cover object-center opacity-35"
           />
         ) : null}
         <div className="pointer-events-none absolute inset-0 bg-zinc-950/60" aria-hidden="true" />
@@ -188,7 +188,7 @@ export function HeroMock({
             sizes="100vw"
             draggable={false}
             aria-hidden="true"
-            className="absolute inset-0 !h-full !w-full max-w-none !rounded-none object-cover"
+            className="absolute inset-0 block !h-full !w-full max-w-none !rounded-none object-cover object-center"
           />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/5" aria-hidden="true" />
@@ -258,7 +258,7 @@ export function HeroMock({
               alt=""
               sizes="(min-width: 640px) 50vw, 100vw"
               draggable={false}
-              className="h-full w-full object-cover"
+              className="block !h-full !w-full max-w-none object-cover object-center"
             />
           ) : null}
         </div>
@@ -323,7 +323,7 @@ export function HeroMock({
             alt=""
             sizes="100vw"
             draggable={false}
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 block !h-full !w-full max-w-none object-cover object-center"
           />
           <span className="absolute inset-0 bg-zinc-950/65" aria-hidden="true" />
         </>

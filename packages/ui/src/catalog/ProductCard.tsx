@@ -54,6 +54,8 @@ export type ProductCardVariation = {
 export type ProductCardData = {
   id: string;
   databaseId?: number;
+  /** Mirrors WooCommerce's featured/star flag for promoted storefront placements. */
+  featured?: boolean;
   /** Overrides the legacy `/shop/:slug` destination with the canonical product URI. */
   href?: string;
   name: string;
@@ -206,30 +208,30 @@ export function ProductCard({
       );
   const expandablePills = [
     {
-      label: product.inStock === false ? "Sold out" : "Available",
+      label: product.inStock === false ? t("product.status.sold_out") : t("product.status.available"),
       className: product.inStock === false
         ? "bg-rose-600/90 text-white"
         : "bg-emerald-500/90 text-white dark:bg-emerald-400/85 dark:text-zinc-950",
     },
     discountPercent || product.badge?.toLowerCase() === "sale"
-      ? { label: discountPercent ? `${discountPercent}% promotion` : "Promotion", className: "bg-rose-500/90 text-white" }
+      ? { label: discountPercent ? t("product.status.promotion_percent", { percent: discountPercent }) : t("product.status.promotion"), className: "bg-rose-500/90 text-white" }
       : null,
     product.badge && product.badge.toLowerCase() !== "sale"
       ? { label: product.badge, className: "bg-zinc-950/85 text-white dark:bg-white/90 dark:text-zinc-950" }
       : product.isNew
-        ? { label: "New", className: "bg-brand-gradient text-white" }
+        ? { label: t("product.status.new"), className: "bg-brand-gradient text-white" }
         : null,
   ].filter((pill): pill is { label: string; className: string } => Boolean(pill)).slice(0, 3);
 
   const ctaLabel =
     showLearnMore
-      ? "Learn more"
+      ? t("product.cta.learn_more")
       : product.productType === "external"
         ? product.externalUrl
           ? t("product.buy_now")
-          : "View product"
+          : t("product.cta.view_product")
         : product.productType === "grouped"
-          ? "View products"
+          ? t("product.cta.view_products")
           : product.productType === "variable" && !product.variations?.length
             ? t("product.choose_options")
             : t("product.add_to_cart");
@@ -267,8 +269,8 @@ export function ProductCard({
     }
     if (product.productType === "variable" && (!selectedVariation || !selectedVariation.inStock)) {
       showToast({
-        title: "Variation unavailable",
-        description: "Choose an in-stock option combination.",
+        title: t("product.variation_unavailable.title"),
+        description: t("product.variation_unavailable.description"),
       });
       return;
     }
@@ -305,7 +307,7 @@ export function ProductCard({
           <Link
             to={product.href}
             draggable={false}
-            aria-label={`View ${product.name}`}
+            aria-label={t("product.cta.view_product_aria", { name: product.name })}
             onClick={() => playAction("navigation")}
             className="relative block h-full w-full overflow-hidden rounded-[inherit] no-underline"
           >
@@ -320,7 +322,7 @@ export function ProductCard({
               />
             ) : (
               <span className="grid h-full w-full place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">
-                {previewImages.length > 1 ? `Product image ${activeImageIndex + 1}` : "Product image"}
+                {previewImages.length > 1 ? t("product.image_alt_indexed", { index: activeImageIndex + 1 }) : t("product.image_alt")}
               </span>
             )}
           </Link>
@@ -335,7 +337,7 @@ export function ProductCard({
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-sm font-medium text-zinc-400 dark:text-zinc-500">
-            {previewImages.length > 1 ? `Product image ${activeImageIndex + 1}` : "Product image"}
+            {previewImages.length > 1 ? t("product.image_alt_indexed", { index: activeImageIndex + 1 }) : t("product.image_alt")}
           </div>
         )}
 
@@ -343,7 +345,7 @@ export function ProductCard({
 
         {!isExpandable && (product.badge ?? product.isNew) ? (
           <span className="absolute left-3 top-3 rounded-full bg-brand-gradient px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-white shadow-soft">
-            {product.badge ?? "New"}
+            {product.badge ?? t("product.status.new")}
           </span>
         ) : null}
 
@@ -399,7 +401,7 @@ export function ProductCard({
             }}
             className="absolute inset-x-3 bottom-3 translate-y-3 rounded-control bg-white/95 px-3 py-2 text-xs font-semibold text-zinc-900 opacity-0 shadow-soft backdrop-blur transition-all duration-300 group-hover/media:translate-y-0 group-hover/media:opacity-100 dark:bg-zinc-950/90 dark:text-zinc-100"
           >
-            Quick view
+            {t("product.cta.quick_view")}
           </button>
         ) : null}
 
@@ -415,14 +417,14 @@ export function ProductCard({
       {isGallery && previewImages.length > 1 ? (
         <div
           className="flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 pb-1 pt-0.5"
-          aria-label={`${product.name} gallery thumbnails`}
+          aria-label={t("product.cta.gallery_thumbnails_aria", { name: product.name })}
         >
           {previewImages.map((_, index) => (
             <button
               key={index}
               type="button"
               onClick={() => setActiveImageIndex(index)}
-              aria-label={`Show photo ${index + 1}`}
+              aria-label={t("product.cta.show_photo_aria", { index: index + 1 })}
               aria-current={index === activeImageIndex}
               className={`grid h-12 w-12 shrink-0 snap-start place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-zinc-100 to-zinc-200 text-[0.6rem] font-medium text-zinc-400 transition dark:from-zinc-800 dark:to-zinc-900 dark:text-zinc-500 ${
                 index === activeImageIndex ? "ring-2 ring-brand-500" : "opacity-70 hover:opacity-100"

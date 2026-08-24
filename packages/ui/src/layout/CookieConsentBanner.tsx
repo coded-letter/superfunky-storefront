@@ -24,28 +24,28 @@ type ManagerTab = "prefs" | "cookies";
 
 type ToggleConfig = {
   key: CookieCategory;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: typeof Megaphone;
 };
 
 const TOGGLES: ToggleConfig[] = [
   {
     key: "marketing",
-    label: "Marketing",
-    description: "Ads",
+    labelKey: "cookie.category.marketing",
+    descriptionKey: "cookie.category.marketing_desc",
     icon: Megaphone,
   },
   {
     key: "tracking",
-    label: "Tracking",
-    description: "Analytics",
+    labelKey: "cookie.category.tracking",
+    descriptionKey: "cookie.category.tracking_desc",
     icon: BarChart3,
   },
   {
     key: "performance",
-    label: "Performance",
-    description: "Layout",
+    labelKey: "cookie.category.performance",
+    descriptionKey: "cookie.category.performance_desc",
     icon: Gauge,
   },
 ];
@@ -128,11 +128,11 @@ const MOCK_COOKIES: MockCookie[] = [
   },
 ];
 
-const CATEGORY_LABELS: Record<MockCookie["category"], string> = {
-  functional: "Functional",
-  marketing: "Marketing",
-  tracking: "Tracking",
-  performance: "Performance",
+const CATEGORY_LABEL_KEYS: Record<MockCookie["category"], string> = {
+  functional: "cookie.category.functional",
+  marketing: "cookie.category.marketing",
+  tracking: "cookie.category.tracking",
+  performance: "cookie.category.performance",
 };
 
 const CATEGORY_ICONS: Record<MockCookie["category"], typeof ShieldCheck> = {
@@ -205,7 +205,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
   }, [isManagerOpen, consent, playAction]);
 
   const groupedCookies = (
-    Object.keys(CATEGORY_LABELS) as MockCookie["category"][]
+    Object.keys(CATEGORY_LABEL_KEYS) as MockCookie["category"][]
   ).map((category) => ({
     category,
     items: storedCookies
@@ -235,14 +235,12 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 {t("cookie.title")}
               </span>
               <p className="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                {providerName} uses cookies for the proper functioning of our
-                website, as well as for analytics and advertising purposes.
-                Learn more in our{" "}
+                {t("cookie.banner.description", { providerName })}{" "}
                 <Link
                   to="/privacy-policy#cookies"
                   className="font-medium text-brand-600 underline dark:text-brand-400"
                 >
-                  Cookies Policy
+                  {t("cookie.banner.policy_link")}
                 </Link>
                 .
               </p>
@@ -270,7 +268,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
               }}
               className="rounded-full bg-brand-gradient px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
             >
-              Accept all
+              {t("cookie.banner.accept_all")}
             </button>
           </div>
         </div>
@@ -322,12 +320,12 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                     {t("cookie.manage")}
                   </span>
                   <p className="m-0 max-w-sm text-xs leading-snug text-zinc-500 dark:text-zinc-400">
-                    Choose which optional cookies we may use.{" "}
+                    {t("cookie.manager.subtitle")}{" "}
                     <Link
                       to="/privacy-policy#cookies"
                       className="font-medium text-brand-600 underline underline-offset-2 dark:text-brand-400"
                     >
-                      Cookies Policy
+                      {t("cookie.banner.policy_link")}
                     </Link>
                   </p>
                 </div>
@@ -338,7 +336,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                   playAction("error");
                   closeManager();
                 }}
-                aria-label="Close"
+                aria-label={t("cookie.manager.close")}
                 className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
@@ -356,7 +354,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 }`}
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                Preferences
+                {t("cookie.manager.tab_preferences")}
               </button>
               <button
                 type="button"
@@ -368,7 +366,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 }`}
               >
                 <List className="h-3.5 w-3.5" aria-hidden="true" />
-                Cookies list
+                {t("cookie.manager.tab_cookies")}
               </button>
             </div>
 
@@ -377,7 +375,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 <div className="grid gap-2">
                   <div
                     className="flex items-center justify-between gap-3 rounded-2xl border border-brand-100 bg-brand-50/50 p-3 transition-all sm:p-4 dark:border-brand-500/20 dark:bg-brand-500/5"
-                    title="Required for core features — cart, wishlist, and remembering this choice."
+                    title={t("cookie.category.functional_title")}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-brand-600 shadow-soft dark:bg-zinc-800 dark:text-brand-300 sm:grid">
@@ -385,10 +383,10 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="m-0 text-sm font-semibold leading-tight text-zinc-800 dark:text-zinc-100">
-                          Functional
+                          {t("cookie.category.functional")}
                         </p>
                         <p className="m-0 hidden text-xs text-zinc-500 dark:text-zinc-400 sm:block">
-                          Always on
+                          {t("cookie.category.functional_desc")}
                         </p>
                       </div>
                     </div>
@@ -403,7 +401,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                     return (
                       <label
                         key={toggle.key}
-                        title={toggle.description}
+                        title={t(toggle.descriptionKey)}
                         className={`flex cursor-pointer items-center justify-between gap-3 rounded-2xl border p-3 transition-all duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 has-[:focus-visible]:ring-offset-1 dark:has-[:focus-visible]:ring-offset-zinc-900 sm:p-4 ${
                           isOn
                             ? "border-brand-200 bg-brand-50/40 dark:border-brand-500/25 dark:bg-brand-500/[0.06]"
@@ -434,10 +432,10 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="m-0 text-sm font-semibold leading-tight text-zinc-800 dark:text-zinc-100">
-                              {toggle.label}
+                              {t(toggle.labelKey)}
                             </p>
                             <p className="m-0 hidden text-xs text-zinc-500 dark:text-zinc-400 sm:block">
-                              {toggle.description}
+                              {t(toggle.descriptionKey)}
                             </p>
                           </div>
                         </div>
@@ -468,7 +466,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                     }}
                     className="flex-1 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-glow transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 sm:flex-none"
                   >
-                    Accept
+                    {t("cookie.manager.accept")}
                   </button>
                   <button
                     type="button"
@@ -478,7 +476,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                     }}
                     className="flex-1 rounded-xl border border-brand-300 px-4 py-2.5 text-sm font-bold text-brand-600 transition hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:border-brand-500/60 dark:text-brand-300 dark:hover:bg-brand-500/10 dark:focus-visible:ring-offset-zinc-900 sm:flex-none"
                   >
-                    Save
+                    {t("cookie.manager.save")}
                   </button>
                   <button
                     type="button"
@@ -488,7 +486,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                     }}
                     className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-bold text-zinc-600 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-offset-zinc-900 sm:flex-none"
                   >
-                    Decline
+                    {t("cookie.manager.decline")}
                   </button>
                 </div>
               </div>
@@ -505,7 +503,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                           aria-hidden="true"
                         />
                         <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                          {CATEGORY_LABELS[category]}
+                          {t(CATEGORY_LABEL_KEYS[category])}
                         </span>
                         <span className="text-[11px] font-medium text-zinc-300 dark:text-zinc-600">
                           · {items.length}
@@ -528,7 +526,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                                 />
                                 {item.provider}
                                 <span aria-hidden="true">·</span>
-                                Expires in {item.lifetime}
+                                {t("cookie.item.expires_in", { lifetime: item.lifetime })}
                               </p>
                             </div>
                             {item.deletable ? (
@@ -542,8 +540,8 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                                   )
                                 }
                                 className="inline-flex shrink-0 items-center gap-1 rounded-full p-2 text-zinc-400 opacity-100 transition-all duration-200 hover:bg-rose-50 hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
-                                title="Delete"
-                                aria-label={`Delete ${item.name}`}
+                                title={t("cookie.item.delete")}
+                                aria-label={t("cookie.item.delete_aria", { name: item.name })}
                               >
                                 <Trash2
                                   className="h-3.5 w-3.5"
@@ -552,7 +550,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                               </button>
                             ) : (
                               <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
-                                Required
+                                {t("cookie.item.required")}
                               </span>
                             )}
                           </li>
@@ -563,7 +561,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 })}
                 {storedCookies.length === 0 ? (
                   <p className="py-10 text-center text-xs text-zinc-400 dark:text-zinc-500">
-                    Nothing left to show.
+                    {t("cookie.manager.nothing_to_show")}
                   </p>
                 ) : null}
               </div>

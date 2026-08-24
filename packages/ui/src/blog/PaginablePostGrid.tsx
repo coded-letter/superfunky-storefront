@@ -4,14 +4,10 @@ import { PostCard, type PostCardData, type PostCardVariant } from "./PostCard";
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
 import { createPaginationSequenceKey } from "../hooks/paginationState";
+import { useT } from "../locale";
 
 export type PostGridVariant = "standard" | "compact" | "list";
 type LoadMode = "pages" | "infinite";
-
-const LOAD_MODE_OPTIONS = [
-  { value: "pages" as const, label: "Pages", icon: LayoutList },
-  { value: "infinite" as const, label: "Infinite scroll", icon: RefreshCw },
-];
 
 export type PaginablePostGridProps = {
   title?: string;
@@ -30,7 +26,7 @@ type PostSort = "default" | "newest" | "oldest" | "title";
  * behaviour, and its "Pages vs Infinite scroll" toggle, so the blog and shop grids feel
  * consistent. */
 export function PaginablePostGrid({
-  title = "Latest posts",
+  title,
   subtitle,
   posts,
   pageSize = 6,
@@ -39,6 +35,12 @@ export function PaginablePostGrid({
   toolbarEnd,
   showFilters = true,
 }: PaginablePostGridProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("filters.default_title_posts");
+  const LOAD_MODE_OPTIONS = [
+    { value: "pages" as const, label: t("filters.load_mode_pages"), icon: LayoutList },
+    { value: "infinite" as const, label: t("filters.load_mode_infinite"), icon: RefreshCw },
+  ];
   const [loadMode, setLoadMode] = useState<LoadMode>("pages");
   const [currentPage, setCurrentPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(pageSize);
@@ -125,44 +127,44 @@ export function PaginablePostGrid({
     <section ref={sectionRef} className="sf-post-grid grid gap-5 scroll-mt-24">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div className="grid gap-1">
-          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
+          <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{resolvedTitle}</h2>
           {subtitle ? <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            Showing <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> of {filteredPosts.length}
+            {t("filters.showing_label")} <span className="font-semibold text-zinc-800 dark:text-zinc-200">{visibleItems.length}</span> {t("filters.showing_suffix", { total: filteredPosts.length })}
           </p>
-          <ViewSwitch label="Browse" options={LOAD_MODE_OPTIONS} value={loadMode} onChange={handleModeChange} />
+          <ViewSwitch label={t("filters.browse")} options={LOAD_MODE_OPTIONS} value={loadMode} onChange={handleModeChange} />
           {toolbarEnd}
         </div>
       </header>
 
       {showFilters ? (
-        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={`${title} filters`}>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search posts" aria-label="Search posts" className={filterControlClass} />
+        <div className="flex flex-wrap items-center gap-2" role="search" aria-label={t("filters.aria_label", { title: resolvedTitle })}>
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("filters.search_posts")} aria-label={t("filters.search_posts")} className={filterControlClass} />
           {categories.length > 1 ? (
-            <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category" className={filterControlClass}>
-              <option value="">All categories</option>
+            <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label={t("filters.category_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_categories")}</option>
               {categories.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
             </select>
           ) : null}
           {tags.length > 1 ? (
-            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label="Filter by tag" className={filterControlClass}>
-              <option value="">All tags</option>
+            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("filters.tag_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_tags")}</option>
               {tags.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
             </select>
           ) : null}
           {authors.length > 1 ? (
-            <select value={author} onChange={(event) => setAuthor(event.target.value)} aria-label="Filter by author" className={filterControlClass}>
-              <option value="">All authors</option>
+            <select value={author} onChange={(event) => setAuthor(event.target.value)} aria-label={t("filters.author_aria")} className={filterControlClass}>
+              <option value="">{t("filters.all_authors")}</option>
               {authors.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           ) : null}
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as PostSort)} aria-label="Sort posts" className={filterControlClass}>
-            <option value="default">Default order</option>
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="title">Title</option>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as PostSort)} aria-label={t("filters.sort_posts_aria")} className={filterControlClass}>
+            <option value="default">{t("filters.sort_default_order")}</option>
+            <option value="newest">{t("filters.sort_newest")}</option>
+            <option value="oldest">{t("filters.sort_oldest")}</option>
+            <option value="title">{t("filters.sort_title")}</option>
           </select>
           {query || category || tag || author || sortBy !== "default" ? (
             <button
@@ -176,7 +178,7 @@ export function PaginablePostGrid({
               }}
               className="px-2 text-xs font-semibold text-zinc-500 underline-offset-2 hover:text-brand-600 hover:underline dark:text-zinc-400"
             >
-              Clear filters
+              {t("filters.clear")}
             </button>
           ) : null}
         </div>
@@ -192,19 +194,19 @@ export function PaginablePostGrid({
         </div>
       ) : (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          No posts match these filters.
+          {t("filters.no_posts_match")}
         </p>
       )}
 
       {loadMode === "pages" && totalPages > 1 ? (
-        <nav aria-label={`${title} pagination`} className="flex flex-wrap justify-center gap-1.5 pt-2">
+        <nav aria-label={t("filters.pagination_aria", { title: resolvedTitle })} className="flex flex-wrap justify-center gap-1.5 pt-2">
           <button
             type="button"
             onClick={() => changePage(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             className={`${pageButtonClass} px-3.5`}
           >
-            ← Prev
+            {t("filters.prev")}
           </button>
 
           {pageNumbers.map((pageNumber) => (
@@ -230,7 +232,7 @@ export function PaginablePostGrid({
             disabled={currentPage === totalPages}
             className={`${pageButtonClass} px-3.5`}
           >
-            Next →
+            {t("filters.next")}
           </button>
         </nav>
       ) : null}
@@ -239,10 +241,10 @@ export function PaginablePostGrid({
         <div ref={sentinelRef} className="flex h-10 items-center justify-center">
           {hasMoreInfinite ? (
             <span className="inline-flex items-center gap-2 text-xs font-medium text-zinc-400 dark:text-zinc-500">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading more…
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> {t("filters.loading_more")}
             </span>
           ) : filteredPosts.length > pageSize ? (
-            <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">You&apos;ve reached the end.</span>
+            <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">{t("filters.end_reached")}</span>
           ) : null}
         </div>
       ) : null}
