@@ -142,9 +142,7 @@ export function CommunityProfileMockupPage() {
         liveCommunity.profilesPublicEnabled,
       )
     : null);
-  const resolvedLiveMember = liveMember && !authoritativeMember && isProfileLoading
-    ? { ...liveMember, coverUrl: undefined }
-    : liveMember;
+  const resolvedLiveMember = liveMember;
   const followersEnabled = liveCommunity?.followersEnabled !== false;
   const user = resolvedLiveMember
     ? resolvedLiveMember
@@ -270,7 +268,7 @@ export function CommunityProfileMockupPage() {
     () => user
       ? liveMember && liveBlog
         ? (currentProfileData?.articles || liveBlog.posts.filter((post) => post.authorDatabaseId === user.databaseId))
-            .filter((post) => !filterByLanguage || post.languageCode?.toLowerCase() === languageCode)
+            .filter((post) => !filterByLanguage || !post.languageCode || post.languageCode.toLowerCase() === languageCode)
         : getCreatorArticles(user.handle, ownArticles)
       : [],
     [user, ownArticles, liveBlog, liveMember, currentProfileData, filterByLanguage, languageCode],

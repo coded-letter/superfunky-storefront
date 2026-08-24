@@ -25,18 +25,23 @@ const staticNavigationRuntimeSource = await readFile(new URL("../src/lib/staticN
 const assistantSource = await readFile(new URL("../src/components/AiShoppingAssistant.tsx", import.meta.url), "utf8");
 const cookieConsentSource = await readFile(new URL("../../../packages/ui/src/layout/CookieConsentBanner.tsx", import.meta.url), "utf8");
 
-test("flagship pages activate immediately while preserving the prerendered handoff", () => {
+test("managed storefronts preserve mobile performance and hydrate without scroll gates", () => {
   assert.match(mainSource, /const MIN_BOOTSTRAP_MS = hasPrerenderedChrome \? 0 : 320/);
-  assert.doesNotMatch(mainSource, /PRERENDER_IDLE_ACTIVATION_DELAY_MS|requestIdleCallback\(requestReactActivation/);
-  assert.doesNotMatch(mainSource, /window\.addEventListener\("load", scheduleIdleActivation/);
   assert.match(mainSource, /isFlagshipStorefront/);
+  assert.match(mainSource, /isManagedStorefront/);
   assert.match(mainSource, /location\.hostname\.endsWith\("--superfunky\.netlify\.app"\)/);
   assert.doesNotMatch(mainSource, /FLAGSHIP_SHADOW_VISIT_KEY|FLAGSHIP_BACKGROUND_MOUNT_DELAY_MS/);
   assert.doesNotMatch(mainSource, /scheduleFlagshipShadowApplication|storefront-react-shadow-mount/);
-  assert.match(mainSource, /else if \(isFlagshipStorefront\) \{/);
+  assert.match(mainSource, /else if \(isManagedStorefront\) \{/);
   assert.match(mainSource, /hasPreparedApplicationVisit = localStorage\.getItem\(RETURNING_PREPARATION_KEY\) === "1"/);
   assert.match(mainSource, /if \(hasPreparedApplicationVisit\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
-  assert.match(mainSource, /window\.requestAnimationFrame\(\(\) => requestReactActivation\(\)\)/);
+  assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS = 2_500/);
+  assert.match(mainSource, /if \(window\.matchMedia\("\(max-width: 767px\)"\)\.matches\) return/);
+  assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS - \(performance\.now\(\) - bootstrapStartedAt\)/);
+  assert.match(mainSource, /\[data-static-mobile-backdrop\]\.is-open, \.storefront-static-nav-item\.is-open/);
+  assert.match(mainSource, /window\.setTimeout\(activateWhenStaticControlsIdle, 1_000\)/);
+  assert.match(mainSource, /window\.requestIdleCallback\(activate, \{ timeout: 2_000 \}\)/);
+  assert.match(mainSource, /scheduleManagedStorefrontActivation\(\)/);
   assert.match(appSource, /hasPendingVisibleContent/);
   assert.doesNotMatch(mainSource, /const preparationEvents = \[[^\]]*"wheel"/);
   assert.match(mainSource, /preparationEvents\.forEach\(\(eventName\) =>/);
@@ -50,12 +55,17 @@ test("flagship pages activate immediately while preserving the prerendered hando
   assert.match(mainSource, /replayControlActivation\(attempt \+ 1\)/);
   assert.match(mainSource, /data-storefront-control=/);
   assert.match(prerenderSource, /data-static-control=.*data-storefront-activate/);
-  assert.match(prerenderSource, /isFlagshipStaticInteractions/);
+  assert.match(prerenderSource, /hasInteractiveStaticChrome/);
   assert.match(mainSource, /if \(!activationRequested\) activationScrollY = window\.scrollY/);
   assert.match(mainSource, /const handoffScrollY = activationScrollY/);
-  assert.match(mainSource, /restoreHandoffScrollPosition\(handoffScrollY\)/);
   assert.doesNotMatch(mainSource, /restoreHandoffScrollPosition\(targetScrollY, attempt \+ 1\)/);
   assert.match(mainSource, /restoreHandoffScrollPosition\(handoffScrollY, true\)/);
+  assert.match(mainSource, /prerenderRoot\.replaceWith\(root\)/);
+  assert.match(mainSource, /root\.style\.removeProperty\("top"\);\s*void root\.offsetHeight;\s*root\.removeAttribute\("inert"\);\s*root\.id = "root"/);
+  assert.match(mainSource, /root\.style\.top = `\$\{Math\.max\(0, window\.scrollY \+ staticMain\.getBoundingClientRect\(\)\.top\)\}px`/);
+  assert.match(mainSource, /activationRequested = true;\s*alignHiddenReactStage\(\);/);
+  assert.doesNotMatch(mainSource, /prerenderRoot\.classList\.add\("is-replaced"\)/);
+  assert.match(indexSource, /#storefront-react-root\[inert\] \{[\s\S]*display: block;[\s\S]*visibility: hidden;/);
   assert.match(mainSource, /resizeObserver\.observe\(root\)/);
   assert.match(mainSource, /stopTimer = setTimeout\(stop, 2_000\)/);
   assert.match(mainSource, /activationShortcodeAnchor/);
@@ -347,14 +357,18 @@ test("fleet prerendered CMS content mounts lightweight native behaviors while id
   assert.match(mainSource, /Static CMS behaviors could not be loaded/);
 });
 
-test("developer native-only pages activate the application on early user intent", () => {
-  assert.match(mainSource, /const isDeveloperStorefront = \(\(\) =>/);
-  assert.match(mainSource, /hostname === "developer\.superfunky\.pro"/);
-  assert.match(mainSource, /if \(prerenderRoot && isDeveloperStorefront\)/);
-  assert.match(mainSource, /prepareApplication\(\)[\s\S]*requestReactActivation\(\)/);
-  assert.match(mainSource, /const developerActivationEvents = \["pointerover", "focusin", "scroll", "touchstart"\]/);
-  assert.match(mainSource, /window\.addEventListener\(eventName, activateDeveloperApplication, \{ passive: true, once: true \}\)/);
-  assert.doesNotMatch(mainSource, /DOMContentLoaded", activateDeveloperApplication/);
+test("developer and fleet sites receive bounded automatic hydration", () => {
+  assert.match(mainSource, /configuredHostname\.endsWith\("\.superfunky\.pro"\)/);
+  assert.match(mainSource, /import\.meta\.env\.VITE_GRAPHQL_ENDPOINT/);
+  assert.match(mainSource, /configuredBackendHostname\.endsWith\("\.superfunky\.pro"\)/);
+  assert.match(mainSource, /location\.hostname\.endsWith\("\.superfunky\.pro"\)/);
+  assert.match(mainSource, /location\.hostname\.endsWith\("\.netlify\.app"\)/);
+  assert.match(mainSource, /scheduleManagedStorefrontActivation/);
+  assert.doesNotMatch(mainSource, /developerActivationEvents|activateDeveloperApplication/);
+  assert.match(prerenderSource, /const hasInteractiveStaticChrome = \[configuredSiteHostname, configuredBackendHostname\]/);
+  assert.match(prerenderSource, /const mobileNavigation = hasInteractiveStaticChrome/);
+  assert.doesNotMatch(appSource, /isGeneratedHome && generatedPayload && !Object\.values\(requirements\)\.some\(Boolean\)/);
+  assert.match(appSource, /<CommunityDataProvider[\s\S]*enabled=\{enabled && requirements\.community\}/);
 });
 
 test("service worker does not precache deployment-racy HTML", () => {

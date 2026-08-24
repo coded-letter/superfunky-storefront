@@ -781,10 +781,13 @@ function CommunityTagPicksShortcode({ attributes }: ShortcodeProps) {
 function CommunityMembersShortcode({ attributes }: ShortcodeProps) {
   const { data, isLoading, error } = useCommunityData();
   const include = csv(attributes.include);
+  const permission = attributes.permission && attributes.permission !== "all"
+    ? attributes.permission
+    : attributes.role;
   const members = withCollectionOffset(
     (data?.members || []).filter((member) =>
       member.isPublic &&
-      (attributes.role === "all" || !attributes.role || member.role === attributes.role) &&
+      (permission === "all" || !permission || member.role === permission) &&
       (!include.length || include.includes(member.handle)),
     ),
     attributes.offset,
@@ -1027,6 +1030,7 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
   const deepLinkOrderId = Number(deepLink.get("order_id") || 0);
   const deepLinkOrderKey = deepLink.get("key") || "";
   const deepLinkEmail = deepLink.get("email") || "";
+  const deepLinkAccessToken = deepLink.get("access_token") || "";
   const refreshIntervalMs = 10_000;
 
   useEffect(() => {
@@ -1101,7 +1105,7 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
     const orderId = confirmation?.order.order_id || deepLinkOrderId;
     const orderKey = confirmation?.order.order_key || deepLinkOrderKey;
     const billingEmail = confirmation?.billingEmail || deepLinkEmail;
-    if (!orderId || (!confirmation && (!orderKey || !billingEmail))) return;
+    if (!orderId || (!confirmation && !deepLinkAccessToken && (!orderKey || !billingEmail))) return;
 
     let cancelled = false;
     let refreshTimer = 0;
@@ -1110,7 +1114,12 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
     setDownloadsError(null);
     const refreshDownloads = async () => {
       try {
-        const result = await getOrderDownloadAccess({ orderId, orderKey, billingEmail });
+        const result = await getOrderDownloadAccess({
+          orderId,
+          orderKey,
+          billingEmail,
+          accessToken: deepLinkAccessToken,
+        });
         if (cancelled) return;
         setDownloadAccess(result);
         setDownloadsError(null);
@@ -1137,10 +1146,14 @@ export function OrderSuccessShortcode({ attributes }: ShortcodeProps) {
       cancelled = true;
       window.clearTimeout(refreshTimer);
     };
-  }, [confirmation, deepLinkOrderId, deepLinkOrderKey, deepLinkEmail]);
+  }, [confirmation, deepLinkAccessToken, deepLinkOrderId, deepLinkOrderKey, deepLinkEmail]);
 
   if (!confirmation) {
-    if (mode === "digital" && deepLinkOrderId && deepLinkOrderKey && deepLinkEmail) {
+    if (
+      mode === "digital"
+      && deepLinkOrderId
+      && (deepLinkAccessToken || (deepLinkOrderKey && deepLinkEmail))
+    ) {
       return (
         <ShortcodeSection title={t("order_success.section_digital")}>
           <div className="grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">

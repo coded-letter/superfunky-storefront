@@ -557,7 +557,7 @@ function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: numb
       <div className="flex items-center justify-between gap-2">
         <a
           href={item.href}
-          className={`${depth ? "text-zinc-500" : "text-zinc-400"} text-sm no-underline transition hover:text-white`}
+          className={`${depth ? "text-zinc-500" : "text-zinc-400"} inline-flex min-h-12 items-center py-2 text-sm no-underline transition hover:text-white`}
         >
           {item.label}
         </a>
@@ -567,7 +567,7 @@ function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: numb
             onClick={() => setIsExpanded((value) => !value)}
             aria-expanded={isExpanded}
             aria-label={t(isExpanded ? "footer.nav.collapse" : "footer.nav.expand", { label: item.label })}
-            className="-mr-1 inline-grid h-6 w-6 shrink-0 place-items-center rounded-full text-zinc-500 transition hover:text-white"
+            className="-mr-1 inline-grid h-12 w-12 shrink-0 place-items-center rounded-full text-zinc-500 transition hover:text-white"
           >
             <ChevronRight
               className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? "rotate-90 text-brand-400" : ""}`}

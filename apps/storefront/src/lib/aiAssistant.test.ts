@@ -39,6 +39,7 @@ test("imports the Command component used by the assistant header icon registry",
 test("accepts production configurations without new header icon fields", () => {
   assert.match(assistantSource, /headerIcons\?\.assistant/);
   assert.match(assistantSource, /headerIconMedia\?\.assistant/);
+  assert.match(headerSource, /"message-circle": MessageCircle/);
 });
 
 test("does not probe optional assistant REST routes when the backend disables the assistant", () => {

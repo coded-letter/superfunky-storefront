@@ -25,7 +25,7 @@ export function AuthorMockupPage() {
   const requestedLanguage = explicitLanguage || languageCode;
   const requestedBackendLanguage = languageOptions.find(({ code }) => code === requestedLanguage)?.backendCode;
   const { data: author, isLoading, error } = useIncrementalData(
-    `author:${slug}:${requestedLanguage}:${requestedBackendLanguage}:${configuredLanguageCodes.join(",")}`,
+    `author:v2:${slug}:${requestedLanguage}:${requestedBackendLanguage}:${configuredLanguageCodes.join(",")}`,
     () => getAuthorArchive(
       slug,
       requestedBackendLanguage || requestedLanguage.toUpperCase(),

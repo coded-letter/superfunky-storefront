@@ -2,6 +2,7 @@ import "./styles.css";
 import { activatePrerenderImages } from "./lib/prerenderImages";
 import { captureInitialCmsPageMarkup } from "./lib/prerenderSnapshot";
 import { installStaticDocumentWarmup } from "./lib/storefrontDocumentWarmup";
+import { startRecentOrdersNotifier } from "./lib/recentOrders";
 
 let hasMounted = false;
 const initialRoot = document.getElementById("root")!;
@@ -9,6 +10,7 @@ const bootstrapOverlay = document.getElementById("storefront-bootstrap");
 const bootstrapStartedAt = performance.now();
 const hasPrerenderedContent = Boolean(initialRoot.querySelector("#prerendered-storefront"));
 const hasPrerenderedChrome = Boolean(initialRoot.querySelector("[data-prerendered-chrome]"));
+const prerenderedChrome = initialRoot.querySelector<HTMLElement>("[data-prerendered-chrome]");
 const MIN_BOOTSTRAP_MS = hasPrerenderedChrome ? 0 : 320;
 const FONT_SETTLE_TIMEOUT_MS = 600;
 const RELOAD_FONT_SETTLE_TIMEOUT_MS = 3_000;
@@ -28,12 +30,27 @@ const isFlagshipStorefront = (() => {
     return location.hostname === "superfunky.pro";
   }
 })();
-const isDeveloperStorefront = (() => {
+const isManagedStorefront = (() => {
   try {
     const configuredSiteUrl = import.meta.env.VITE_SITE_URL?.trim() || location.origin;
-    return new URL(configuredSiteUrl, location.origin).hostname === "developer.superfunky.pro";
+    const configuredHostname = new URL(configuredSiteUrl, location.origin).hostname;
+    const configuredBackendHostname = new URL(
+      import.meta.env.VITE_GRAPHQL_ENDPOINT?.trim() || location.origin,
+      location.origin,
+    ).hostname;
+    const isManagedConfiguration = configuredHostname === "superfunky.pro"
+      || configuredHostname.endsWith(".superfunky.pro")
+      || configuredBackendHostname === "superfunky.pro"
+      || configuredBackendHostname.endsWith(".superfunky.pro");
+    const isManagedRuntime = location.hostname === "superfunky.pro"
+      || location.hostname.endsWith(".superfunky.pro")
+      || location.hostname === "127.0.0.1"
+      || location.hostname === "localhost"
+      || location.hostname.endsWith(".netlify.app");
+    return isManagedConfiguration && isManagedRuntime;
   } catch {
-    return location.hostname === "developer.superfunky.pro";
+    return location.hostname === "superfunky.pro"
+      || location.hostname.endsWith(".superfunky.pro");
   }
 })();
 let root = initialRoot;
@@ -99,6 +116,21 @@ const initialFontsReady = document.fonts.status === "loaded"
       void document.fonts.ready.then(finish);
     });
 const initialVisualsReady = Promise.all([domReady, initialFontsReady]);
+if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
+  const endpoint = new URL(
+    "/wp-json/funkycommerce/v1/recent-orders",
+    import.meta.env.VITE_GRAPHQL_ENDPOINT?.trim() || location.origin,
+  ).toString();
+  void startRecentOrdersNotifier({
+      enabled: true,
+      itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
+      intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
+      endpoint,
+    })
+    .catch((error) => {
+      console.error("Recent-order notifications could not start.", error);
+    });
+}
 const currentDocumentKey = `${location.pathname}${location.search}${location.hash}`;
 let savedReloadScrollY = 0;
 try {
@@ -240,10 +272,15 @@ const showInteractionFailure = () => {
 
 const prepareReactShell = () => {
   root.removeAttribute("aria-busy");
-  root.removeAttribute("inert");
   dismissBootstrapOverlay();
+  if (!prerenderRoot) root.removeAttribute("inert");
+};
+
+const alignHiddenReactStage = () => {
   if (!prerenderRoot) return;
-  root.classList.add("is-ready");
+  const staticMain = prerenderRoot.querySelector<HTMLElement>("#prerendered-storefront");
+  if (!staticMain) return;
+  root.style.top = `${Math.max(0, window.scrollY + staticMain.getBoundingClientRect().top)}px`;
 };
 
 const revealReactShell = () => {
@@ -253,27 +290,26 @@ const revealReactShell = () => {
   performance.mark("storefront:handoff");
   prepareReactShell();
   if (!prerenderRoot) return;
+  prerenderRoot.setAttribute("aria-hidden", "true");
+  prerenderRoot.setAttribute("inert", "");
+  root.classList.remove("storefront-react-stage", "is-ready");
+  prerenderRoot.replaceWith(root);
+  root.style.removeProperty("top");
+  void root.offsetHeight;
+  root.removeAttribute("inert");
+  root.id = "root";
+  stopPrerenderImageLoading();
+  stopStaticDocumentWarmup();
+  stopStaticSubmenus();
+  stopStaticMobileNavigation();
+  stopStaticHeaderBehavior();
+  stopStaticCmsBehaviors();
+  restoreHandoffScrollPosition(handoffScrollY, true);
+  document.documentElement.classList.remove("storefront-instant-handoff");
+  removeActivationListeners();
   queueMicrotask(() => {
     replayLanguageSwitcherActivation();
     replayControlActivation();
-    prerenderRoot.setAttribute("aria-hidden", "true");
-    prerenderRoot.setAttribute("inert", "");
-    prerenderRoot.classList.add("is-replaced");
-    restoreHandoffScrollPosition(handoffScrollY);
-    window.setTimeout(() => {
-      prerenderRoot.remove();
-      stopPrerenderImageLoading();
-      stopStaticDocumentWarmup();
-      stopStaticSubmenus();
-      stopStaticMobileNavigation();
-      stopStaticHeaderBehavior();
-      stopStaticCmsBehaviors();
-      root.id = "root";
-      root.classList.remove("storefront-react-stage", "is-ready");
-      restoreHandoffScrollPosition(handoffScrollY, true);
-      document.documentElement.classList.remove("storefront-instant-handoff");
-      removeActivationListeners();
-    }, 180);
   });
 };
 
@@ -395,7 +431,6 @@ const finishWhenReactCoherent = () => {
   if (!reactShellReady) return;
   if (prerenderRoot) {
     if (!activationRequested) return;
-    prepareReactShell();
     if (reactVisibleReady) finishBootstrap();
     return;
   }
@@ -418,6 +453,7 @@ const requestReactActivation = (event?: Event | IdleDeadline) => {
   }
   if (!activationRequested) activationScrollY = window.scrollY;
   activationRequested = true;
+  alignHiddenReactStage();
   performance.mark("storefront:activation-requested");
   removePreparationListeners();
   if (event instanceof Event && event.type === "click" && waitingControl) {
@@ -833,22 +869,6 @@ if (prerenderRoot) {
     };
   }
 }
-if (prerenderRoot && isDeveloperStorefront) {
-  const developerActivationEvents = ["pointerover", "focusin", "scroll", "touchstart"] as const;
-  const activateDeveloperApplication = () => {
-    developerActivationEvents.forEach((eventName) => {
-      window.removeEventListener(eventName, activateDeveloperApplication);
-    });
-    void prepareApplication()
-      .then(() => requestReactActivation())
-      .catch((error) => {
-        console.error("Developer storefront intent activation failed.", error);
-      });
-  };
-  developerActivationEvents.forEach((eventName) => {
-    window.addEventListener(eventName, activateDeveloperApplication, { passive: true, once: true });
-  });
-}
 if (hasPrerenderedChrome) {
   dismissBootstrapOverlay();
 }
@@ -898,6 +918,7 @@ const mountApplication = async () => {
 };
 
 const RETURNING_PREPARATION_KEY = "storefront:application-prepared";
+const COLD_DESKTOP_ACTIVATION_DELAY_MS = 2_500;
 let applicationPreparation: ReturnType<typeof loadApplication> | null = null;
 function loadApplication() {
   const hydrationPayloads = loadStaticHydrationPayloads();
@@ -933,6 +954,29 @@ const prepareApplication = () => {
   });
   return applicationPreparation;
 };
+const scheduleManagedStorefrontActivation = () => {
+  if (window.matchMedia("(max-width: 767px)").matches) return;
+  const remainingDelay = Math.max(
+    0,
+    COLD_DESKTOP_ACTIVATION_DELAY_MS - (performance.now() - bootstrapStartedAt),
+  );
+  const activateWhenStaticControlsIdle = () => {
+    if (activationRequested) return;
+    if (prerenderRoot?.querySelector(
+      "[data-static-mobile-backdrop].is-open, .storefront-static-nav-item.is-open",
+    )) {
+      window.setTimeout(activateWhenStaticControlsIdle, 1_000);
+      return;
+    }
+    const activate = () => requestReactActivation();
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(activate, { timeout: 2_000 });
+    } else {
+      activate();
+    }
+  };
+  window.setTimeout(activateWhenStaticControlsIdle, remainingDelay);
+};
 function requestReactPreparation(event: Event) {
   const target = event.target as Element | null;
   if (target?.closest(
@@ -949,7 +993,7 @@ function requestReactPreparation(event: Event) {
 
 if (!prerenderRoot) {
   void mountApplication();
-} else if (isFlagshipStorefront) {
+} else if (isManagedStorefront) {
   let hasPreparedApplicationVisit = false;
   try {
     hasPreparedApplicationVisit = localStorage.getItem(RETURNING_PREPARATION_KEY) === "1";
@@ -960,7 +1004,7 @@ if (!prerenderRoot) {
     document.documentElement.classList.add("storefront-instant-handoff");
     requestReactActivation();
   } else {
-    window.requestAnimationFrame(() => requestReactActivation());
+    scheduleManagedStorefrontActivation();
   }
 } else {
   try {

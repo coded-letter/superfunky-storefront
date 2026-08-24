@@ -81,7 +81,7 @@
       html,
       body { background: var(--storefront-bootstrap-bg); }
       #storefront-react-root[inert] {
-        display: none;
+        display: block;
         opacity: 0;
         pointer-events: none;
         visibility: hidden;
@@ -902,11 +902,16 @@
         padding-left: .75rem;
       }
       .storefront-static-footer-column a {
+        align-items: center;
         color: rgb(82 82 91);
+        display: flex;
         font-size: .8125rem;
         line-height: 1.35;
+        min-height: 48px;
         overflow-wrap: anywhere;
+        padding: .5rem 0;
         text-decoration: none;
+        touch-action: manipulation;
       }
       .storefront-static-footer-column a:hover,
       .storefront-static-footer-column a:focus-visible {

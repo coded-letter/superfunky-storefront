@@ -28,6 +28,8 @@ test("community grid cards cover their locked aspect while compact thumbnails re
   assert.match(card, /fit="cover"[\s\S]*lockAspect=\{layout !== "masonry"\}/);
   assert.match(gallery, /object-contain object-right/);
   assert.match(gallery, /object-cover/);
+  assert.match(gallery, /style=\{lockAspect \? undefined : \{ aspectRatio: activeAspect \}\}/);
+  assert.match(gallery, /relative h-full w-full min-h-0 min-w-0/);
 });
 
 test("community grid videos expose playable overlay controls", () => {
@@ -43,6 +45,8 @@ test("grouped community cards switch media without activating card navigation", 
   assert.match(gallery, /event\.stopPropagation\(\)/);
   assert.match(gallery, /aria-pressed=\{index === activeIndex\}/);
   assert.match(card, /closest\("a, button, input, textarea, select"\)/);
+  assert.match(gallery, /media\[\(activeIndex \+ 1\) % media\.length\]/);
+  assert.match(gallery, /image\.srcset = item\.srcSet/);
 });
 
 test("community post detail gallery opens an accessible image and video lightbox", () => {

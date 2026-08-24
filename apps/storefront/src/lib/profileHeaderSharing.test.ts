@@ -12,6 +12,11 @@ const communityPage = readFileSync(
 );
 const authorPage = readFileSync(new URL("../pages/AuthorMockupPage.tsx", import.meta.url), "utf8");
 const authors = readFileSync(new URL("./authors.ts", import.meta.url), "utf8");
+const account = readFileSync(new URL("./account.ts", import.meta.url), "utf8");
+const incrementalData = readFileSync(
+  new URL("../../../../packages/sdk/src/incrementalData.ts", import.meta.url),
+  "utf8",
+);
 
 test("shared ProfileHeader implements all six backend-selected layout variants", () => {
   for (const variant of ["immersive", "cover-banner", "compact-list", "split", "strip"]) {
@@ -55,4 +60,23 @@ test("author archive exposes coverUrl by reusing the existing communityCover fie
   assert.match(authors, /coverUrl:\s*data\.user\.communityCover\?\.url \|\| null/);
   // Guard against re-introducing a duplicate/new cover field name on the author query.
   assert.doesNotMatch(authors, /authorCover|coverAttachment|authorCoverUrl/);
+});
+
+test("profile covers never flash the avatar while authoritative cover data loads", () => {
+  assert.doesNotMatch(communityPage, /coverUrl: undefined/);
+  assert.doesNotMatch(profileHeader, /coverUrl \|\| avatarUrl/);
+  assert.match(profileHeader, /\{coverUrl \? \(/);
+});
+
+test("avatar editing updates the account cache independently and invalidates profile media", () => {
+  assert.match(account, /function applyUpdatedAvatar/);
+  assert.match(account, /avatarUrl: avatar\.avatarUrl/);
+  assert.match(account, /invalidateIncrementalDataPrefix\("community:"\)/);
+  assert.match(account, /invalidateIncrementalDataPrefix\("community-post:v6:"\)/);
+  assert.match(account, /invalidateIncrementalDataPrefix\("community-archive-data:v1:"\)/);
+  assert.match(account, /invalidateIncrementalDataPrefix\("author:v2:"\)/);
+  assert.match(account, /invalidateIncrementalDataPrefix\("blog-data:"\)/);
+  assert.match(incrementalData, /entry\.cacheKey\.startsWith\("community:v10:"\)/);
+  assert.match(incrementalData, /entry\.cacheKey\.startsWith\("author:v2:"\)/);
+  assert.match(authorPage, /`author:v2:/);
 });

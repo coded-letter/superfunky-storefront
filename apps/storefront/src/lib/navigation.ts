@@ -272,6 +272,11 @@ export type StorefrontConfiguration = {
     extraHtml: string;
     copyrightText: string;
   };
+  recentOrders: {
+    enabled: boolean;
+    itemCount: number;
+    intervalSeconds: number;
+  };
   features: {
     promo: boolean;
     search: boolean;
@@ -454,7 +459,7 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     wishlist: "heart",
     cart: "shopping-cart",
     menu: "menu",
-    assistant: "command",
+    assistant: "message-circle",
   },
   headerIconMedia: {},
   aiAssistant: {
@@ -481,6 +486,11 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     spotifyPlayerDescription: "",
     extraHtml: "",
     copyrightText: "",
+  },
+  recentOrders: {
+    enabled: false,
+    itemCount: 5,
+    intervalSeconds: 10,
   },
   features: {
     promo: true,
@@ -1249,6 +1259,15 @@ function normalizeStorefrontRadioFooter(
   );
 }
 
+function clampConfigurationInteger(
+  value: number | null | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+) {
+  return Number.isInteger(value) ? Math.max(min, Math.min(max, Number(value))) : fallback;
+}
+
 export function normalizeStorefrontConfiguration(configuration: StorefrontConfiguration | null): StorefrontConfiguration {
   if (!configuration) return DEFAULT_STOREFRONT_CONFIGURATION;
   return {
@@ -1305,6 +1324,11 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
       socialLinks: normalizeFooterSocialProfiles(configuration.footer?.socialLinks),
       extraHtml: typeof configuration.footer?.extraHtml === "string" ? configuration.footer.extraHtml : "",
       copyrightText: typeof configuration.footer?.copyrightText === "string" ? configuration.footer.copyrightText : "",
+    },
+    recentOrders: {
+      enabled: configuration.recentOrders?.enabled === true,
+      itemCount: clampConfigurationInteger(configuration.recentOrders?.itemCount, 1, 10, 5),
+      intervalSeconds: clampConfigurationInteger(configuration.recentOrders?.intervalSeconds, 3, 300, 10),
     },
     features: {
       ...DEFAULT_STOREFRONT_CONFIGURATION.features,

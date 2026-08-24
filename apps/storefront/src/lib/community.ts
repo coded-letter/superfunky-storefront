@@ -277,6 +277,8 @@ type RawCommunityPost = {
     altText: string;
     width: number | null;
     height: number | null;
+    srcSet: string | null;
+    sizes: string | null;
   }[];
   featuredImage: {
     node: {
@@ -404,6 +406,8 @@ const COMMUNITY_QUERY = /* GraphQL */ `
           altText
           width
           height
+          srcSet
+          sizes
         }
         featuredImage {
           node {
@@ -639,6 +643,8 @@ const COMMUNITY_FEED_QUERY = /* GraphQL */ `
           altText
           width
           height
+          srcSet
+          sizes
         }
         featuredImage {
           node {
@@ -705,6 +711,8 @@ const COMMUNITY_POST_FIELDS = /* GraphQL */ `
       altText
       width
       height
+      srcSet
+      sizes
     }
     language {
       code
@@ -943,11 +951,22 @@ async function communityGraphqlRequest<T>(
   variables?: Record<string, unknown>,
   token?: string,
 ): Promise<GraphqlResponse<T>> {
-  const response = await graphqlRequest<T>(query, variables, token);
-  const hasOptionalLocalization = query.includes("LanguageCodeFilterEnum")
-    || query.includes("$languageSlug")
-    || query.includes("language {")
-    || query.includes("translations {");
+  let compatibleQuery = query;
+  let response = await graphqlRequest<T>(compatibleQuery, variables, token);
+  const responsiveMediaFieldsUnavailable = response.errors?.some(({ message }) =>
+    /Cannot query field "(?:srcSet|sizes)" on type "FunkycommerceCommunityMedia"/.test(message)
+  );
+  if (responsiveMediaFieldsUnavailable) {
+    compatibleQuery = removeGraphqlFieldSelections(
+      removeGraphqlFieldSelections(compatibleQuery, "srcSet"),
+      "sizes",
+    );
+    response = await graphqlRequest<T>(compatibleQuery, variables, token);
+  }
+  const hasOptionalLocalization = compatibleQuery.includes("LanguageCodeFilterEnum")
+    || compatibleQuery.includes("$languageSlug")
+    || compatibleQuery.includes("language {")
+    || compatibleQuery.includes("translations {");
   const localizationFieldsUnavailable = response.errors?.some(({ message }) => (
     [
       'Unknown type "LanguageCodeFilterEnum"',
@@ -962,7 +981,7 @@ async function communityGraphqlRequest<T>(
     || (hasOptionalLocalization && message === "Internal server error")
   ));
   if (!localizationFieldsUnavailable) return response;
-  return graphqlRequest<T>(withoutCommunityLocalizationFields(query), variables, token);
+  return graphqlRequest<T>(withoutCommunityLocalizationFields(compatibleQuery), variables, token);
 }
 
 export async function getCommunityData(languageCode: string, backendLanguageCode: string): Promise<CommunityData> {
@@ -2295,6 +2314,7 @@ function mapProfileArticle(article: RawProfileArticle, member: CommunityMember):
     imageUrl: article.featuredImage?.node?.sourceUrl || undefined,
     date: article.date || new Date(0).toISOString(),
     lastEditedDate: article.modified || undefined,
+    languageCode: article.language?.code?.toLowerCase() || "",
     author: { name: member.displayName, avatarUrl: member.avatarUrl, slug: member.handle },
     wordCount: words,
     readingTimeMinutes: Math.max(1, Math.ceil(words / 220)),
@@ -2313,6 +2333,8 @@ function mapCommunityPost(post: RawCommunityPost, member: CommunityMember): Comm
           altText: item.altText || "",
           width: item.width || undefined,
           height: item.height || undefined,
+          srcSet: item.srcSet || undefined,
+          sizes: item.sizes || undefined,
         }]
       : [],
   );

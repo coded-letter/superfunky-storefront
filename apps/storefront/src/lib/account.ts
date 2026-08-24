@@ -1,5 +1,5 @@
 import { authStore } from "./auth";
-import { graphqlRequest } from "@funky/sdk";
+import { graphqlRequest, invalidateIncrementalDataPrefix } from "@funky/sdk";
 import { loadOrderConfirmation, ORDER_CONFIRMATION_TTL_MS } from "./orderConfirmation";
 import { formatStoreApiMoney } from "./storeApiMoney";
 import { getOrder, type StoreApiOrder } from "./wcStoreApi";
@@ -315,6 +315,24 @@ export type AccountAvatar = {
   attachmentId: number | null;
 };
 
+function applyUpdatedAvatar(token: string, avatar: AccountAvatar) {
+  if (cachedAccount?.token === token && cachedAccount.account) {
+    cachedAccount = {
+      token,
+      account: {
+        ...cachedAccount.account,
+        avatarUrl: avatar.avatarUrl,
+        avatarAttachmentId: avatar.attachmentId,
+      },
+    };
+  }
+  invalidateIncrementalDataPrefix("community:");
+  invalidateIncrementalDataPrefix("community-post:v6:");
+  invalidateIncrementalDataPrefix("community-archive-data:v1:");
+  invalidateIncrementalDataPrefix("author:v2:");
+  invalidateIncrementalDataPrefix("blog-data:");
+}
+
 export async function uploadStorefrontAvatar(imageDataUrl: string): Promise<AccountAvatar> {
   const token = authStore.load()?.authToken;
   if (!token) throw new Error("Sign in before changing your avatar");
@@ -332,6 +350,7 @@ export async function uploadStorefrontAvatar(imageDataUrl: string): Promise<Acco
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   if (!data?.uploadFunkycommerceAvatar?.avatarUrl) throw new Error("The avatar upload returned no image");
+  applyUpdatedAvatar(token, data.uploadFunkycommerceAvatar);
   return data.uploadFunkycommerceAvatar;
 }
 
@@ -352,5 +371,6 @@ export async function removeStorefrontAvatar(): Promise<AccountAvatar> {
   );
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   if (!data?.removeFunkycommerceAvatar) throw new Error("The avatar removal returned no data");
+  applyUpdatedAvatar(token, data.removeFunkycommerceAvatar);
   return data.removeFunkycommerceAvatar;
 }

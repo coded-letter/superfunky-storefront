@@ -30,6 +30,7 @@ export async function getOrderDownloadAccess(input: {
   orderId: number;
   orderKey?: string;
   billingEmail?: string;
+  accessToken?: string;
 }): Promise<OrderDownloadAccess> {
   if (!BACKEND_ORIGIN) throw new Error("The download service is not configured.");
 
@@ -37,6 +38,7 @@ export async function getOrderDownloadAccess(input: {
   url.searchParams.set("rest_route", `/funkycommerce/v1/orders/${input.orderId}/downloads`);
   if (input.orderKey) url.searchParams.set("key", input.orderKey);
   if (input.billingEmail) url.searchParams.set("email", input.billingEmail);
+  if (input.accessToken) url.searchParams.set("access_token", input.accessToken);
 
   const response = await fetch(url, {
     cache: "no-store",

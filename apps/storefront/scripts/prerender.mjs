@@ -51,9 +51,13 @@ const outputDirectory = resolve("dist");
 const template = await readFile(resolve(outputDirectory, "index.html"), "utf8");
 const environmentSiteUrl = (process.env.VITE_SITE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL)?.replace(/\/+$/, "");
 const graphqlRequestOrigin = environmentSiteUrl ? new URL(environmentSiteUrl).origin : "";
-const isFlagshipStaticInteractions = environmentSiteUrl
-  ? new URL(environmentSiteUrl).hostname === "superfunky.pro"
-  : false;
+const configuredSiteHostname = environmentSiteUrl ? new URL(environmentSiteUrl).hostname : "";
+const configuredBackendHostname = process.env.VITE_GRAPHQL_ENDPOINT
+  ? new URL(process.env.VITE_GRAPHQL_ENDPOINT).hostname
+  : "";
+const hasInteractiveStaticChrome = [configuredSiteHostname, configuredBackendHostname].some(
+  (hostname) => hostname === "superfunky.pro" || hostname.endsWith(".superfunky.pro"),
+);
 const graphqlEndpoint = process.env.VITE_GRAPHQL_ENDPOINT?.trim();
 let defaultLanguage = process.env.VITE_DEFAULT_LANGUAGE?.trim().toLowerCase() || "en";
 const configuredBackendProfile = process.env.VITE_BACKEND_PROFILE?.trim().toLowerCase() || "full";
@@ -256,6 +260,18 @@ const STATIC_HEADER_ASSISTANT_QUERY = `
   }
 `;
 
+const STATIC_RECENT_ORDERS_QUERY = `
+  query StorefrontStaticRecentOrders($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      recentOrders {
+        enabled
+        itemCount
+        intervalSeconds
+      }
+    }
+  }
+`;
+
 const DEFAULT_STATIC_HEADER_CONTROLS = {
   baseCurrency: "EUR",
   currencySymbol: "€",
@@ -294,7 +310,7 @@ const DEFAULT_STATIC_HEADER_CONTROLS = {
     wishlist: "heart",
     cart: "shopping-cart",
     menu: "menu",
-    assistant: "command",
+    assistant: "message-circle",
   },
   media: {},
 };
@@ -318,6 +334,11 @@ const DEFAULT_STATIC_CHROME = {
   stylesheets: [],
   colors: [],
   headerControls: DEFAULT_STATIC_HEADER_CONTROLS,
+  recentOrders: {
+    enabled: false,
+    itemCount: 5,
+    intervalSeconds: 10,
+  },
 };
 
 const COMMUNITY_BUILD_MEMBERS_QUERY = `
@@ -584,13 +605,15 @@ async function discoverStaticChrome() {
     { language: defaultLanguage },
     "storefront static chrome",
   );
-  const branding = payload.data?.storefrontConfig?.branding;
-  const layout = payload.data?.storefrontConfig?.layout;
+  const storefrontConfig = payload.data?.storefrontConfig;
+  const branding = storefrontConfig?.branding;
+  const layout = storefrontConfig?.layout;
   const themeStyles = payload.data?.themeStyles;
   const colors = themeStyles?.colors;
   let decoration = null;
   let headerControls = null;
   let headerAssistant = null;
+  let recentOrders = null;
   try {
     decoration = await requestGraphql(
       STATIC_CHROME_DECORATION_QUERY,
@@ -624,11 +647,24 @@ async function discoverStaticChrome() {
       `Static header assistant unavailable; preserving stable controls: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  try {
+    recentOrders = await requestGraphql(
+      STATIC_RECENT_ORDERS_QUERY,
+      { language: defaultLanguage },
+      "storefront recent-order controls",
+      { attempts: 1 },
+    );
+  } catch (error) {
+    console.warn(
+      `Recent-order controls unavailable; keeping notifications disabled: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const decorationBranding = decoration?.data?.storefrontConfig?.branding;
   const decorationLayout = decoration?.data?.storefrontConfig?.layout;
   const controls = headerControls?.data?.storefrontConfig;
   const assistantControls = headerAssistant?.data?.storefrontConfig;
   const assistantConfig = assistantControls?.aiAssistant;
+  const recentOrdersConfig = recentOrders?.data?.storefrontConfig?.recentOrders;
   const controlFeatures = controls?.features;
   const controlLayout = controls?.layout;
   const baseCurrency = typeof controls?.baseCurrency === "string" && controls.baseCurrency.trim()
@@ -662,6 +698,11 @@ async function discoverStaticChrome() {
       && layout.themeMaxWidthPx <= 1920
       ? layout.themeMaxWidthPx
       : DEFAULT_STATIC_CHROME.themeMaxWidthPx,
+    recentOrders: {
+      enabled: recentOrdersConfig?.enabled === true,
+      itemCount: Math.max(1, Math.min(10, Number(recentOrdersConfig?.itemCount) || 5)),
+      intervalSeconds: Math.max(3, Math.min(300, Number(recentOrdersConfig?.intervalSeconds) || 10)),
+    },
     customCss: boundedStaticCss(themeStyles?.customCss, "WordPress custom CSS", 256_000),
     fontFaceStyles: boundedStaticCss(themeStyles?.fontFaceStyles, "WordPress font-face CSS", 128_000),
     globalStyles: boundedStaticCss(themeStyles?.globalStyles, "WordPress global CSS", 512_000),
@@ -1311,7 +1352,7 @@ async function renderRoute(route) {
   let rendered = template
     .replace(
       '<html lang="en">',
-      `<html lang="${route.lang}"${isFlagshipStaticInteractions ? " data-storefront-flagship" : ""}>`,
+      `<html lang="${route.lang}"${hasInteractiveStaticChrome ? " data-storefront-flagship" : ""}>`,
     )
     .replace(/\s*<title(?:\s[^>]*)?>.*?<\/title>/, "")
     .replace(
@@ -1348,7 +1389,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="interaction">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="interaction">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -1403,11 +1444,11 @@ function renderStaticChrome(route) {
     .map((item, index) => {
       const { label, href, children = [] } = item;
       const submenuId = `storefront-static-submenu-${index}`;
-      const submenu = isFlagshipStaticInteractions && children.length
+      const submenu = hasInteractiveStaticChrome && children.length
         ? renderStaticSubmenu(item, submenuId, route.path)
         : "";
       const toggle = children.length
-        ? isFlagshipStaticInteractions
+        ? hasInteractiveStaticChrome
           ? `<button type="button" class="storefront-static-nav-toggle" data-static-submenu-toggle aria-haspopup="true" aria-expanded="false" aria-controls="${submenuId}" aria-label="Show ${escapeAttribute(label)} links">${staticHeaderIcon("chevron-down", "", "chevron")}</button>`
           : `<span class="storefront-static-nav-toggle">${staticHeaderIcon("chevron-down", "", "chevron")}</span>`
         : "";
@@ -1424,9 +1465,9 @@ function renderStaticChrome(route) {
     ? `<div class="storefront-static-announcement"><div class="storefront-static-announcement-content">${staticChromeConfig.promoHtml}</div></div>`
     : "";
   const controls = renderStaticHeaderControls(route);
-  const parityAttribute = isFlagshipStaticInteractions ? " data-static-react-parity" : "";
-  const searchIcon = isFlagshipStaticInteractions ? staticHeaderIcon("search", "", "search") : "";
-  const mobileNavigation = isFlagshipStaticInteractions
+  const parityAttribute = hasInteractiveStaticChrome ? " data-static-react-parity" : "";
+  const searchIcon = hasInteractiveStaticChrome ? staticHeaderIcon("search", "", "search") : "";
+  const mobileNavigation = hasInteractiveStaticChrome
     ? renderStaticMobileNavigation(navigationItems, navigationLabel, route.path)
     : "";
   return `<header class="storefront-static-header" data-static-announcement-scroll="${staticChromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
@@ -1543,7 +1584,7 @@ function staticMenuClassNames(cssClasses) {
 function renderStaticBreadcrumbs(route, homePath, homeLabel) {
   const isHome = route.path === "/"
     || route.path === normalizeLanguageRoutePath("/", route.lang, configuredLanguageCodes);
-  if (!isFlagshipStaticInteractions || !staticChromeConfig.showBreadcrumbs || isHome) return "";
+  if (!hasInteractiveStaticChrome || !staticChromeConfig.showBreadcrumbs || isHome) return "";
   const currentLabel = route.title.replace(/\s+(?:[|»·-])\s+(?:FunkyCommerce|Superfunky).*$/i, "").trim() || route.title;
   const breadcrumbItems = Array.isArray(route.breadcrumbs) && route.breadcrumbs.length > 1
     ? route.breadcrumbs.map((breadcrumb, index, items) => ({
@@ -1566,7 +1607,7 @@ function renderStaticBreadcrumbs(route, homePath, homeLabel) {
 }
 
 function renderStaticFooter(route) {
-  if (!isFlagshipStaticInteractions) return "";
+  if (!hasInteractiveStaticChrome) return "";
   const routeMenu = staticFooterMenu(staticChromeConfig.navigationMenus, route.lang);
   const routeFooterItems = staticFooterItems(routeMenu?.menuItems?.nodes);
   const footerItems = routeFooterItems.length
@@ -1622,6 +1663,7 @@ const STATIC_HEADER_ICON_PATHS = {
   "shopping-cart": '<circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.7 11.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/>',
   menu: '<path d="M4 12h16M4 6h16M4 18h16"/>',
   command: '<path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12Z"/>',
+  "message-circle": '<path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/>',
   cookie: '<path d="M12 2a10 10 0 1 0 10 10c0-1.1-.9-2-2-2h-1a3 3 0 0 1-3-3V6a4 4 0 0 0-4-4Z"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/>',
 };
 
@@ -1640,7 +1682,7 @@ function renderStaticHeaderControls(route) {
       <img src="/icons/flags/${escapeAttribute(languageFlag)}.svg" alt="" width="20" height="14" />
       <b>${escapeAttribute(languageCode.toUpperCase())}</b>
       ${staticHeaderIcon("chevron-down", "", "chevron")}`;
-    items.push(isFlagshipStaticInteractions
+    items.push(hasInteractiveStaticChrome
       ? `<button type="button" class="storefront-static-switcher storefront-static-switcher--language" aria-label="Language">${content}</button>`
       : `<span class="storefront-static-switcher storefront-static-switcher--language">${content}</span>`);
   }
@@ -1649,13 +1691,13 @@ function renderStaticHeaderControls(route) {
       <span>${escapeAttribute(controls.currencySymbol)}</span>
       <b>${escapeAttribute(controls.baseCurrency)}</b>
       ${staticHeaderIcon("chevron-down", "", "chevron")}`;
-    items.push(isFlagshipStaticInteractions
+    items.push(hasInteractiveStaticChrome
       ? `<button type="button" class="storefront-static-switcher" data-static-control="currency" data-storefront-activate aria-label="Currency">${content}</button>`
       : `<span class="storefront-static-switcher">${content}</span>`);
   }
 
   if (controls.assistant?.enabled === true && controls.assistant.showHeader === true) {
-    items.push(staticHeaderControl("assistant", controls.icons.assistant, controls.media.assistant, "command"));
+    items.push(staticHeaderControl("assistant", controls.icons.assistant, controls.media.assistant, "message-circle"));
   }
   items.push('<span class="storefront-static-control-divider storefront-static-desktop-control"></span>');
   if (controls.layout.showHeaderDarkModeToggle !== false) {
@@ -1678,12 +1720,12 @@ function renderStaticHeaderControls(route) {
   }
   items.push(staticHeaderControl("menu", controls.icons.menu, controls.media.menu, "menu", false, true));
 
-  const hidden = isFlagshipStaticInteractions ? "" : ' aria-hidden="true"';
+  const hidden = hasInteractiveStaticChrome ? "" : ' aria-hidden="true"';
   return `<span class="storefront-static-controls"${hidden}>${items.join("")}</span>`;
 }
 
 function renderStaticFloatingControls(route) {
-  if (!isFlagshipStaticInteractions) return "";
+  if (!hasInteractiveStaticChrome) return "";
   const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const assistant = controls.assistant?.enabled === true && controls.assistant.showFixed === true
     ? `<aside class="sf-ai-assistant-launcher fixed bottom-5 right-5 z-[70] flex max-w-[calc(100vw-1rem)] flex-col items-end gap-3">
@@ -1716,7 +1758,7 @@ function staticHeaderControl(role, iconName, mediaUrl, fallback, desktopOnly = f
     desktopOnly ? "storefront-static-desktop-control" : "",
     mobileOnly ? "storefront-static-mobile-control" : "",
   ].filter(Boolean).join(" ");
-  if (!isFlagshipStaticInteractions) {
+  if (!hasInteractiveStaticChrome) {
     return `<span class="${classes}" data-static-control="${escapeAttribute(role)}">${staticHeaderIcon(iconName, mediaUrl, fallback)}</span>`;
   }
   const attributes = `class="${classes}" data-static-control="${escapeAttribute(role)}" data-storefront-control="${escapeAttribute(role)}" aria-label="${escapeAttribute(role.replaceAll("-", " "))}"`;
@@ -2077,13 +2119,13 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         },
         entries: ({ assistant, navigation }) => [
           {
-            cacheKey: `navigation-data:v13:${languageCode}`,
+            cacheKey: `navigation-data:v14:${languageCode}`,
             value: navigation,
             dependencies: ["config:storefront", "menu:global", `translation:${languageCode}`],
           },
           ...(assistant
             ? [{
-                cacheKey: `navigation-assistant:v1:${languageCode}`,
+                cacheKey: `navigation-assistant:v2:${languageCode}`,
                 value: assistant,
                 dependencies: ["config:storefront", `translation:${languageCode}`],
               }]
@@ -2125,7 +2167,7 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         enabled: backendProfile === "full",
         load: () => getCommunityData(languageCode, backendLanguageCode),
         entries: (value) => [{
-          cacheKey: `community:v9:${languageCode}:${backendLanguageCode}:0:0`,
+          cacheKey: `community:v10:${languageCode}:${backendLanguageCode}:0:0`,
           value,
           dependencies: ["community:public", `translation:${languageCode}`],
         }],

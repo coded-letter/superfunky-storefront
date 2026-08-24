@@ -56,6 +56,22 @@ export function CommunityMediaGallery({
   }, [mediaKey]);
 
   useEffect(() => {
+    if (media.length < 2) return;
+    const adjacent = [
+      media[(activeIndex + 1) % media.length],
+      media[(activeIndex - 1 + media.length) % media.length],
+    ];
+    for (const item of adjacent) {
+      if (item.mediaType !== "image") continue;
+      const image = new Image();
+      image.decoding = "async";
+      image.src = item.url;
+      if (item.srcSet) image.srcset = item.srcSet;
+      image.sizes = item.sizes || "(min-width: 768px) 33vw, 100vw";
+    }
+  }, [activeIndex, media, mediaKey]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || activeMedia?.mediaType !== "video" || isLightboxOpen) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -169,8 +185,8 @@ export function CommunityMediaGallery({
   return (
     <div className={`sf-media-gallery grid gap-2 ${className}`}>
       <div
-        className={`relative overflow-hidden bg-zinc-100 dark:bg-zinc-900 ${variant === "detail" ? "rounded-3xl shadow-soft" : ""}`}
-        style={{ aspectRatio: activeAspect }}
+        className={`relative h-full w-full min-h-0 min-w-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900 ${variant === "detail" ? "rounded-3xl shadow-soft" : ""}`}
+        style={lockAspect ? undefined : { aspectRatio: activeAspect }}
       >
         {activeMedia.mediaType === "video" ? (
           <video

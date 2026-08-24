@@ -29,12 +29,12 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   const { syncCurrencyOptions, setCurrencyCode, currencyOptions } = useCurrency();
   const { syncUiStrings } = useUiStrings();
   const rawState = useIncrementalData(
-    `navigation-data:v13:${languageCode}`,
+    `navigation-data:v14:${languageCode}`,
     () => getNavigationData(languageCode),
     enabled,
   );
   const assistantState = useIncrementalData(
-    `navigation-assistant:v1:${languageCode}`,
+    `navigation-assistant:v2:${languageCode}`,
     () => getAiAssistantConfiguration(languageCode),
     enabled && !rawState.isLoading,
   );
