@@ -309,6 +309,9 @@ const STATIC_PAYMENT_GATEWAYS_QUERY = `
       }
     }
     storefrontConfig: funkycommerceStorefrontConfig {
+      payments {
+        blikEnabled
+      }
       cryptoAssets {
         code
         label
@@ -392,6 +395,7 @@ const DEFAULT_STATIC_CHROME = {
   },
   paymentGatewayCache: {
     gateways: [],
+    blikEnabled: false,
     cryptoAssets: [],
   },
 };
@@ -759,6 +763,7 @@ async function discoverStaticChrome() {
   const recentOrdersConfig = recentOrders?.data?.storefrontConfig?.recentOrders;
   const gatewayNodes = paymentGateways?.data?.paymentGateways?.nodes;
   const cryptoAssets = paymentGateways?.data?.storefrontConfig?.cryptoAssets;
+  const blikEnabled = paymentGateways?.data?.storefrontConfig?.payments?.blikEnabled === true;
   const controlFeatures = controls?.features;
   const controlLayout = controls?.layout;
   const baseCurrency = typeof controls?.baseCurrency === "string" && controls.baseCurrency.trim()
@@ -801,6 +806,7 @@ async function discoverStaticChrome() {
     },
     paymentGatewayCache: {
       gateways: Array.isArray(gatewayNodes) ? gatewayNodes : [],
+      blikEnabled,
       cryptoAssets: Array.isArray(cryptoAssets) ? cryptoAssets : [],
     },
     customCss: boundedStaticCss(themeStyles?.customCss, "WordPress custom CSS", 256_000),

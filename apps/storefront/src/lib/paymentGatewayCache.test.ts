@@ -19,6 +19,7 @@ test("checkout restores a bounded public payment-gateway cache synchronously", (
       { id: "stripe_blik", title: "BLIK", description: null },
       { id: "funkycommerce_crypto", title: "Crypto", description: "Pay by wallet" },
     ],
+    blikEnabled: true,
     cryptoAssets: [{
       code: "btc",
       label: "Bitcoin",
@@ -35,19 +36,27 @@ test("checkout restores a bounded public payment-gateway cache synchronously", (
     "funkycommerce_crypto",
   ]);
   assert.equal(restored.seed.cryptoAssets[0]?.code, "btc");
+  assert.equal(restored.seed.blikEnabled, true);
+  assert.equal(parsePaymentGatewayCacheSeed({
+    gateways: [{ id: "stripe", title: "Card" }],
+    cryptoAssets: [],
+  })?.blikEnabled, false);
 
   assert.equal(isPaymentGatewayCacheTimestampUsable(cachedAt - 86_400_001, cachedAt), false);
   assert.equal(isPaymentGatewayCacheTimestampUsable(cachedAt - 86_400_000, cachedAt), true);
   assert.equal(parsePaymentGatewayCacheSeed({
     gateways: [{ id: "stripe", title: "Card", customerEmail: "private@example.com" }],
+    blikEnabled: true,
     cryptoAssets: [],
   }), null);
   assert.equal(parsePaymentGatewayCacheSeed({
     gateways: [{ id: "stripe", title: "Card" }],
+    blikEnabled: true,
     cryptoAssets: [{ code: "btc", label: "Bitcoin" }],
   }), null);
   assert.ok(parsePaymentGatewayCacheSeed({
     gateways: [{ id: "stripe", title: "Card" }],
+    blikEnabled: true,
     cryptoAssets: [{
       code: "btc",
       label: "Bitcoin",
@@ -65,12 +74,16 @@ test("checkout cache is prerendered, revalidated, and persists only public prese
   assert.match(paymentsSource, /\.finally\(\(\) => \{\s*inFlight = null;/);
   assert.match(paymentsSource, /useState<PaymentGatewayAvailability>\(\(\) =>\s*getCachedPaymentGatewayAvailability/);
   assert.match(paymentsSource, /typeof asset\.fiatRate === "number" && asset\.fiatRate > 0/);
+  assert.match(paymentsSource, /currencyCode === "PLN"[\s\S]*snapshot\?\.blikEnabled[\s\S]*ids\.has\("stripe"\)/);
+  assert.doesNotMatch(paymentsSource, /isBlikAvailable:.*ids\.has\("stripe_blik"\)/);
+  assert.match(paymentsSource, /LEGACY_PAYMENT_GATEWAYS_QUERY/);
 
   const persistenceBlock = paymentsSource.slice(
     paymentsSource.indexOf("function persistGatewaySnapshot"),
     paymentsSource.indexOf("const persistedGatewayCache"),
   );
   assert.match(persistenceBlock, /gateways: Array\.from\(snapshot\.gateways\.values\(\)\)/);
+  assert.match(persistenceBlock, /blikEnabled: snapshot\.blikEnabled/);
   assert.match(persistenceBlock, /cryptoAssets: snapshot\.cryptoAssets/);
   assert.doesNotMatch(persistenceBlock, /customer|address|cart|order|nonce|paymentToken/i);
 });

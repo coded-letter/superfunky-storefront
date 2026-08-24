@@ -15,6 +15,7 @@ export type CryptoAsset = {
 
 export type PaymentGatewayCacheSeed = {
   gateways: PaymentGatewayNode[];
+  blikEnabled: boolean;
   cryptoAssets: CryptoAsset[];
 };
 
@@ -55,8 +56,9 @@ export function parsePaymentGatewayCacheSeed(value: unknown): PaymentGatewayCach
   if (!value || typeof value !== "object") return null;
   const seed = value as Partial<PaymentGatewayCacheSeed>;
   if (!Array.isArray(seed.gateways) || !seed.gateways.every(isPaymentGatewayNode)) return null;
+  const blikEnabled = typeof seed.blikEnabled === "boolean" ? seed.blikEnabled : false;
   if (!Array.isArray(seed.cryptoAssets) || !seed.cryptoAssets.every(isCryptoAsset)) return null;
-  return { gateways: seed.gateways, cryptoAssets: seed.cryptoAssets };
+  return { gateways: seed.gateways, blikEnabled, cryptoAssets: seed.cryptoAssets };
 }
 
 export function isPaymentGatewayCacheTimestampUsable(cachedAt: number, now = Date.now()) {

@@ -756,6 +756,7 @@ export function CheckoutMockupPage() {
       requireAuthenticatedUser,
       language: languageCode,
       backendLanguage: languageBackendCode,
+      selectedCurrency: currencyCode,
       customerNote: orderNotes,
       shippingAddress: shippingDetails,
       digitalOrder: shouldHideShipping,

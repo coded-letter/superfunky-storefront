@@ -66,3 +66,20 @@ test("BLIK reconciliation verifies Stripe and uses Woo Stripe's webhook handler"
   assert.match(checkoutContext, /stripe_blik[\s\S]*on-hold/);
   assert.match(checkoutContext, /hash_equals\(\s*\(string\) \$order->get_order_key\(\),\s*\(string\) \$order_key\s*\)/);
 });
+
+test("selected PLN enables backend-controlled Stripe BLIK without changing the store base currency", () => {
+  assert.match(checkoutContext, /function funkycommerce_blik_presentation_enabled/);
+  assert.match(checkoutContext, /'blik_enabled'/);
+  assert.match(checkoutContext, /function funkycommerce_enable_selected_blik_gateway/);
+  assert.match(checkoutContext, /rest_request_before_callbacks/);
+  assert.match(checkoutContext, /FUNKYCOMMERCE_CHECKOUT_CONTEXT_NAMESPACE/);
+  assert.match(checkoutContext, /'PLN' !== funkycommerce_store_api_payment_currency\(\)/);
+  assert.match(checkoutContext, /empty\( \$gateways\['stripe'\] \)/);
+  assert.match(checkoutContext, /\$registered\['stripe_blik'\]/);
+  assert.match(checkoutContext, /function funkycommerce_convert_blik_order_to_pln/);
+  assert.match(checkoutContext, /get_option\( 'woocommerce_currency', 'EUR' \)/);
+  assert.match(checkoutContext, /\$rates\['PLN'\]/);
+  assert.match(checkoutContext, /\$order->calculate_totals\( false \)/);
+  assert.match(checkoutContext, /\$order->set_currency\( 'PLN' \)/);
+  assert.match(checkoutContext, /funkycommerce-blik-rate-unavailable/);
+});
