@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
-import { Seo, useLanguage } from "@funky/ui";
+import { Seo, useLanguage, useT } from "@funky/ui";
 import { Breadcrumbs, seoBreadcrumbsToItems } from "./Breadcrumbs";
 import { useIncrementalData } from "@funky/sdk/react";
 import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
@@ -51,6 +51,7 @@ export function CmsPageContent({
   shortcodeRenderers = {},
   synchronizeLanguage = true,
 }: CmsPageContentProps) {
+  const t = useT();
   const { pathname } = useLocation();
   const { configuredLanguageCodes } = useLanguage();
   const pageUri = normalizePageUri(pathname);
@@ -118,12 +119,12 @@ export function CmsPageContent({
   }
 
   if (isLoading) {
-    return <ContentLoadingState label="Loading page" />;
+    return <ContentLoadingState label={t("loading.page")} />;
   }
 
   if (error) {
     if (fallback !== undefined) return fallback;
-    return <PageStatus title="Page unavailable" message={error.message} />;
+    return <PageStatus title={t("error.page_unavailable")} message={error.message} />;
   }
 
   if (!page) {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Heart, Lock, MessageCircle, Pencil, Sparkles, Store, Trash2 } from "lucide-react";
-import { CommunityMediaGallery, ResponsiveImage, UploadPostModal, avatarColorFor, useLanguage, useLayoutPreferences, type SocialPostMedia } from "@funky/ui";
+import { CommunityMediaGallery, ResponsiveImage, UploadPostModal, avatarColorFor, useLanguage, useLayoutPreferences, useT, type SocialPostMedia } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
@@ -40,6 +40,7 @@ import {
  * `role: "creator"` accounts — their shop listings, per the marketplace mockup.
  */
 export function CommunityPostMockupPage() {
+  const t = useT();
   const { postId = "" } = useParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -115,10 +116,10 @@ export function CommunityPostMockupPage() {
   }, [wordpressPost?.contentHtml]);
 
   if (!post && isDirectPostLoading) {
-    return <ContentLoadingState label="Loading community post" />;
+    return <ContentLoadingState label={t("loading.community_post")} />;
   }
   if (!post && directPostError) {
-    return <CommunityPostStatus title="Community post unavailable" message={directPostError.message} />;
+    return <CommunityPostStatus title={t("error.community_post_unavailable")} message={directPostError.message} />;
   }
   if (!post || !author) return <NotFoundMockupPage />;
 
@@ -295,7 +296,7 @@ export function CommunityPostMockupPage() {
                     setLiked(result.liked);
                     setLikesCount(result.likesCount);
                   } catch (error) {
-                    setLikeError(error instanceof Error ? error.message : "The like could not be updated.");
+                    setLikeError(error instanceof Error ? error.message : t("error.like_failed"));
                   }
                 }}
                 className={`inline-flex items-center gap-1.5 ${liked ? "text-red-500" : ""}`}

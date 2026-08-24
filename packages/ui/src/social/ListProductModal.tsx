@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { Download, ImagePlus, Plus, Store, Trash2, X } from "lucide-react";
 import { useToast } from "../state";
-import { parseLocalizedPrice, useCurrency } from "../locale";
+import { parseLocalizedPrice, useCurrency, useT } from "../locale";
 import { deriveMarketplaceVariationAttributes, marketplaceVariationKey } from "./marketplaceVariations";
 
 export type ListProductDownloadableFile = { name: string; fileDataUrl: string };
@@ -136,6 +136,7 @@ export type ListProductModalProps = {
  * both creating a new listing and editing an existing one via `initialProduct`.
  */
 export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProductModalProps) {
+  const t = useT();
   const { showToast } = useToast();
   const { currencyCode } = useCurrency();
   const isEditing = Boolean(initialProduct);
@@ -331,7 +332,7 @@ export function ListProductModal({ onClose, onSubmit, initialProduct }: ListProd
       });
       onClose();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The product could not be listed.");
+      setSubmitError(error instanceof Error ? error.message : t("error.product_listing_failed"));
     } finally {
       setIsSubmitting(false);
     }

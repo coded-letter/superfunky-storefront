@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { normalizeLanguagePath, PaginableProductGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { normalizeLanguagePath, PaginableProductGrid, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, seoBreadcrumbsToItems } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { HeroMock } from "../components/HeroMock";
@@ -20,6 +20,7 @@ import { ArchiveDescriptionSection } from "./shared";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
 
 export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTaxonomy }) {
+  const t = useT();
   const { pathname } = useLocation();
   const { slug } = useParams();
   const { languageCode, languageBackendCode } = useLanguage();
@@ -47,7 +48,7 @@ export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTax
   );
 
   if (isLoading) return <ContentLoadingState label="Loading product archive" />;
-  if (error) return <ArchiveStatus title="Archive unavailable" message="This collection is temporarily unavailable." />;
+  if (error) return <ArchiveStatus title={t("error.archive_unavailable")} message="This collection is temporarily unavailable." />;
   if (!archive) {
     return (
       <ArchiveStatus

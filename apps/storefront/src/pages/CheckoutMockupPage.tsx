@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { Link, useNavigate } from "react-router-dom";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { AlertTriangle, Banknote, Check, ChevronDown, Copy, CreditCard, PackageCheck, QrCode, ShieldCheck, Tag, Truck } from "lucide-react";
-import { CurrencyMark, normalizeLanguagePath, useCart, useCurrency, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { CurrencyMark, normalizeLanguagePath, useCart, useCurrency, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { saveCheckoutEmail, saveNewsletterEmail, useAbandonedCartPublicConfig, useAbandonedCartTracking } from "../lib/abandonedCart";
 import { syncCartToBackend } from "../lib/backendCart";
@@ -81,12 +81,6 @@ type StripePaymentController = {
 };
 
 const BLIK_WINDOW_SECONDS = 120;
-const CHECKOUT_COUPON_COPY = {
-  title: "Have a coupon?",
-  label: "Coupon code",
-  apply: "Apply code",
-} as const;
-const DEFAULT_MARKETING_CONSENT_LABEL = "Keep me posted about new drops, offers, and restocks by email.";
 const BLIK_RENDERED_HEIGHT_PX = 33.28;
 // Mock exchange-rate lock window for crypto invoices (BTCPay/Coinbase Commerce-style
 // checkouts typically quote a fixed rate for ~15 minutes before it needs refreshing).
@@ -127,6 +121,7 @@ const FALLBACK_SHIPPING_METHODS: DisplayShippingMethod[] = [
 ];
 
 export function CheckoutMockupPage() {
+  const t = useT();
   const embedded = useEmbeddedApplicationShortcode();
   if (!embedded) {
     return <StandaloneApplicationNotice shortcode="checkout" />;
@@ -173,7 +168,12 @@ export function CheckoutMockupPage() {
   const defaultCountryCode = navigationData?.storefrontConfig.defaultCustomerCountry || checkoutCountries[0]?.code || "PL";
   const freeShippingZones = navigationData?.storefrontConfig.freeShippingZones ?? [];
   const checkoutPresentation = navigationData?.storefrontConfig.checkout;
-  const marketingConsentLabel = checkoutPresentation?.marketingLabel || DEFAULT_MARKETING_CONSENT_LABEL;
+  const marketingConsentLabel = checkoutPresentation?.marketingLabel || t("checkout.marketing_consent");
+  const couponCopy = useMemo(() => ({
+    title: t("checkout.coupon.title"),
+    label: t("checkout.coupon.label"),
+    apply: t("checkout.coupon.apply"),
+  }), [t]);
 
   const accountMode = checkoutPresentation?.accountMode
     ?? (config["allow-guest-checkout"] === "false" ? "required" : "optional");
@@ -531,7 +531,7 @@ export function CheckoutMockupPage() {
       setAppliedCoupons((result.totals.coupons || []).map(({ code }) => code));
       setCouponCode("");
     } else {
-      setCouponError(result.error || "Failed to apply coupon");
+      setCouponError(result.error || t("checkout.coupon.error"));
     }
   }
 
@@ -569,10 +569,10 @@ export function CheckoutMockupPage() {
         event.preventDefault();
         setOrderError(
           paymentMethod === "crypto"
-            ? "Crypto checkout is not currently available on this backend."
+            ? t("checkout.payment.unavailable_backend")
             : isCryptoOnlyCurrency
               ? "Only the crypto wallet payment method is available while paying in BTC/ETH."
-              : "The selected payment method is not currently available.",
+              : t("checkout.payment.method_unavailable"),
         );
       }
       return;
@@ -597,26 +597,35 @@ export function CheckoutMockupPage() {
     const shouldCreateAccount = !isLoggedIn && (createAccount || requireAccountCreation);
     const normalizedUsername = accountUsername.trim();
     const accountUsernameError = shouldCreateAccount
-      ? !/^[A-Za-z0-9._-]{3,60}$/.test(normalizedUsername)
-        ? "Use 3–60 letters, numbers, dots, underscores, or hyphens"
-        : undefined
+      ? validateFieldValue(accountUsername, {
+          label: t("checkout.field.username"),
+          min: 3,
+          max: 60,
+          required: true,
+          type: "username",
+        }, t)
       : undefined;
-    const accountPasswordError = shouldCreateAccount && accountPassword.length < 8
-      ? "Password must be at least 8 characters"
+    const accountPasswordError = shouldCreateAccount
+      ? validateFieldValue(accountPassword, {
+          label: t("checkout.field.password"),
+          min: 8,
+          max: 72,
+          required: true,
+        }, t)
       : undefined;
     const nextBillingErrors = {
-      firstName: checkoutValidation.errors.firstName,
-      lastName: checkoutValidation.errors.lastName,
-      address1: checkoutValidation.errors.address1,
-      city: checkoutValidation.errors.city,
-      state: checkoutValidation.errors.state,
-      postcode: checkoutValidation.errors.postcode,
-      countryCode: checkoutValidation.errors.country,
-      phone: checkoutValidation.errors.phone,
-      email: checkoutValidation.errors.email,
+      firstName: localizeFieldError(checkoutValidation.errors.firstName, billingAddress.firstName, { label: t("checkout.field.first_name"), min: 1, max: 35, required: true }, t),
+      lastName: localizeFieldError(checkoutValidation.errors.lastName, billingAddress.lastName, { label: t("checkout.field.last_name"), min: 1, max: 35, required: true }, t),
+      address1: localizeFieldError(checkoutValidation.errors.address1, billingAddress.address1, { label: t("checkout.field.address1"), min: 4, max: 100, required: !shouldHideShipping }, t),
+      city: localizeFieldError(checkoutValidation.errors.city, billingAddress.city, { label: t("checkout.field.city"), min: 1, max: 85, required: !shouldHideShipping }, t),
+      state: localizeFieldError(checkoutValidation.errors.state, billingAddress.state, { label: t("checkout.field.state"), min: 1, max: 254, required: !shouldHideShipping }, t),
+      postcode: localizeFieldError(checkoutValidation.errors.postcode, billingAddress.postcode, { label: t("checkout.field.postcode"), min: 2, max: 12, required: !shouldHideShipping }, t),
+      countryCode: localizeFieldError(checkoutValidation.errors.country, billingAddress.countryCode, { label: t("checkout.field.country"), min: 2, max: 55, required: true }, t),
+      phone: localizeFieldError(checkoutValidation.errors.phone, billingPhone, { label: t("checkout.field.phone"), min: 7, max: 20, required: true, type: "phone" }, t),
+      email: localizeFieldError(checkoutValidation.errors.email, billingEmail, { label: t("checkout.field.email"), min: 6, max: 254, required: true, type: "email" }, t),
       blikCode:
         paymentMethod === "blik" && !/^\d{6}$/.test(blikCode.trim())
-          ? "BLIK code must be 6 digits"
+          ? t("checkout.payment.blik_error")
           : undefined,
       accountUsername: accountUsernameError,
       accountPassword: accountPasswordError,
@@ -637,13 +646,13 @@ export function CheckoutMockupPage() {
         })
       : null;
     const nextDeliveryErrors: CheckoutFieldErrors = {
-      firstName: deliveryValidation?.errors.firstName,
-      lastName: deliveryValidation?.errors.lastName,
-      address1: deliveryValidation?.errors.address1,
-      city: deliveryValidation?.errors.city,
-      state: deliveryValidation?.errors.state,
-      postcode: deliveryValidation?.errors.postcode,
-      countryCode: deliveryValidation?.errors.country,
+      firstName: localizeFieldError(deliveryValidation?.errors.firstName, deliveryAddress.firstName, { label: t("checkout.field.first_name"), min: 1, max: 35, required: true }, t),
+      lastName: localizeFieldError(deliveryValidation?.errors.lastName, deliveryAddress.lastName, { label: t("checkout.field.last_name"), min: 1, max: 35, required: true }, t),
+      address1: localizeFieldError(deliveryValidation?.errors.address1, deliveryAddress.address1, { label: t("checkout.field.address1"), min: 4, max: 100, required: true }, t),
+      city: localizeFieldError(deliveryValidation?.errors.city, deliveryAddress.city, { label: t("checkout.field.city"), min: 1, max: 85, required: true }, t),
+      state: localizeFieldError(deliveryValidation?.errors.state, deliveryAddress.state, { label: t("checkout.field.state"), min: 1, max: 254, required: true }, t),
+      postcode: localizeFieldError(deliveryValidation?.errors.postcode, deliveryAddress.postcode, { label: t("checkout.field.postcode"), min: 2, max: 12, required: true }, t),
+      countryCode: localizeFieldError(deliveryValidation?.errors.country, deliveryAddress.countryCode, { label: t("checkout.field.country"), min: 2, max: 55, required: true }, t),
     };
     setDeliveryErrors(nextDeliveryErrors);
     if (
@@ -655,17 +664,19 @@ export function CheckoutMockupPage() {
     ) {
       setOrderError(
         accountUsernameError || accountPasswordError
-          ? accountUsernameError || accountPasswordError || "Complete the account details."
+          ? accountUsernameError || accountPasswordError || t("checkout.error.billing_required")
           : nextBillingErrors.blikCode
             ? nextBillingErrors.blikCode
-          : `Complete the required ${deliveryValidation?.isValid === false ? "shipping" : "billing"} details before placing the order.`,
+          : deliveryValidation?.isValid === false
+            ? "Complete the required shipping details before placing the order."
+            : t("checkout.error.billing_required"),
       );
       return;
     }
     if (!shouldHideShipping && isBackendConfigured && (shippingLoading || !selectedShipping)) {
       setOrderError(
         shippingLoading
-          ? "Wait for the available shipping methods to finish loading."
+          ? t("checkout.shipping_loading")
           : "No shipping method is available for this address.",
       );
       return;
@@ -873,25 +884,25 @@ export function CheckoutMockupPage() {
     : authoritativeSubtotal - discountValue + shippingValue + taxValue;
 
   const summaryRows = [
-    { label: "Subtotal", value: authoritativeSubtotalLabel },
-    ...(discountValue > 0 ? [{ label: "Discount", value: `-${formatBaseAmount(discountValue)}` }] : []),
+    { label: t("checkout.subtotal"), value: authoritativeSubtotalLabel },
+    ...(discountValue > 0 ? [{ label: t("checkout.discount"), value: `-${formatBaseAmount(discountValue)}` }] : []),
     {
-      label: "Shipping",
-      value: shouldHideShipping ? "Digital delivery" : shippingValue === 0 ? "Free" : formatBaseAmount(shippingValue),
+      label: t("checkout.shipping"),
+      value: shouldHideShipping ? t("cart.digital_delivery") : shippingValue === 0 ? t("checkout.free") : formatBaseAmount(shippingValue),
     },
-    { label: "Tax", value: formatBaseAmount(taxValue) },
+    { label: t("checkout.tax"), value: formatBaseAmount(taxValue) },
   ];
 
   const couponSection = (
-    <CheckoutSection title={CHECKOUT_COUPON_COPY.title} collapsible defaultOpen={couponVisible} onToggle={setCouponVisible}>
+    <CheckoutSection title={couponCopy.title} collapsible defaultOpen={couponVisible} onToggle={setCouponVisible}>
       <div
         data-checkout-coupon-row
         className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
       >
         <div data-checkout-coupon-input className="min-w-0 w-full max-w-full box-border">
           <InputMock
-            label={CHECKOUT_COUPON_COPY.label}
-            placeholder={CHECKOUT_COUPON_COPY.label}
+            label={couponCopy.label}
+            placeholder={couponCopy.label}
             value={couponCode}
             onChange={(value) => {
               setCouponCode(value);
@@ -906,7 +917,7 @@ export function CheckoutMockupPage() {
           disabled={couponLoading || !couponCode.trim()}
           className="min-h-11 min-w-0 w-full max-w-full box-border whitespace-normal rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold leading-snug text-zinc-700 transition hover:border-brand-400 hover:text-brand-600 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
         >
-          {couponLoading ? "Applying..." : CHECKOUT_COUPON_COPY.apply}
+          {couponLoading ? t("checkout.coupon.applying") : couponCopy.apply}
         </button>
       </div>
       {couponError ? (
@@ -921,14 +932,14 @@ export function CheckoutMockupPage() {
             <p key={code} className="m-0 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
               <span className="flex items-center gap-1.5">
                 <Tag className="h-4 w-4" aria-hidden="true" />
-                Coupon "{code}" applied
+                {t("checkout.coupon.applied", { code })}
               </span>
               <button
                 type="button"
                 onClick={() => handleRemoveCoupon(code)}
                 className="text-xs font-semibold text-emerald-600 underline hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100"
               >
-                Remove
+                {t("checkout.coupon.remove")}
               </button>
             </p>
           ))}
@@ -938,14 +949,14 @@ export function CheckoutMockupPage() {
   );
 
   const paymentSection = (
-    <CheckoutSection title="Payment method">
+    <CheckoutSection title={t("checkout.payment.title")}>
       <div className="grid gap-2.5">
         {!isBackendConfigured || isStripeGatewayEnabled ? (
           <>
             <PaymentOption
               icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
-              label="Pay online"
-              description="Cards and other Stripe-supported online payment methods."
+              label={t("checkout.payment.online")}
+              description={t("checkout.payment.online_desc")}
               checked={paymentMethod === "stripe"}
               onSelect={() => setPaymentMethod("stripe")}
               disabled={isCryptoOnlyCurrency}
@@ -982,8 +993,8 @@ export function CheckoutMockupPage() {
                   }}
                 />
               }
-              label="BLIK"
-              description="Pay instantly in PLN with a 6-digit BLIK code via Stripe."
+              label={t("checkout.payment.blik")}
+              description={t("checkout.payment.blik_desc")}
               checked={paymentMethod === "blik"}
               onSelect={() => setPaymentMethod("blik")}
               disabled={isCryptoOnlyCurrency}
@@ -992,7 +1003,7 @@ export function CheckoutMockupPage() {
             {paymentMethod === "blik" && !isCryptoOnlyCurrency ? (
               <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                 <InputMock
-                  label="BLIK code"
+                  label={t("checkout.payment.blik_label")}
                   value={blikCode}
                   onChange={(value) => {
                     setBlikCode(value.replace(/\D/g, "").slice(0, 6));
@@ -1016,7 +1027,7 @@ export function CheckoutMockupPage() {
                   </span>
                   {blikSecondsLeft > 0
                     ? "left to authorize the payment in your banking app after placing the order."
-                    : "Code expired — place the order again to get a fresh authorization window."}
+                    : t("checkout.payment.blik_expired")}
                 </p>
               </div>
             ) : null}
@@ -1051,8 +1062,8 @@ export function CheckoutMockupPage() {
           <>
             <PaymentOption
               icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
-              label="Direct bank transfer"
-              description="Pay from your bank using the store's transfer instructions after placing the order."
+              label={t("checkout.payment.bacs")}
+              description={t("checkout.payment.bacs_desc")}
               checked={paymentMethod === "bacs"}
               onSelect={() => setPaymentMethod("bacs")}
               disabled={isCryptoOnlyCurrency}
@@ -1061,7 +1072,7 @@ export function CheckoutMockupPage() {
             {paymentMethod === "bacs" && !isCryptoOnlyCurrency ? (
               <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                 <p className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                  Payment instructions
+                  {t("checkout.payment.instructions")}
                 </p>
                 <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">
                   The live store backend accepts bank-transfer orders. After placing the order, customers continue to the
@@ -1074,8 +1085,8 @@ export function CheckoutMockupPage() {
 
         <PaymentOption
           icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
-          label="Payment upon delivery"
-          description="Pay in cash when your order arrives."
+          label={t("checkout.payment.cod")}
+          description={t("checkout.payment.cod_desc")}
           checked={paymentMethod === "cod"}
           onSelect={() => setPaymentMethod("cod")}
           disabled={shouldHideShipping || !isCodAvailable || isCryptoOnlyCurrency}
@@ -1083,23 +1094,23 @@ export function CheckoutMockupPage() {
             isCryptoOnlyCurrency
               ? "Not available while paying in BTC/ETH — use the crypto wallet method instead."
               : shouldHideShipping
-                ? "Not available for digital orders"
-                : "Not available at this time"
+                ? t("checkout.payment.unavailable_digital")
+                : t("checkout.payment.unavailable")
           }
         />
 
         {isCheckAvailable ? (
           <PaymentOption
             icon={<Banknote className="h-5 w-5" aria-hidden="true" />}
-            label="Bank cheque"
-            description="Mail a cheque — your order ships once it clears."
+            label={t("checkout.payment.cheque")}
+            description={t("checkout.payment.cheque_desc")}
             checked={paymentMethod === "cheque"}
             onSelect={() => setPaymentMethod("cheque")}
             disabled={shouldHideShipping || isCryptoOnlyCurrency}
             disabledReason={
               isCryptoOnlyCurrency
                 ? "Not available while paying in BTC/ETH — use the crypto wallet method instead."
-                : "Not available for digital orders"
+                : t("checkout.payment.unavailable_digital")
             }
           />
         ) : null}
@@ -1107,7 +1118,7 @@ export function CheckoutMockupPage() {
         {paymentMethod === "cheque" && !isCryptoOnlyCurrency ? (
           <div className="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
             <p className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-              Payment instructions
+              {t("checkout.payment.instructions")}
             </p>
             <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">
               This backend accepts cheque orders, but it does not expose public cheque account fields over GraphQL.
@@ -1120,7 +1131,7 @@ export function CheckoutMockupPage() {
 
       <p className="m-0 flex items-center justify-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
         <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        {checkoutPresentation?.trustMessage || "Transactions secured with SSL encryption"}
+        {checkoutPresentation?.trustMessage || t("checkout.payment.ssl")}
       </p>
       {checkoutPresentation?.supportMessage ? (
         <p className="m-0 text-center text-xs text-zinc-400 dark:text-zinc-500">
@@ -1141,17 +1152,17 @@ export function CheckoutMockupPage() {
           <section className="grid gap-5">
             <div>
               <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {checkoutPresentation?.heading || "Checkout"}
+                {checkoutPresentation?.heading || t("checkout.title")}
               </h1>
               {checkoutPresentation?.intro ? <p className="mb-0 mt-2 text-sm text-zinc-500 dark:text-zinc-400">{checkoutPresentation.intro}</p> : null}
             </div>
 
             {couponPosition === "top" ? couponSection : null}
 
-            <CheckoutSection title="Billing details">
+            <CheckoutSection title={t("checkout.billing.title")}>
               <div className="grid min-w-0 gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 <InputMock
-                label="First name"
+                label={t("checkout.field.first_name")}
                 required
                 value={billingAddress.firstName}
                 onChange={(value) => updateBillingAddress("firstName", value)}
@@ -1160,7 +1171,7 @@ export function CheckoutMockupPage() {
                 error={billingErrors.firstName}
               />
               <InputMock
-                label="Last name"
+                label={t("checkout.field.last_name")}
                 required
                 value={billingAddress.lastName}
                 onChange={(value) => updateBillingAddress("lastName", value)}
@@ -1170,7 +1181,7 @@ export function CheckoutMockupPage() {
               />
               {!hideOptionalBillingFields ? (
                 <InputMock
-                  label="Company name"
+                  label={t("checkout.field.company")}
                   value={billingAddress.company}
                   onChange={(value) => updateBillingAddress("company", value)}
                   name="billingCompany"
@@ -1178,7 +1189,7 @@ export function CheckoutMockupPage() {
                 />
               ) : null}
               <CountrySelect
-                label="Country / region"
+                label={t("checkout.field.country")}
                 required
                 value={billingAddress.countryCode}
                 onChange={(value) => updateBillingAddress("countryCode", value)}
@@ -1191,9 +1202,9 @@ export function CheckoutMockupPage() {
             {!shouldHideShipping ? (
               <div className="grid gap-4">
                 <InputMock
-                  label="Street address"
+                  label={t("checkout.field.address1")}
                   required
-                  helperText="House number and street name"
+                  helperText={t("checkout.field.address1_helper")}
                   value={billingAddress.address1}
                   onChange={(value) => updateBillingAddress("address1", value)}
                   name="billingAddressLine1"
@@ -1202,8 +1213,8 @@ export function CheckoutMockupPage() {
                 />
                 {!hideOptionalBillingFields ? (
                   <InputMock
-                    label="Apartment, suite, unit etc."
-                    helperText="Optional"
+                    label={t("checkout.field.address2")}
+                    helperText={t("checkout.field.optional")}
                     value={billingAddress.address2}
                     onChange={(value) => updateBillingAddress("address2", value)}
                     name="billingAddressLine2"
@@ -1212,7 +1223,7 @@ export function CheckoutMockupPage() {
                 ) : null}
                 <div className="grid gap-4 md:grid-cols-3">
                   <InputMock
-                    label="Town / city"
+                    label={t("checkout.field.city")}
                     required
                     value={billingAddress.city}
                     onChange={(value) => updateBillingAddress("city", value)}
@@ -1221,7 +1232,7 @@ export function CheckoutMockupPage() {
                     error={billingErrors.city}
                   />
                   <InputMock
-                    label="State / county"
+                    label={t("checkout.field.state")}
                     required
                     value={billingAddress.state}
                     onChange={(value) => updateBillingAddress("state", value)}
@@ -1230,7 +1241,7 @@ export function CheckoutMockupPage() {
                     error={billingErrors.state}
                   />
                   <InputMock
-                    label="Postcode / ZIP"
+                    label={t("checkout.field.postcode")}
                     required
                     value={billingAddress.postcode}
                     onChange={(value) => updateBillingAddress("postcode", value)}
@@ -1243,7 +1254,7 @@ export function CheckoutMockupPage() {
             ) : null}
             <div className="grid gap-4 md:grid-cols-2">
               <InputMock
-                label="Phone"
+                label={t("checkout.field.phone")}
                 type="tel"
                 required
                 value={billingPhone}
@@ -1251,7 +1262,7 @@ export function CheckoutMockupPage() {
                   setBillingPhone(value);
                   setBillingErrors((previous) => ({
                     ...previous,
-                    phone: value.trim().length > 0 && !isValidPhone(value) ? "Phone is not a valid phone number" : undefined,
+                    phone: value.trim().length > 0 && !isValidPhone(value) ? t("checkout.field.phone_error") : undefined,
                   }));
                 }}
                 name="billingPhone"
@@ -1260,7 +1271,7 @@ export function CheckoutMockupPage() {
                 error={billingErrors.phone}
               />
               <InputMock
-                label="Email address"
+                label={t("checkout.field.email")}
                 type="email"
                 required
                 value={billingEmail}
@@ -1269,7 +1280,7 @@ export function CheckoutMockupPage() {
                   saveCheckoutEmail(value);
                   setBillingErrors((previous) => ({
                     ...previous,
-                    email: value.trim().length > 0 && !isValidEmail(value) ? "Email is not a valid email address" : undefined,
+                    email: value.trim().length > 0 && !isValidEmail(value) ? t("checkout.field.email_error") : undefined,
                   }));
                 }}
                 name="billingEmail"
@@ -1284,8 +1295,7 @@ export function CheckoutMockupPage() {
             <div className="flex items-start gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
               <PackageCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <p className="m-0">
-                <strong>Digital delivery.</strong> Your purchase is delivered instantly via the website after payment —
-                no shipping address or shipping method needed.
+                {t("checkout.digital_notice")}
               </p>
             </div>
           ) : null}
@@ -1293,7 +1303,7 @@ export function CheckoutMockupPage() {
           {couponPosition === "inline" ? couponSection : null}
 
           {!isLoggedIn && accountMode === "optional" ? (
-            <CheckoutSection title="Account">
+            <CheckoutSection title={t("checkout.account.title")}>
               <label className="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 <input
                   type="checkbox"
@@ -1301,12 +1311,12 @@ export function CheckoutMockupPage() {
                   onChange={(event) => setCreateAccount(event.target.checked)}
                   className="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
                 />
-                Create an account?
+                {t("checkout.account.create")}
               </label>
               {createAccount ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   <InputMock
-                    label="Username"
+                    label={t("checkout.field.username")}
                     required
                     value={accountUsername}
                     onChange={(value) => {
@@ -1318,7 +1328,7 @@ export function CheckoutMockupPage() {
                     error={billingErrors.accountUsername}
                   />
                   <InputMock
-                    label="Password"
+                    label={t("checkout.field.password")}
                     type="password"
                     required
                     value={accountPassword}
@@ -1343,10 +1353,10 @@ export function CheckoutMockupPage() {
               </label>
             </CheckoutSection>
           ) : !isLoggedIn && accountMode === "required" ? (
-            <CheckoutSection title="Account">
+            <CheckoutSection title={t("checkout.account.title")}>
               <div className="grid gap-4 md:grid-cols-2">
                 <InputMock
-                  label="Username"
+                  label={t("checkout.field.username")}
                   required
                   value={accountUsername}
                   onChange={(value) => {
@@ -1358,7 +1368,7 @@ export function CheckoutMockupPage() {
                   error={billingErrors.accountUsername}
                 />
                 <InputMock
-                  label="Password"
+                  label={t("checkout.field.password")}
                   type="password"
                   required
                   value={accountPassword}
@@ -1415,7 +1425,7 @@ export function CheckoutMockupPage() {
           </CheckoutSection>
 
           {!shouldHideShipping ? (
-            <CheckoutSection title="Delivery">
+            <CheckoutSection title={t("checkout.delivery.title")}>
               <label className="flex items-center gap-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
                 <input
                   type="checkbox"
@@ -1423,13 +1433,13 @@ export function CheckoutMockupPage() {
                   onChange={(event) => setShipToDifferentAddress(event.target.checked)}
                   className="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
                 />
-                Ship to a different address?
+                {t("checkout.ship_to_different")}
               </label>
               {shipToDifferentAddress ? (
                 <div className="grid gap-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                   <div className="grid gap-4 md:grid-cols-2">
                     <InputMock
-                      label="First name"
+                      label={t("checkout.field.first_name")}
                       required
                       value={deliveryAddress.firstName}
                       onChange={(value) => updateDeliveryAddress("firstName", value)}
@@ -1438,7 +1448,7 @@ export function CheckoutMockupPage() {
                       error={deliveryErrors.firstName}
                     />
                     <InputMock
-                      label="Last name"
+                      label={t("checkout.field.last_name")}
                       required
                       value={deliveryAddress.lastName}
                       onChange={(value) => updateDeliveryAddress("lastName", value)}
@@ -1449,7 +1459,7 @@ export function CheckoutMockupPage() {
                   </div>
                   {!hideOptionalShippingFields ? (
                     <InputMock
-                      label="Company name"
+                      label={t("checkout.field.company")}
                       value={deliveryAddress.company}
                       onChange={(value) => updateDeliveryAddress("company", value)}
                       name="shippingCompany"
@@ -1457,7 +1467,7 @@ export function CheckoutMockupPage() {
                     />
                   ) : null}
                   <CountrySelect
-                    label="Country / region"
+                    label={t("checkout.field.country")}
                     required
                     value={deliveryAddress.countryCode}
                     onChange={(value) => updateDeliveryAddress("countryCode", value)}
@@ -1467,7 +1477,7 @@ export function CheckoutMockupPage() {
                     error={deliveryErrors.countryCode}
                   />
                   <InputMock
-                    label="Street address"
+                    label={t("checkout.field.address1")}
                     required
                     value={deliveryAddress.address1}
                     onChange={(value) => updateDeliveryAddress("address1", value)}
@@ -1477,8 +1487,8 @@ export function CheckoutMockupPage() {
                   />
                   {!hideOptionalShippingFields ? (
                     <InputMock
-                      label="Apartment, suite, unit etc."
-                      helperText="Optional"
+                      label={t("checkout.field.address2")}
+                      helperText={t("checkout.field.optional")}
                       value={deliveryAddress.address2}
                       onChange={(value) => updateDeliveryAddress("address2", value)}
                       name="shippingAddressLine2"
@@ -1487,7 +1497,7 @@ export function CheckoutMockupPage() {
                   ) : null}
                   <div className="grid gap-4 md:grid-cols-3">
                     <InputMock
-                      label="Town / city"
+                      label={t("checkout.field.city")}
                       required
                       value={deliveryAddress.city}
                       onChange={(value) => updateDeliveryAddress("city", value)}
@@ -1496,7 +1506,7 @@ export function CheckoutMockupPage() {
                       error={deliveryErrors.city}
                     />
                     <InputMock
-                      label="State / county"
+                      label={t("checkout.field.state")}
                       required
                       value={deliveryAddress.state}
                       onChange={(value) => updateDeliveryAddress("state", value)}
@@ -1505,7 +1515,7 @@ export function CheckoutMockupPage() {
                       error={deliveryErrors.state}
                     />
                     <InputMock
-                      label="Postcode / ZIP"
+                      label={t("checkout.field.postcode")}
                       required
                       value={deliveryAddress.postcode}
                       onChange={(value) => updateDeliveryAddress("postcode", value)}
@@ -1518,9 +1528,9 @@ export function CheckoutMockupPage() {
               ) : null}
 
               <div className="grid gap-2.5 pt-2">
-                <span className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Shipping method</span>
+                <span className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t("checkout.shipping_method")}</span>
                 {shippingLoading ? (
-                  <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">Loading live shipping methods…</p>
+                  <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{t("checkout.shipping_loading")}</p>
                 ) : null}
                 {shippingError ? (
                   <p className="m-0 text-xs text-amber-600 dark:text-amber-400">
@@ -1554,7 +1564,7 @@ export function CheckoutMockupPage() {
                         </span>
                       </span>
                       <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {isFreeForMethod ? "Free" : formatBaseAmount(method.price)}
+                        {isFreeForMethod ? t("checkout.free") : formatBaseAmount(method.price)}
                       </span>
                     </label>
                   );
@@ -1569,7 +1579,7 @@ export function CheckoutMockupPage() {
                   <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>
                     <strong>{formatBaseAmount(remainingForFreeShipping)}</strong>{" "}
-                    left to free standard shipping — back to cart
+                    {t("checkout.free_shipping_nudge")}
                   </span>
                 </Link>
               ) : null}
@@ -1577,10 +1587,10 @@ export function CheckoutMockupPage() {
           ) : null}
 
           {showOrderNotes ? (
-            <CheckoutSection title="Order notes">
+            <CheckoutSection title={t("checkout.order_notes.title")}>
               <InputMock
-                label="Notes about your order"
-                helperText="Optional — e.g. delivery instructions"
+                label={t("checkout.order_notes.label")}
+                helperText={t("checkout.order_notes.helper")}
                 multiline
                 rows={3}
                 value={orderNotes}
@@ -1598,7 +1608,7 @@ export function CheckoutMockupPage() {
           {paymentMethodsPosition === "right" ? paymentSection : null}
 
           <OrderSummaryCard
-            title="Review order"
+            title={t("checkout.summary.title")}
             lineItems={items.map((item) => ({
               id: item.id,
               name: item.name,
@@ -1608,13 +1618,13 @@ export function CheckoutMockupPage() {
             }))}
             freeShippingNotice={
               !shouldHideShipping && remainingForFreeShipping !== null && remainingForFreeShipping > 0
-                ? { remainingLabel: formatBaseAmount(remainingForFreeShipping), href: cartPath, actionLabel: "back to cart" }
+                ? { remainingLabel: formatBaseAmount(remainingForFreeShipping), href: cartPath, actionLabel: t("checkout.back_to_cart") }
                 : undefined
             }
             rows={summaryRows}
             total={formatBaseAmount(totalValue)}
             ctaHref={shouldHideShipping ? orderSuccessDigitalPath : orderSuccessPath}
-            ctaLabel={checkoutPresentation?.submitLabel || "Place order"}
+            ctaLabel={checkoutPresentation?.submitLabel || t("checkout.cta")}
             ctaDisabled={
               (showTermsCheckbox && !agreedToTerms) ||
               (showPrivacyCheckbox && !agreedToPrivacy) ||
@@ -1640,10 +1650,7 @@ export function CheckoutMockupPage() {
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-800"
                     />
                     <span>
-                      I have read and agree to the website's{" "}
-                      <a href="#terms" className="font-medium text-brand-600 underline underline-offset-2 dark:text-brand-400">
-                        terms and conditions
-                      </a>
+                      {renderLinkedLabel(t("checkout.terms"), t("checkout.terms_link"), "#terms")}
                       <span aria-hidden="true"> *</span>
                     </span>
                   </label>
@@ -1657,10 +1664,7 @@ export function CheckoutMockupPage() {
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-800"
                     />
                     <span>
-                      I consent to my personal data being processed as described in the{" "}
-                      <a href="#privacy" className="font-medium text-brand-600 underline underline-offset-2 dark:text-brand-400">
-                        privacy policy
-                      </a>
+                      {renderLinkedLabel(t("checkout.privacy"), t("checkout.privacy_link"), "#privacy")}
                       <span aria-hidden="true"> *</span>
                     </span>
                   </label>
@@ -1678,11 +1682,12 @@ export function CheckoutMockupPage() {
 }
 
 function CheckoutStepper({ currentStep }: { currentStep: number }) {
+  const t = useT();
   // Payment happens inline on this same page (no separate "Payment" step) — it's
   // selected and completed as part of "Checkout" below, right before confirmation.
-  const steps = ["Cart", "Checkout", "Confirmation"];
+  const steps = [t("checkout.step.cart"), t("checkout.step.checkout"), t("checkout.step.confirmation")];
   return (
-    <nav aria-label="Checkout progress" className="flex items-center justify-center gap-2 sm:gap-4">
+    <nav aria-label={t("checkout.progress_aria")} className="flex items-center justify-center gap-2 sm:gap-4">
       {steps.map((step, index) => {
         const stepNumber = index + 1;
         const isComplete = stepNumber < currentStep;
@@ -1779,6 +1784,7 @@ function CountrySelect({
   autoComplete?: string;
   error?: string;
 }) {
+  const t = useT();
   return (
     <label className="grid min-w-0 gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
       <span>
@@ -1798,7 +1804,7 @@ function CountrySelect({
             : "border-zinc-200 focus:border-brand-400 focus:ring-brand-100 dark:border-zinc-700 dark:focus:border-brand-500 dark:focus:ring-brand-950"
         }`}
       >
-        <option value="">Select a country…</option>
+        <option value="">{t("checkout.field.country_placeholder")}</option>
         {options.map((country) => (
           <option key={country.code} value={country.code}>
             {country.label}
@@ -1808,6 +1814,51 @@ function CountrySelect({
       {error ? <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">{error}</span> : null}
     </label>
   );
+}
+
+type TranslateFn = (key: string, replacements?: Record<string, string | number>) => string;
+type ValidationRule = {
+  label: string;
+  min: number;
+  max: number;
+  required?: boolean;
+  type?: "email" | "phone" | "username";
+};
+
+function validateFieldValue(value: string, rule: ValidationRule, t: TranslateFn): string | undefined {
+  const trimmed = value.trim();
+  if (rule.required && trimmed.length === 0) return t("validation.required", { label: rule.label });
+  if (!trimmed.length) return undefined;
+  if (trimmed.length < rule.min) return t("validation.min_length", { label: rule.label, min: rule.min });
+  if (trimmed.length > rule.max) return t("validation.max_length", { label: rule.label, max: rule.max });
+  if (rule.type === "email" && !isValidEmail(trimmed)) return t("validation.email", { label: rule.label });
+  if (rule.type === "phone" && !isValidPhone(trimmed)) return t("validation.phone", { label: rule.label });
+  if (rule.type === "username" && !/^[a-zA-Z0-9_.-]+$/.test(trimmed)) return t("validation.username_chars", { label: rule.label });
+  return undefined;
+}
+
+function localizeFieldError(rawError: string | undefined, value: string, rule: ValidationRule, t: TranslateFn): string | undefined {
+  if (!rawError) return undefined;
+  return validateFieldValue(value, rule, t) ?? rawError;
+}
+
+function renderLinkedLabel(text: string, linkText: string, href: string) {
+  const [before, after] = splitAroundLink(text, linkText);
+  return (
+    <>
+      {before}
+      <a href={href} className="font-medium text-brand-600 underline underline-offset-2 dark:text-brand-400">
+        {linkText}
+      </a>
+      {after}
+    </>
+  );
+}
+
+function splitAroundLink(text: string, linkText: string): [string, string] {
+  const index = text.indexOf(linkText);
+  if (index === -1) return [`${text} `, ""];
+  return [text.slice(0, index), text.slice(index + linkText.length)];
 }
 
 function PaymentOption({

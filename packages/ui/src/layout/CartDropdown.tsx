@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { useT } from "../locale";
 import { useCart } from "../state";
 import { ResponsiveImage } from "../media";
 
@@ -17,6 +18,7 @@ export type CartDropdownProps = {
  * without needing a portal or ref-measuring.
  */
 export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
+  const t = useT();
   const { items, itemCount, subtotalLabel, removeItem, updateQuantity } = useCart();
 
   if (!isOpen) return null;
@@ -27,14 +29,14 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Shopping cart"
+        aria-label={t("cart.aria")}
         onClick={(event) => event.stopPropagation()}
         className="sf-cart-dropdown funky-cart-dropdown absolute right-0 top-[calc(100%+0.75rem)] z-[80] w-[22rem] max-w-[90vw] origin-top-right rounded-2xl border border-zinc-200 bg-white p-4 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="m-0 flex items-center gap-1.5 font-display text-sm font-bold text-zinc-900 dark:text-zinc-100">
             <ShoppingBag className="h-4 w-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
-            Your cart
+            {t("cart.title")}
             {itemCount > 0 ? (
               <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[0.65rem] font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                 {itemCount}
@@ -44,7 +46,7 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
         </div>
 
         {items.length === 0 ? (
-          <p className="m-0 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">Your cart is empty.</p>
+          <p className="m-0 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{t("cart.empty.heading")}</p>
         ) : (
           <ul className="m-0 grid max-h-72 list-none gap-2.5 overflow-y-auto p-0">
             {items.map((item) => (
@@ -95,7 +97,7 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
         {items.length > 0 ? (
           <div className="mt-3 space-y-2.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">Subtotal</span>
+              <span className="text-zinc-500 dark:text-zinc-400">{t("cart.subtotal")}</span>
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{subtotalLabel}</span>
             </div>
             <div className="flex gap-2">
@@ -104,14 +106,14 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
                 onClick={onClose}
                 className="flex-1 rounded-full border border-zinc-200 px-3 py-2 text-center text-xs font-semibold text-zinc-700 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
-                View cart
+                {t("cart.view_cart")}
               </Link>
               <Link
                 to="/checkout"
                 onClick={onClose}
                 className="flex-1 rounded-full bg-brand-gradient px-3 py-2 text-center text-xs font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
               >
-                Checkout
+                {t("cart.checkout")}
               </Link>
             </div>
           </div>
@@ -121,7 +123,7 @@ export function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
             onClick={onClose}
             className="mt-2 block rounded-full bg-brand-gradient px-3 py-2 text-center text-xs font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
           >
-            Continue shopping
+            {t("cart.continue_shopping")}
           </Link>
         )}
       </div>

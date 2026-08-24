@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCart, useSoundUX, useToast } from "../state";
-import { useCurrency } from "../locale";
+import { useCurrency, useT } from "../locale";
 import type { ProductCardData } from "./ProductCard";
 import { ResponsiveImage } from "../media";
 import { hasProductCardPrice } from "./productCardPrice";
@@ -20,6 +20,7 @@ export type ProductQuickViewModalProps = {
  * whether to click through or add straight to cart.
  */
 export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModalProps) {
+  const t = useT();
   const { formatBaseAmount } = useCurrency();
   const { playAction } = useSoundUX();
   const { addItem, openDrawer } = useCart();
@@ -50,7 +51,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
         : product.productType === "grouped"
           ? "View products"
           : product.productType === "variable"
-            ? "Select options"
+            ? t("product.select_options")
             : "Add to cart";
 
   // Lock page scroll while open, matching the image lightbox's behaviour.
@@ -191,7 +192,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                     priceAmount: product.priceAmount,
                   });
                   showToast({
-                    title: "Added to cart",
+                    title: t("product.added"),
                     description: product.name,
                     action: { label: "View cart", onClick: openDrawer },
                   });

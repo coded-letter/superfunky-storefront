@@ -42,13 +42,15 @@ test("community grid videos expose playable overlay controls", () => {
 });
 
 test("grouped community cards switch media without activating card navigation", () => {
-  assert.match(gallery, /aria-label="Previous media"/);
-  assert.match(gallery, /aria-label="Next media"/);
+  assert.match(gallery, /aria-label=\{t\("image\.prev"\)\}/);
+  assert.match(gallery, /aria-label=\{t\("image\.next"\)\}/);
   assert.match(gallery, /event\.stopPropagation\(\)/);
   assert.match(gallery, /aria-pressed=\{index === activeIndex\}/);
   assert.match(card, /closest\("a, button, input, textarea, select"\)/);
   assert.match(gallery, /media\[\(activeIndex \+ 1\) % media\.length\]/);
   assert.match(gallery, /image\.srcset = item\.srcSet/);
+  assert.match(gallery, /if \(variant !== "detail" \|\| media\.length < 2\) return/);
+  assert.match(feed, /imageLoading=\{index < 2 \? "eager" : "lazy"\}/);
 });
 
 test("community post detail gallery opens an accessible image and video lightbox", () => {

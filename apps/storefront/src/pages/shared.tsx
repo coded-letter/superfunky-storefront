@@ -1,7 +1,7 @@
 import { Bookmark, Truck } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ResponsiveImage, useReadingList, ViewSwitch, type PostCardData, type ProductCardData, type ProductGalleryImage } from "@funky/ui";
+import { ResponsiveImage, useReadingList, useT, ViewSwitch, type PostCardData, type ProductCardData, type ProductGalleryImage } from "@funky/ui";
 import { sanitizeCmsHtml } from "../lib/cmsBehaviors";
 
 const BOOL_OPTIONS: { value: "on" | "off"; label: string }[] = [
@@ -337,6 +337,7 @@ export function OrderSummaryCard({
 }
 
 export function BookmarkButton({ postId, className = "" }: { postId: string; className?: string }) {
+  const t = useT();
   const { has, toggle } = useReadingList();
   const isSaved = has(postId);
   return (
@@ -344,8 +345,8 @@ export function BookmarkButton({ postId, className = "" }: { postId: string; cla
       type="button"
       onClick={() => toggle(postId)}
       aria-pressed={isSaved}
-      aria-label={isSaved ? "Remove from reading list" : "Save to reading list"}
-      title={isSaved ? "Remove from reading list" : "Save to reading list"}
+      aria-label={isSaved ? t("product.remove_reading") : t("product.save_reading")}
+      title={isSaved ? t("product.remove_reading") : t("product.save_reading")}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
         isSaved
           ? "bg-brand-gradient text-white shadow-soft"

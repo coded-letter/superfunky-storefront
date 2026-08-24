@@ -6,6 +6,7 @@ import {
   hasOnlyMenuSchemaCompatibilityErrors,
   mapBestAvailableMenu,
   omitUnsupportedLayoutFields,
+  parseUiStrings,
   scoreMenu,
 } from "./navigation.ts";
 import {
@@ -19,6 +20,24 @@ const navigationSource = readFileSync(new URL("navigation.ts", import.meta.url),
 const navigationDataSource = readFileSync(new URL("../state/navigationData.tsx", import.meta.url), "utf8");
 
 let dom: JSDOM;
+
+test("UI string payloads keep only string values under non-empty keys", () => {
+  assert.deepEqual(
+    parseUiStrings(JSON.stringify({
+      "cart.title": "Backend cart",
+      "checkout.title": "",
+      "": "ignored",
+      count: 3,
+      nested: { label: "ignored" },
+    })),
+    {
+      "cart.title": "Backend cart",
+      "checkout.title": "",
+    },
+  );
+  assert.deepEqual(parseUiStrings("not-json"), {});
+  assert.deepEqual(parseUiStrings(JSON.stringify(["not", "a", "map"])), {});
+});
 
 test("layout GraphQL compatibility retries can omit unsupported child fields without dropping the layout object", () => {
   const query = `
@@ -64,7 +83,8 @@ test("optional language discovery cannot invalidate layout configuration", () =>
     /if \(isNavigationCompatibilityError\(errors\)\) \{\s*return mapNavigationLanguages\(await getOptionalPolylangRestLanguages\(\)\)/,
   );
   assert.match(navigationSource, /STOREFRONT_BACKEND_PROFILE === "shell"/);
-  assert.match(navigationDataSource, /navigation-data:v14/);
+  assert.match(navigationDataSource, /navigation-data:v15/);
+  assert.match(navigationDataSource, /syncUiStrings\(languageCode, rawState\.data\?\.uiStrings \?\? \{\}\)/);
   assert.match(navigationDataSource, /lastResolvedData/);
   assert.match(navigationDataSource, /canRenderChildren = !enabled \|\| Boolean\(state\.data\) \|\| !rawState\.isLoading/);
   assert.doesNotMatch(navigationDataSource, /useFastNavigationMenus|fastMenus/);

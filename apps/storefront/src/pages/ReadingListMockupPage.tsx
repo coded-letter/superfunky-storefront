@@ -1,12 +1,13 @@
 import { BookOpen, Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import { PostCard, savedListEntityId, useLayoutPreferences, useReadArticles, useReadingList } from "@funky/ui";
+import { PostCard, savedListEntityId, useLayoutPreferences, useReadArticles, useReadingList, useT } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useBlogData } from "../state/blogData";
 
 export function ReadingListMockupPage() {
+  const t = useT();
   const { readingListLayout: layout } = useLayoutPreferences();
   const blogPath = useStorefrontPath("blog", "/blog");
   const { ids, clear, syncError } = useReadingList();
@@ -65,7 +66,7 @@ export function ReadingListMockupPage() {
 
       {syncError ? <SavedCollectionStatus message={`Your reading list could not be synced: ${syncError}`} /> : null}
       {capError ? <SavedCollectionStatus message={`Your reading-list limit could not be loaded: ${capError}`} /> : null}
-      {ids.length > 0 && isLoading ? <ContentLoadingState compact label="Loading your saved articles" /> : null}
+      {ids.length > 0 && isLoading ? <ContentLoadingState compact label={t("reading_list.loading")} /> : null}
       {ids.length > 0 && error ? (
         <SavedCollectionStatus message={`Your saved articles could not be loaded: ${error.message}`} />
       ) : null}
@@ -75,7 +76,7 @@ export function ReadingListMockupPage() {
             <BookOpen className="h-6 w-6" aria-hidden="true" />
           </span>
           <div className="grid gap-1">
-            <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">Nothing saved yet</h2>
+            <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("reading_list.empty")}</h2>
             <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
               Use the bookmark button on any article in the blog to save it for later reading.
             </p>

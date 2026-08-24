@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, Languages, PencilLine, Trash2, X } from "lucide-react";
+import { useT } from "../locale";
 import { useToast } from "../state";
 import { slugify } from "./slugify";
 
@@ -70,6 +71,7 @@ export type WriteArticleModalProps = {
  * association (linking this post to an existing post in another language).
  */
 export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, searchTranslationCandidates }: WriteArticleModalProps) {
+  const t = useT();
   const { showToast } = useToast();
   const isEditing = Boolean(initialPost);
   const [imagePreview, setImagePreview] = useState<string | null>(initialPost?.imageUrl || null);
@@ -190,7 +192,7 @@ export function WriteArticleModal({ onClose, onSubmit, onDelete, initialPost, se
       });
       onClose();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The article could not be published.");
+      setSubmitError(error instanceof Error ? error.message : t("error.article_failed"));
     } finally {
       setIsSubmitting(false);
     }

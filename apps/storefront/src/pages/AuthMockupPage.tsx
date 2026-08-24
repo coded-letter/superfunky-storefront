@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ViewSwitch, useLayoutPreferences } from "@funky/ui";
+import { ViewSwitch, useLayoutPreferences, useT } from "@funky/ui";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { saveCheckoutEmail, saveNewsletterEmail } from "../lib/abandonedCart";
 import { useResolvedStorefrontPath, useStorefrontPath } from "../lib/storefrontPaths";
-import { validateForgotPasswordForm, validateLoginForm, validateNewPassword, validateRegisterForm, type FieldErrors } from "../lib/validation";
+import { isValidEmail, validateForgotPasswordForm, validateLoginForm, validateNewPassword, validateRegisterForm, type FieldErrors } from "../lib/validation";
 import { InputMock, primaryActionButtonClass } from "./shared";
 import {
   login,
@@ -32,31 +32,26 @@ export type AuthShortcodeMode = AuthMode | "combined";
 const AUTH_BACKGROUND_IMAGE =
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80";
 
-const TITLES: Record<AuthMode, string> = {
-  login: "Welcome back",
-  register: "Create your account",
-  "forgot-password": "Forgotten password",
+const TITLE_KEYS: Record<AuthMode, string> = {
+  login: "auth.title.login",
+  register: "auth.title.register",
+  "forgot-password": "auth.title.forgot",
 };
 
-const BREADCRUMB_LABELS: Record<AuthMode, string> = {
-  login: "Sign in",
-  register: "Register",
-  "forgot-password": "Forgot password",
-};
-
-const DESCRIPTIONS: Record<AuthMode, string> = {
-  login: "Sign in to track orders, manage your wishlist, and check out faster.",
-  register: "Join Superfunky for personalized recommendations and faster checkout.",
-  "forgot-password": "We'll email you a secure link to get back into your account.",
+const DESCRIPTION_KEYS: Record<AuthMode, string> = {
+  login: "auth.desc.login",
+  register: "auth.desc.register",
+  "forgot-password": "auth.desc.forgot",
 };
 
 const AUTH_MODE_OPTIONS = [
-  { value: "login" as const, label: "Login" },
-  { value: "register" as const, label: "Register" },
-  { value: "forgot-password" as const, label: "Forgot password" },
+  { value: "login" as const, labelKey: "auth.tab.login" },
+  { value: "register" as const, labelKey: "auth.tab.register" },
+  { value: "forgot-password" as const, labelKey: "auth.tab.forgot" },
 ];
 
 export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
+  const t = useT();
   const embedded = useEmbeddedApplicationShortcode();
   const { path: accountPath, isLoading: isLoadingAccountPath } = useResolvedStorefrontPath("account", "/account");
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
@@ -80,28 +75,28 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const formColumn = (
     <div className="grid content-start gap-6">
       <div className="grid gap-1">
-        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{TITLES[activeMode]}</h1>
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{DESCRIPTIONS[activeMode]}</p>
+        <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t(TITLE_KEYS[activeMode])}</h1>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t(DESCRIPTION_KEYS[activeMode])}</p>
       </div>
 
       {combined ? (
         <ViewSwitch
           label="Authentication view"
-          options={AUTH_MODE_OPTIONS}
+          options={AUTH_MODE_OPTIONS.map((option) => ({ ...option, label: t(option.labelKey) }))}
           value={activeMode}
           onChange={setActiveMode}
         />
       ) : embedded ? null : (
         <div className="flex flex-wrap gap-1.5 rounded-control bg-zinc-100 p-1 dark:bg-zinc-800/60">
-          <AuthTab href={authLoginPath} label="Login" isActive={activeMode === "login"} />
-          <AuthTab href={authRegisterPath} label="Register" isActive={activeMode === "register"} />
-          <AuthTab href={authForgotPath} label="Forgot" isActive={activeMode === "forgot-password"} />
+          <AuthTab href={authLoginPath} label={t("auth.tab.login")} isActive={activeMode === "login"} />
+          <AuthTab href={authRegisterPath} label={t("auth.tab.register")} isActive={activeMode === "register"} />
+          <AuthTab href={authForgotPath} label={t("auth.tab.forgot")} isActive={activeMode === "forgot-password"} />
         </div>
       )}
 
       {activeMode === "login" && searchParams.get("password-reset") === "success" ? (
         <p role="status" className="m-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-          Your password was updated. Sign in with the new password.
+          {t("auth.password_updated")}
         </p>
       ) : null}
 
@@ -140,6 +135,7 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
 }
 
 function AuthSplitLayout({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <div className="relative -mt-8 -mb-16 overflow-hidden rounded-3xl">
       {/* 50/50 background split, now capped to the same `max-w-7xl` content column every
@@ -165,7 +161,7 @@ function AuthSplitLayout({ children }: { children: ReactNode }) {
             <span className="inline-grid h-11 w-11 place-items-center rounded-2xl bg-brand-gradient shadow-glow">✦</span>
             <h2 className="m-0 font-display text-2xl font-bold">Superfunky</h2>
             <p className="m-0 max-w-xs text-sm text-white/70">
-              A modern storefront experience connected to your site account.
+              {t("auth.brand_tagline")}
             </p>
           </div>
           <p className="relative m-0 text-xs text-white/50">© 2026 Superfunky</p>
@@ -176,6 +172,7 @@ function AuthSplitLayout({ children }: { children: ReactNode }) {
 }
 
 function AuthProviders() {
+  const t = useT();
   const { clients, error } = useLoginClients();
   const providers = clients.filter((client) =>
     client.provider !== "PASSWORD" &&
@@ -191,7 +188,7 @@ function AuthProviders() {
     <div className="grid gap-4">
       <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" aria-hidden="true" />
-        Or continue with
+        {t("auth.or_continue")}
         <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" aria-hidden="true" />
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -201,8 +198,8 @@ function AuthProviders() {
             <a
               key={provider.provider}
               href={provider.authorizationUrl || undefined}
-              title={`Continue with ${providerLabel(provider)}`}
-              aria-label={`Continue with ${providerLabel(provider)}`}
+              title={t("auth.continue_with", { provider: providerLabel(provider) })}
+              aria-label={t("auth.continue_with", { provider: providerLabel(provider) })}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500"
             >
               <span className={`inline-grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white ${meta.badgeClass}`}>
@@ -254,6 +251,7 @@ function isSafeAuthorizationUrl(value: string | null): boolean {
 }
 
 function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; authForgotPath: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const [values, setValues] = useState({ identity: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
@@ -264,7 +262,10 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = validateLoginForm(values);
-    setErrors(result.errors);
+    setErrors(localizeFieldErrors(result.errors, values, {
+      identity: { label: t("auth.login.username"), min: 3, max: 254, required: true },
+      password: { label: t("auth.login.password"), min: 1, max: 72, required: true },
+    }, t));
     if (!result.isValid) return;
     setIsSubmitting(true);
     setSubmitError(null);
@@ -272,7 +273,7 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
       await login(values.identity, values.password, rememberMe);
       navigate(accountPath, { replace: true });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Sign-in failed.");
+      setSubmitError(error instanceof Error ? error.message : t("auth.login.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -281,13 +282,13 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
   return (
     <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
       <InputMock
-        label="Username or email"
+        label={t("auth.login.username")}
         value={values.identity}
         onChange={(value) => setValues((previous) => ({ ...previous, identity: value }))}
         error={errors.identity}
       />
       <InputMock
-        label="Password"
+        label={t("auth.login.password")}
         type="password"
         value={values.password}
         onChange={(value) => setValues((previous) => ({ ...previous, password: value }))}
@@ -301,21 +302,22 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
             onChange={(event) => setRememberMe(event.target.checked)}
             className="accent-brand-600"
           />
-          Remember me
+          {t("auth.login.remember")}
         </label>
         <Link to={authForgotPath} className="text-sm font-medium text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">
-          Forgot password?
+          {t("auth.login.forgot_link")}
         </Link>
       </div>
       {submitError ? <p role="alert" className="m-0 text-sm font-medium text-rose-600 dark:text-rose-400">{submitError}</p> : null}
       <button type="submit" disabled={isSubmitting} className={`${primaryActionButtonClass} disabled:cursor-not-allowed disabled:opacity-60`}>
-        {isSubmitting ? "Signing in…" : "Sign in"}
+        {isSubmitting ? t("auth.login.cta_loading") : t("auth.login.cta")}
       </button>
     </form>
   );
 }
 
 function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string; authLoginPath: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const [values, setValues] = useState({ firstName: "", lastName: "", username: "", email: "", password: "", confirmPassword: "" });
   const [marketingConsent, setMarketingConsent] = useState(false);
@@ -327,7 +329,14 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = validateRegisterForm(values);
-    setErrors(result.errors);
+    setErrors(localizeFieldErrors(result.errors, values, {
+      firstName: { label: t("auth.register.first_name"), min: 1, max: 35, required: true },
+      lastName: { label: t("auth.register.last_name"), min: 1, max: 35, required: true },
+      username: { label: t("auth.register.username"), min: 3, max: 35, required: true, type: "username" },
+      email: { label: t("auth.register.email"), min: 6, max: 254, required: true, type: "email" },
+      password: { label: t("auth.register.password"), min: 8, max: 72, required: true },
+      confirmPassword: { label: t("auth.register.confirm"), min: 0, max: 0 },
+    }, t));
     if (!result.isValid) return;
 
     // Same "checkout_form"-style persistence the abandoned-cart tracker reads from,
@@ -345,7 +354,7 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
         setSubmitted(true);
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The account could not be created.");
+      setSubmitError(error instanceof Error ? error.message : t("auth.register.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -354,9 +363,9 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
   if (submitted) {
     return (
       <div className="grid gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-        <p className="m-0 font-semibold">Account created.</p>
-        <p className="m-0">You can now sign in with your email and password.</p>
-        <Link to={authLoginPath} className="font-semibold text-emerald-800 dark:text-emerald-200">Continue to sign in</Link>
+        <p className="m-0 font-semibold">{t("auth.register.success.heading")}</p>
+        <p className="m-0">{t("auth.register.success.body")}</p>
+        <Link to={authLoginPath} className="font-semibold text-emerald-800 dark:text-emerald-200">{t("auth.register.success.cta")}</Link>
       </div>
     );
   }
@@ -365,14 +374,14 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
     <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
       <div className="grid gap-4 sm:grid-cols-2">
         <InputMock
-          label="First name"
+          label={t("auth.register.first_name")}
           value={values.firstName}
           onChange={(value) => setValues((previous) => ({ ...previous, firstName: value }))}
           error={errors.firstName}
           required
         />
         <InputMock
-          label="Last name"
+          label={t("auth.register.last_name")}
           value={values.lastName}
           onChange={(value) => setValues((previous) => ({ ...previous, lastName: value }))}
           error={errors.lastName}
@@ -380,16 +389,16 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
         />
       </div>
       <InputMock
-        label="Username"
+        label={t("auth.register.username")}
         value={values.username}
         onChange={(value) => setValues((previous) => ({ ...previous, username: value }))}
         error={errors.username}
-        placeholder="e.g. funk_rider.99"
-        helperText="Used for your community profile URL — letters, numbers, underscores, hyphens, dots"
+        placeholder={t("auth.register.username_placeholder")}
+        helperText={t("auth.register.username_helper")}
         required
       />
       <InputMock
-        label="Email"
+        label={t("auth.register.email")}
         type="email"
         value={values.email}
         onChange={(value) => setValues((previous) => ({ ...previous, email: value }))}
@@ -397,16 +406,16 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
         required
       />
       <InputMock
-        label="Password"
+        label={t("auth.register.password")}
         type="password"
         value={values.password}
         onChange={(value) => setValues((previous) => ({ ...previous, password: value }))}
         error={errors.password}
-        helperText="At least 8 characters"
+        helperText={t("auth.register.password_helper")}
         required
       />
       <InputMock
-        label="Confirm password"
+        label={t("auth.register.confirm")}
         type="password"
         value={values.confirmPassword}
         onChange={(value) => setValues((previous) => ({ ...previous, confirmPassword: value }))}
@@ -420,17 +429,18 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
           onChange={(event) => setMarketingConsent(event.target.checked)}
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
         />
-        <span>I'd like to receive occasional emails about new drops, offers, and restocks. You can unsubscribe anytime.</span>
+        <span>{t("auth.register.newsletter")}</span>
       </label>
       {submitError ? <p role="alert" className="m-0 text-sm font-medium text-rose-600 dark:text-rose-400">{submitError}</p> : null}
       <button type="submit" disabled={isSubmitting} className={`${primaryActionButtonClass} disabled:cursor-not-allowed disabled:opacity-60`}>
-        {isSubmitting ? "Creating account…" : "Create account"}
+        {isSubmitting ? t("auth.register.cta_loading") : t("auth.register.cta")}
       </button>
     </form>
   );
 }
 
 function ForgotPasswordFormMock({ authLoginPath }: { authLoginPath: string }) {
+  const t = useT();
   const [identity, setIdentity] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [sent, setSent] = useState(false);
@@ -440,7 +450,9 @@ function ForgotPasswordFormMock({ authLoginPath }: { authLoginPath: string }) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = validateForgotPasswordForm({ identity });
-    setErrors(result.errors);
+    setErrors(localizeFieldErrors(result.errors, { identity }, {
+      identity: { label: t("auth.forgot.field"), min: 3, max: 254, required: true },
+    }, t));
     if (!result.isValid) return;
     setIsSubmitting(true);
     setSubmitError(null);
@@ -448,7 +460,7 @@ function ForgotPasswordFormMock({ authLoginPath }: { authLoginPath: string }) {
       await sendPasswordResetEmail(identity);
       setSent(true);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The reset email could not be sent.");
+      setSubmitError(error instanceof Error ? error.message : t("auth.forgot.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -457,17 +469,17 @@ function ForgotPasswordFormMock({ authLoginPath }: { authLoginPath: string }) {
   if (sent) {
     return (
       <p className="m-0 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-        If an account exists for {identity}, a reset link is on its way.
+        {t("auth.forgot.success", { identity })}
       </p>
     );
   }
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
-      <InputMock label="Username or email" value={identity} onChange={setIdentity} error={errors.identity} />
+      <InputMock label={t("auth.forgot.field")} value={identity} onChange={setIdentity} error={errors.identity} />
       {submitError ? <p role="alert" className="m-0 text-sm font-medium text-rose-600 dark:text-rose-400">{submitError}</p> : null}
       <button type="submit" disabled={isSubmitting} className={`${primaryActionButtonClass} disabled:cursor-not-allowed disabled:opacity-60`}>
-        {isSubmitting ? "Sending…" : "Send reset link"}
+        {isSubmitting ? t("auth.forgot.cta_loading") : t("auth.forgot.cta")}
       </button>
     </form>
   );
@@ -481,6 +493,7 @@ function ForgotPasswordFormMock({ authLoginPath }: { authLoginPath: string }) {
  * expired or tampered link) it shows an error state instead of a form.
  */
 export function ResetPasswordMockupPage() {
+  const t = useT();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
@@ -498,11 +511,11 @@ export function ResetPasswordMockupPage() {
     if (!key || !login) return;
     const passwordError = validateNewPassword(password);
     if (passwordError) {
-      setSubmitError(passwordError);
+      setSubmitError(localizePasswordValidationMessage(passwordError, t));
       return;
     }
     if (password !== confirmPassword) {
-      setSubmitError("The passwords do not match.");
+      setSubmitError(t("auth.reset.error.mismatch"));
       return;
     }
     setIsSubmitting(true);
@@ -511,7 +524,7 @@ export function ResetPasswordMockupPage() {
       await resetUserPassword(key, login, password);
       navigate(`${authLoginPath}?password-reset=success`, { replace: true });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The password could not be reset.");
+      setSubmitError(error instanceof Error ? error.message : t("auth.reset.error.failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -522,7 +535,7 @@ export function ResetPasswordMockupPage() {
       <div className="grid w-full max-w-md gap-6 text-center">
         <div className="grid gap-1">
           <Breadcrumbs
-            items={[{ label: "Home", href: "/" }, { label: "Reset password" }]}
+            items={[{ label: "Home", href: "/" }, { label: t("auth.reset.breadcrumb") }]}
             className="justify-center"
           />
           <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Reset your password</h1>
@@ -553,6 +566,7 @@ export function ResetPasswordMockupPage() {
 }
 
 export function OAuthCallbackPage() {
+  const t = useT();
   const { provider = "" } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -570,7 +584,7 @@ export function OAuthCallbackPage() {
       return;
     }
     if (!(normalizedProvider in AUTH_PROVIDER_META) || normalizedProvider === "PASSWORD" || normalizedProvider === "SITETOKEN" || !code) {
-      setError("The provider callback is incomplete or invalid.");
+      setError(t("auth.oauth.callback_error"));
       return;
     }
     let cancelled = false;
@@ -579,12 +593,12 @@ export function OAuthCallbackPage() {
         if (!cancelled) navigate(accountPath, { replace: true });
       })
       .catch((callbackError) => {
-        if (!cancelled) setError(callbackError instanceof Error ? callbackError.message : "Provider sign-in failed.");
+        if (!cancelled) setError(callbackError instanceof Error ? callbackError.message : t("auth.oauth.error"));
       });
     return () => {
       cancelled = true;
     };
-  }, [code, navigate, normalizedProvider, providerError, state]);
+  }, [code, navigate, normalizedProvider, providerError, state, t]);
 
   return (
     <div className="grid min-h-[60vh] place-items-center px-4 py-16">
@@ -617,4 +631,56 @@ function AuthTab({ href, label, isActive }: { href: string; label: string; isAct
       {label}
     </Link>
   );
+}
+
+type TranslateFn = (key: string, replacements?: Record<string, string | number>) => string;
+type ValidationRule = {
+  label: string;
+  min: number;
+  max: number;
+  required?: boolean;
+  type?: "email" | "username";
+};
+
+function localizeFieldErrors<T extends Record<string, string>>(
+  errors: FieldErrors,
+  values: T,
+  rules: Record<string, ValidationRule>,
+  t: TranslateFn,
+): FieldErrors {
+  return Object.fromEntries(
+    Object.entries(errors).map(([field, rawError]) => [
+      field,
+      localizeFieldError(rawError, values[field] ?? "", rules[field], t),
+    ]),
+  );
+}
+
+function localizeFieldError(rawError: string, value: string, rule: ValidationRule | undefined, t: TranslateFn): string {
+  if (rawError === "Passwords don't match") return t("validation.passwords_mismatch");
+  if (!rule) return rawError;
+  const trimmed = value.trim();
+  if (rule.required && trimmed.length === 0) return t("validation.required", { label: rule.label });
+  if (trimmed.length < rule.min) return t("validation.min_length", { label: rule.label, min: rule.min });
+  if (trimmed.length > rule.max) return t("validation.max_length", { label: rule.label, max: rule.max });
+  if (rule.type === "email" && !isValidEmail(trimmed)) return t("validation.email", { label: rule.label });
+  if (rule.type === "username" && !/^[a-zA-Z0-9_.-]+$/.test(trimmed)) return t("validation.username_chars", { label: rule.label });
+  return rawError;
+}
+
+function localizePasswordValidationMessage(message: string, t: TranslateFn): string {
+  switch (message) {
+    case "Use at least 8 characters.":
+      return t("validation.password.min_length");
+    case "Include an uppercase letter.":
+      return t("validation.password.uppercase");
+    case "Include a lowercase letter.":
+      return t("validation.password.lowercase");
+    case "Include a number.":
+      return t("validation.password.number");
+    case "Include a special character.":
+      return t("validation.password.special");
+    default:
+      return message;
+  }
 }

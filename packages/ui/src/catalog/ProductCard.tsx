@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ResponsiveImage } from "../media";
 import { useCart, useSoundUX, useToast, useWishlist } from "../state";
 import { savedListEntityId } from "../state/savedListSync";
-import { calculateDiscountPercent, useCurrency } from "../locale";
+import { calculateDiscountPercent, useCurrency, useT } from "../locale";
 import { ProductQuickViewModal } from "./ProductQuickViewModal";
 import { hasProductCardPrice } from "./productCardPrice";
 import { resolveVariationSwatchColor } from "./variationSwatch";
@@ -124,6 +124,7 @@ export function ProductCard({
   imageAspect = "auto",
 }: ProductCardProps) {
   const { formatBaseAmount } = useCurrency();
+  const t = useT();
   const navigate = useNavigate();
   const { quickViewEnabled } = useContext(ProductCardPreferencesContext);
   const { has, toggle } = useWishlist();
@@ -224,14 +225,14 @@ export function ProductCard({
     showLearnMore
       ? "Learn more"
       : product.productType === "external"
-      ? product.externalUrl
-        ? "Buy now"
-        : "View product"
-      : product.productType === "grouped"
-        ? "View products"
-        : product.productType === "variable" && !product.variations?.length
-          ? "Choose options"
-        : "Add to cart";
+        ? product.externalUrl
+          ? t("product.buy_now")
+          : "View product"
+        : product.productType === "grouped"
+          ? "View products"
+          : product.productType === "variable" && !product.variations?.length
+            ? t("product.choose_options")
+            : t("product.add_to_cart");
 
   const selectVariationOption = (label: string, value: string, imageIndex?: number) => {
     const nextOptions = { ...selectedOptions, [label]: value };
@@ -285,9 +286,9 @@ export function ProductCard({
       priceAmount: selectedPriceAmount,
     });
     showToast({
-      title: "Added to cart",
+      title: t("product.added"),
       description: product.name,
-      action: { label: "View cart", onClick: openDrawer },
+      action: { label: t("cart.view_cart"), onClick: openDrawer },
     });
   };
 
@@ -373,7 +374,7 @@ export function ProductCard({
         {!isSimple && allowPurchaseActions ? (
           <button
             type="button"
-            aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+            aria-label={isWishlisted ? t("product.remove_wishlist") : t("product.add_wishlist")}
             aria-pressed={isWishlisted}
             onClick={() => toggle(wishlistId)}
             className={`absolute right-3 top-3 inline-grid h-9 w-9 place-items-center rounded-control shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${

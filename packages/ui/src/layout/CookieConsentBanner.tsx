@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useT } from "../locale";
 import {
   useCookieConsent,
   useSoundUX,
@@ -179,6 +180,7 @@ export function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
  * list with provider/lifetime metadata and per-item delete), restyled to match this app's
  * design system instead of the legacy's hardcoded dark theme. */
 export function CookieConsentBanner({ providerName = "Superfunky" }: { providerName?: string }) {
+  const t = useT();
   const {
     consent,
     isManagerOpen,
@@ -218,7 +220,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
       {!consent && !isManagerOpen ? (
         <div
           role="region"
-          aria-label="Cookie consent"
+          aria-label={t("cookie.title")}
           aria-hidden={isNearPageBottom}
           className={`sf-cookie-consent funky-cookie-consent-banner fixed inset-x-4 bottom-4 z-40 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white/95 p-5 shadow-soft-lg backdrop-blur transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-900/95 sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-sm ${
             isNearPageBottom ? "pointer-events-none translate-y-4 opacity-0" : "pointer-events-auto translate-y-0 opacity-100"
@@ -230,7 +232,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
             </span>
             <div className="grid gap-1">
               <span className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
-                Cookie consent
+                {t("cookie.title")}
               </span>
               <p className="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
                 {providerName} uses cookies for the proper functioning of our
@@ -257,7 +259,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
               }}
               className="rounded-full border border-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
             >
-              Settings
+              {t("cookie.settings")}
             </button>
             <button
               type="button"
@@ -284,8 +286,8 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
             playAction("modal-open");
             openManager();
           }}
-          aria-label="Cookie settings"
-          title="Cookie settings"
+          aria-label={t("cookie.settings")}
+          title={t("cookie.settings")}
           tabIndex={isNearPageBottom ? -1 : 0}
           aria-hidden={isNearPageBottom}
           className={`fixed bottom-5 left-5 z-40 inline-grid h-11 w-11 place-items-center rounded-full bg-brand-gradient text-white shadow-glow transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-soft-lg ${
@@ -306,7 +308,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Manage cookie preferences"
+            aria-label={t("cookie.manage")}
             onClick={(event) => event.stopPropagation()}
             className="sf-cookie-settings funky-cookie-consent-manager grid max-h-[85vh] w-full max-w-xl gap-4 overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white p-5 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
           >
@@ -317,7 +319,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                 </span>
                 <div className="grid gap-0.5 pt-0.5">
                   <span className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
-                    Manage cookies
+                    {t("cookie.manage")}
                   </span>
                   <p className="m-0 max-w-sm text-xs leading-snug text-zinc-500 dark:text-zinc-400">
                     Choose which optional cookies we may use.{" "}

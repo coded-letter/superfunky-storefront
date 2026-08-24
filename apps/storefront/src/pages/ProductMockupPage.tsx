@@ -10,6 +10,7 @@ import {
   useCart,
   useCurrency,
   useLayoutPreferences,
+  useT,
   useWishlist,
   type ProductGalleryImage,
   type ProductPageLayout,
@@ -34,6 +35,7 @@ import { CommentsSection, summarizeReviews } from "./CommentThread";
 import type { ProductVariationCombo } from "./shared";
 
 export function ProductMockupPage() {
+  const t = useT();
   const { pathname } = useLocation();
   const { slug } = useParams();
   const identifier = pathname.startsWith("/shop/") && slug ? slug : pathname;
@@ -52,14 +54,15 @@ export function ProductMockupPage() {
     normalizedProduct?.uri,
   );
 
-  if (isLoading) return <ContentLoadingState label="Loading product" />;
-  if (error) return <ProductStatus title="Product unavailable" message={error.message} />;
+  if (isLoading) return <ContentLoadingState label={t("product.loading")} />;
+  if (error) return <ProductStatus title={t("product.unavailable")} message={error.message} />;
   if (!normalizedProduct) return <ProductStatus title="Product not found" message={`The store has no published product matching “${identifier}”.`} />;
 
   return <ProductTemplate key={normalizedProduct.id} product={normalizedProduct} />;
 }
 
 function ProductTemplate({ product }: { product: CmsProductDetail }) {
+  const t = useT();
   const contentRef = useRef<HTMLDivElement>(null);
   const shopPath = useStorefrontPath("shop", "/shop");
   const { formatBaseAmount, currencyCode, convertSelectedToBase } = useCurrency();
@@ -312,7 +315,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 onClick={() => toggle(wishlistId)}
                 className="justify-self-start rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
               >
-                {has(wishlistId) ? "Saved to wishlist" : "Add to wishlist"}
+                {has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
               </button>
             </div>
           ) : (
@@ -338,7 +341,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                   rel="noopener noreferrer"
                   className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white no-underline hover:bg-brand-700"
                 >
-                  {product.externalButtonText || "Buy product"}
+                  {product.externalButtonText || t("product.buy_now")}
                 </a>
               ) : (
                 <button
@@ -356,7 +359,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 onClick={addToCart}
                 className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isGrouped ? "Grouped product" : isVariable && !selectedVariation ? "Choose available options" : "Add to cart"}
+                {isGrouped ? t("product.grouped") : isVariable && !selectedVariation ? t("product.choose_options") : t("product.add_to_cart")}
               </button>
             )}
             <button
@@ -365,7 +368,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
               onClick={() => toggle(wishlistId)}
               className="self-end rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
             >
-              {has(wishlistId) ? "Saved to wishlist" : "Add to wishlist"}
+              {has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
             </button>
           </div>
           )}

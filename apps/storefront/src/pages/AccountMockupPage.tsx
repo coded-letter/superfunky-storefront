@@ -218,8 +218,8 @@ export function AccountMockupPage() {
   }, [authUserId, needsOrders, ordersState.loadedForUserId]);
   const account = accountState.data;
   const authUser = authStore.load()?.user;
-  const accountDisplayName = account?.displayName || authUser?.displayName || "Guest account";
-  const accountEmail = account?.email || authUser?.email || "Sign in to load your account";
+  const accountDisplayName = account?.displayName || authUser?.displayName || t("account.guest.name");
+  const accountEmail = account?.email || authUser?.email || t("account.guest.email_placeholder");
   const accountInitials = `${account?.firstName[0] ?? ""}${account?.lastName[0] ?? ""}`.toUpperCase()
     || accountDisplayName.slice(0, 1).toUpperCase()
     || "—";
@@ -268,7 +268,7 @@ export function AccountMockupPage() {
               </div>
             )}
             {accountState.isLoading && !authUser ? (
-              <div className="grid min-w-0 flex-1 gap-2" role="status" aria-label="Loading account identity">
+              <div className="grid min-w-0 flex-1 gap-2" role="status" aria-label={t("account.loading")}>
                 <span className="h-3.5 w-28 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
                 <span className="h-3 w-36 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
               </div>
@@ -318,7 +318,7 @@ export function AccountMockupPage() {
                 className="mt-1 flex items-center gap-2.5 rounded-xl border-t border-zinc-100 px-3 pt-3 text-sm font-medium text-zinc-500 no-underline transition hover:text-rose-600 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-rose-400"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
-                Log out
+                {t("account.logout")}
               </Link>
             ) : (
               <Link
@@ -326,7 +326,7 @@ export function AccountMockupPage() {
                 className="mt-1 flex items-center gap-2.5 rounded-xl border-t border-zinc-100 px-3 pt-3 text-sm font-semibold text-brand-600 no-underline transition hover:text-brand-500 dark:border-zinc-800 dark:text-brand-400"
               >
                 <User className="h-4 w-4" aria-hidden="true" />
-                Sign in or register
+                {t("account.signin_register")}
               </Link>
             )}
           </nav>
@@ -394,12 +394,32 @@ const GUEST_ACCOUNT_CONTENT: Record<AccountTab, { eyebrow: string; title: string
 };
 
 function GuestAccountPanel({ tab, authLoginPath, authRegisterPath }: { tab: AccountTab; authLoginPath: string; authRegisterPath: string }) {
+  const t = useT();
   const content = GUEST_ACCOUNT_CONTENT[tab];
+  const translatedContentByTab: Partial<Record<AccountTab, { eyebrow: string; title: string }>> = {
+    dashboard: {
+      eyebrow: t("account.guest.benefit1_eyebrow"),
+      title: t("account.guest.benefit1_title"),
+    },
+    orders: {
+      eyebrow: t("account.guest.benefit2_eyebrow"),
+      title: t("account.guest.benefit2_title"),
+    },
+    addresses: {
+      eyebrow: t("account.guest.benefit3_eyebrow"),
+      title: t("account.guest.benefit3_title"),
+    },
+    community: {
+      eyebrow: t("account.guest.benefit4_eyebrow"),
+      title: t("account.guest.benefit4_title"),
+    },
+  };
+  const translatedContent = translatedContentByTab[tab];
   return (
     <div className="overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <div className="bg-brand-gradient px-6 py-8 text-white sm:px-8">
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{content.eyebrow}</p>
-        <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{content.title}</h1>
+        <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">{translatedContent?.eyebrow ?? content.eyebrow}</p>
+        <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{translatedContent?.title ?? content.title}</h1>
         <p className="mb-0 mt-3 max-w-2xl text-sm leading-relaxed text-white/85">{content.description}</p>
       </div>
       <div className="grid gap-6 p-6 sm:p-8">
@@ -413,13 +433,13 @@ function GuestAccountPanel({ tab, authLoginPath, authRegisterPath }: { tab: Acco
         </ul>
         <div className="flex flex-wrap gap-3">
           <Link to={authLoginPath} className={`${primaryActionButtonClass} inline-flex items-center justify-center no-underline`}>
-            Log in
+            {t("account.guest.cta.login")}
           </Link>
           <Link
             to={authRegisterPath}
             className="inline-flex items-center justify-center rounded-control border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-700 no-underline transition hover:border-brand-400 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
           >
-            Create an account
+            {t("account.guest.cta.register")}
           </Link>
         </div>
       </div>
@@ -489,6 +509,7 @@ function DashboardPanel({
   onAvatarChanged: (avatar: AccountAvatar) => void;
   onAccountChanged: () => void;
 }) {
+  const t = useT();
   const { showToast } = useToast();
   const pushEnabled = useNavigationData().data?.storefrontConfig.features.push === true;
   const [profile, setProfile] = useState<ProfileFormState>(DEFAULT_PROFILE);
@@ -622,9 +643,9 @@ function DashboardPanel({
 
   const initials = `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase() || "JD";
   const fullName = `${profile.firstName} ${profile.lastName}`.trim();
-  if (isLoading) return <AccountLoadingDots label="Loading your account" />;
+  if (isLoading) return <AccountLoadingDots label={t("account.loading")} />;
   if (error) return <AccountPanelStatus message={error.message} tone="error" />;
-  if (!account) return <AccountPanelStatus message="Sign in to load your profile and account summary." />;
+  if (!account) return <AccountPanelStatus message={t("account.empty_state")} />;
 
   return (
     <div className="grid gap-5">
@@ -680,8 +701,8 @@ function DashboardPanel({
               ) : null}
             </div>
             <div className="grid gap-1">
-              <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Hi, {profile.firstName} 👋</h1>
-              <p className="m-0 text-sm capitalize text-zinc-500 dark:text-zinc-400">{account ? `${account.role} role` : "Sign in to load your account"}</p>
+              <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{t("account.greeting", { name: profile.firstName })}</h1>
+              <p className="m-0 text-sm capitalize text-zinc-500 dark:text-zinc-400">{account ? t("account.role", { role: account.role }) : t("account.guest.email_placeholder")}</p>
             </div>
           </div>
           <div className="grid gap-2">
@@ -694,7 +715,7 @@ function DashboardPanel({
             }`}>
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               {account.emailVerified
-                ? "Verified email"
+                ? t("account.verified")
                 : account.emailVerificationRequired
                   ? "Email verification required"
                   : "Email verification optional"}
@@ -859,6 +880,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 function PushNotificationsCard() {
+  const t = useT();
   const [permission, setPermission] = useState<PushPermission>(() => getCurrentPermission());
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -874,12 +896,12 @@ function PushNotificationsCard() {
         if (subscription && isPushBackendConfigured) setCategories(await getPushPreferences());
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load notification preferences.");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("notification.push.enable_error"));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const handleEnable = async () => {
     setIsBusy(true);
@@ -888,7 +910,7 @@ function PushNotificationsCard() {
       await subscribeToPush();
       setIsSubscribed(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't enable push notifications.");
+      setError(err instanceof Error ? err.message : t("notification.push.enable_error"));
     } finally {
       setPermission(getCurrentPermission());
       setIsBusy(false);
@@ -902,7 +924,7 @@ function PushNotificationsCard() {
       await unsubscribeFromPush();
       setIsSubscribed(false);
     } catch {
-      setError("Couldn't disable push notifications.");
+      setError(t("notification.push.disable_error"));
     } finally {
       setIsBusy(false);
     }
@@ -1076,16 +1098,16 @@ function OrdersPanel({
         ))}
       </div>
 
-      {isLoading ? <AccountPanelStatus message="Loading your orders…" /> : null}
+      {isLoading ? <AccountPanelStatus message={t("account.orders.loading")} /> : null}
       {error ? <AccountPanelStatus message={error.message} tone="error" /> : null}
-      {!isLoading && !error && !account ? <AccountPanelStatus message="Sign in to view your order history." /> : null}
+      {!isLoading && !error && !account ? <AccountPanelStatus message={t("account.orders.sign_in")} /> : null}
       {!isLoading && !error && account && account.emailVerificationRequired && !account.emailVerified ? (
         <AccountPanelStatus message="Your account email still needs confirmation. You can continue using your account while it is pending." />
       ) : null}
       {!isLoading && !error && account && orders.length === 0 ? (
         <div className="grid place-items-center gap-2 rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-14 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
           <Package className="h-8 w-8 text-zinc-300 dark:text-zinc-700" aria-hidden="true" />
-          <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">You have not placed an order with this account yet.</p>
+          <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("account.orders.empty")}</p>
           <Link to={shopPath} className="text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">
             Browse the shop
           </Link>
@@ -1203,15 +1225,16 @@ function AddressesPanel({
   error: Error | null;
   onSaved: () => void;
 }) {
+  const t = useT();
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Addresses</h1>
       </div>
 
-      {isLoading ? <AccountPanelStatus message="Loading your saved addresses…" /> : null}
+      {isLoading ? <AccountPanelStatus message={t("account.addresses.loading")} /> : null}
       {error ? <AccountPanelStatus message={error.message} tone="error" /> : null}
-      {!isLoading && !error && !account ? <AccountPanelStatus message="Sign in to manage billing and shipping addresses." /> : null}
+      {!isLoading && !error && !account ? <AccountPanelStatus message={t("account.addresses.sign_in")} /> : null}
       {account ? (
         <div className="grid gap-4 md:grid-cols-2">
           <AddressCard title="Billing address" address={account.billingAddress} onSaved={onSaved} />
@@ -1224,6 +1247,7 @@ function AddressesPanel({
 
 /** Authenticated community publishing and marketplace controls. */
 function CommunityPanel() {
+  const t = useT();
   const { data: community, viewer: user, refresh } = useCommunityData();
   const { data: blog } = useBlogData();
   const { languageCode } = useLanguage();
@@ -1493,7 +1517,7 @@ function CommunityPanel() {
             className={`${primaryActionButtonClass} inline-flex items-center gap-1.5 !px-4 !py-2 text-xs`}
           >
             <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-            Share a post
+            {t("community.share")}
           </button> : null}
         </div>
 
@@ -1608,7 +1632,7 @@ function CommunityPanel() {
                 className={`${primaryActionButtonClass} inline-flex items-center gap-1.5 !px-4 !py-2 text-xs`}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                List a new product
+                {t("community.list_product")}
               </button> : null}
               {canPublishArticles ? <button
                 type="button"
@@ -1616,7 +1640,7 @@ function CommunityPanel() {
                 className="inline-flex items-center gap-1.5 rounded-control border border-zinc-200 px-3.5 py-2 text-xs font-semibold text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                Write an article
+                {t("community.write")}
               </button> : null}
             </div>
 
@@ -1818,6 +1842,7 @@ function AddressCard({
   address: AccountAddress;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(address);
   const [isSaving, setIsSaving] = useState(false);
@@ -1833,7 +1858,7 @@ function AddressCard({
       setIsEditing(false);
       onSaved();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "The address could not be saved.");
+      setSaveError(error instanceof Error ? error.message : t("account.addresses.save_error"));
     } finally {
       setIsSaving(false);
     }
@@ -1870,7 +1895,7 @@ function AddressCard({
           {saveError ? <p role="alert" className="m-0 text-xs font-medium text-rose-600 dark:text-rose-400">{saveError}</p> : null}
           <div className="flex gap-2">
             <button type="button" onClick={save} disabled={isSaving} className={`${primaryActionButtonClass} !px-4 !py-2 text-xs disabled:opacity-60`}>
-              {isSaving ? "Saving…" : "Save address"}
+              {isSaving ? "Saving…" : t("account.addresses.save")}
             </button>
             <button
               type="button"

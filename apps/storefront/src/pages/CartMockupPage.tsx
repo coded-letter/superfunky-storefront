@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
-import { ProductCard, ResponsiveImage, useCart, useCurrency, useLayoutPreferences } from "@funky/ui";
+import { ProductCard, ResponsiveImage, useCart, useCurrency, useLayoutPreferences, useT } from "@funky/ui";
 import { StandaloneApplicationNotice, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { useAbandonedCartRecovery } from "../lib/abandonedCart";
 import { DEFAULT_FREE_SHIPPING_METHOD, isCartVirtual, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, useCheckoutCart } from "../lib/checkout";
@@ -15,6 +15,7 @@ import { useCommerceData } from "../state/commerceData";
 import { useNavigationData } from "../state/navigationData";
 
 export function CartMockupPage() {
+  const t = useT();
   const embedded = useEmbeddedApplicationShortcode();
   const recoveryState = useAbandonedCartRecovery();
   const recoveryNotice =
@@ -136,6 +137,7 @@ export function CartMockupPage() {
     ? storeApiAmount(cartTotals.total_price, cartTotals)
     : authoritativeSubtotal - discountValue + shippingValue + taxValue;
   const remainingForFreeShipping = freeShippingThreshold !== null ? freeShippingThreshold - authoritativeSubtotal : null;
+  const itemLabel = items.length === 1 ? t("cart.item_singular") : t("cart.item_plural");
 
   if (items.length === 0) {
     const featuredProducts = isBackendConfigured
@@ -148,17 +150,17 @@ export function CartMockupPage() {
             <ShoppingBag className="h-7 w-7" aria-hidden="true" />
           </div>
           <div className="grid gap-1">
-            <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">Your cart is empty</h1>
-            <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Add products from the shop to see them here.</p>
+            <h1 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{t("cart.empty.cart_title")}</h1>
+            <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("cart.empty.body_alt")}</p>
           </div>
           <Link to={shopPath} className={`${primaryActionButtonClass} no-underline`}>
-            Continue shopping
+            {t("cart.continue_shopping")}
           </Link>
         </div>
 
         {featuredProducts.length ? (
           <div className="grid gap-4">
-            <h2 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">You might like</h2>
+            <h2 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{t("cart.you_might_like")}</h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {featuredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} variant="default" />
@@ -176,8 +178,8 @@ export function CartMockupPage() {
       {layout === "editorial" ? (
         <div className="grid gap-8">
           <div className="grid gap-1">
-            <h1 className="m-0 font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100">Your cart</h1>
-            <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{items.length} item{items.length === 1 ? "" : "s"}, ready when you are.</p>
+            <h1 className="m-0 font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100">{t("cart.title")}</h1>
+            <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{items.length} {itemLabel}, ready when you are.</p>
           </div>
 
           <div className="funky-cart-editorial-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -194,13 +196,13 @@ export function CartMockupPage() {
                     />
                     <ShoppingBag className="relative h-8 w-8" aria-hidden="true" />
                     <div className="relative grid gap-1">
-                      <h2 className="m-0 font-display text-xl font-bold leading-tight">Ready to check out?</h2>
+                      <h2 className="m-0 font-display text-xl font-bold leading-tight">{t("cart.ready")}</h2>
                       <p className="m-0 text-sm text-white/85">
-                        {items.length} item{items.length === 1 ? "" : "s"} · {authoritativeSubtotalLabel} subtotal
+                        {items.length} {itemLabel} · {authoritativeSubtotalLabel} {t("cart.subtotal")}
                       </p>
                     </div>
                     <span className="relative inline-flex items-center gap-1.5 text-sm font-semibold">
-                      Continue to checkout <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      {t("cart.continue_checkout")} <ArrowRight className="h-4 w-4" aria-hidden="true" />
                     </span>
                   </Link>
                   <div className="h-[34px]" aria-hidden="true" />
@@ -269,8 +271,8 @@ export function CartMockupPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
           <section className="grid gap-5">
             <div className="grid gap-1">
-              <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Your cart</h1>
-              <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{items.length} item{items.length === 1 ? "" : "s"}.</p>
+              <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t("cart.title")}</h1>
+              <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{items.length} {itemLabel}.</p>
             </div>
             <div className="grid gap-3">
               {items.map((item) => (
@@ -316,7 +318,7 @@ export function CartMockupPage() {
                         onClick={() => removeItem(item.id)}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 transition hover:text-rose-500"
                       >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> {t("cart.remove")}
                       </button>
                     </div>
                   </div>
@@ -333,20 +335,20 @@ export function CartMockupPage() {
                  : undefined
               }
               rows={[
-               { label: "Subtotal", value: authoritativeSubtotalLabel },
-               ...(discountValue > 0 ? [{ label: "Discount", value: `-${formatBaseAmount(discountValue)}` }] : []),
-               { label: "Shipping", value: cartIsVirtual ? "Digital delivery" : shippingValue === 0 ? "Free" : formatBaseAmount(shippingValue) },
-               { label: "Tax", value: formatBaseAmount(taxValue) },
+               { label: t("cart.subtotal"), value: authoritativeSubtotalLabel },
+               ...(discountValue > 0 ? [{ label: t("checkout.discount"), value: `-${formatBaseAmount(discountValue)}` }] : []),
+               { label: t("cart.shipping"), value: cartIsVirtual ? t("cart.digital_delivery") : shippingValue === 0 ? t("cart.free") : formatBaseAmount(shippingValue) },
+               { label: t("cart.tax"), value: formatBaseAmount(taxValue) },
               ]}
               afterRows={
                 cartIsVirtual ? null : (
                   <label className="mb-2 grid gap-2 rounded-xl bg-zinc-50 px-3 py-3 text-sm font-medium text-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200">
-                    <span>Shipping destination preview</span>
+                    <span>{t("cart.shipping_destination")}</span>
                     <select
                       value={selectedCountry}
                       onChange={(e) => setSelectedCountry(e.target.value)}
                       className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-900 transition hover:border-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                      aria-label="Preview shipping destination"
+                      aria-label={t("cart.shipping_destination_aria")}
                     >
                       {availableCountries.map((country) => (
                         <option key={country.code} value={country.code}>
@@ -359,7 +361,7 @@ export function CartMockupPage() {
               }
               total={formatBaseAmount(totalValue)}
               ctaHref={checkoutPath}
-              ctaLabel="Continue to checkout"
+              ctaLabel={t("cart.continue_checkout")}
               position={summarySticky ? "sticky" : "static"}
             />
           </div>

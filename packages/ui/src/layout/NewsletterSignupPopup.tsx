@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, CheckCircle2, ImagePlus, Mail, ShieldCheck, Sparkles, X } from "lucide-react";
+import { useT } from "../locale";
 import { useLayoutPreferences, useSoundUX } from "../state";
 import {
   NEWSLETTER_POPUP_OPEN_DELAY_MS,
@@ -30,13 +31,15 @@ export function NewsletterSignupPopup({
   onSubscribe,
   title = "Be the first to know when the next favorite drops.",
   description = "Join our insider list for early access, private offers, and curated stories from the Superfunky world.",
-  privacyConsentLabel = "I agree to receive occasional email updates and understand that I can unsubscribe at any time.",
+  privacyConsentLabel,
 }: {
   onSubscribe?: (email: string) => Promise<void>;
   title?: string;
   description?: string;
   privacyConsentLabel?: string;
 }) {
+  const t = useT();
+  const resolvedPrivacyConsentLabel = privacyConsentLabel ?? t("newsletter.consent");
   const { playAction } = useSoundUX();
   const { showNewsletterPopup, newsletterPopupVariant, newsletterPopupCooldownDays } = useLayoutPreferences();
   const [isOpen, setIsOpen] = useState(false);
@@ -249,7 +252,7 @@ export function NewsletterSignupPopup({
 
     if (!isValidEmail) {
       playAction("error");
-      setError("Please enter a valid email address.");
+      setError(t("newsletter.email_invalid"));
       return;
     }
 
@@ -264,7 +267,7 @@ export function NewsletterSignupPopup({
       await onSubscribe?.(trimmedEmail);
     } catch (submissionError) {
       playAction("error");
-      setError(submissionError instanceof Error ? submissionError.message : "The newsletter signup could not be saved.");
+      setError(submissionError instanceof Error ? submissionError.message : t("newsletter.signup_error"));
       setIsSubmitting(false);
       return;
     }
@@ -306,7 +309,7 @@ export function NewsletterSignupPopup({
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white text-brand-600 shadow-sm dark:bg-zinc-900 dark:text-brand-300">
         <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
       </div>
-      <h4 className="font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">You’re on the list.</h4>
+      <h4 className="font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("newsletter.subscribed")}</h4>
       <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
         Thanks for subscribing — expect a first look at our next drop and exclusive updates soon.
       </p>
@@ -316,13 +319,13 @@ export function NewsletterSignupPopup({
   const subscribeForm = (
     <form className="mt-4 space-y-3 sm:mt-6 sm:space-y-4" onSubmit={handleSubmit}>
       <label className="block">
-        <span className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-200">Email address</span>
+        <span className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-200">{t("newsletter.email")}</span>
         <div className="relative">
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com"
+            placeholder={t("newsletter.email_placeholder")}
             className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 pr-12 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
           />
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-brand-50 p-2 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
@@ -339,7 +342,7 @@ export function NewsletterSignupPopup({
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500"
         />
         <span className="break-words">
-          {privacyConsentLabel}
+          {resolvedPrivacyConsentLabel}
         </span>
       </label>
 
@@ -351,7 +354,7 @@ export function NewsletterSignupPopup({
           disabled={isSubmitting}
           className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-60 sm:px-5 sm:py-3"
         >
-          {isSubmitting ? "Subscribing…" : "Subscribe"}
+          {isSubmitting ? t("newsletter.subscribing") : t("newsletter.subscribe")}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
         <button
@@ -384,7 +387,7 @@ export function NewsletterSignupPopup({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Join the mailing list"
+          aria-label={t("newsletter.join")}
           className={`pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-4xl border border-zinc-200/80 bg-white p-5 shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 sm:p-6 ${
             isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
           }`}
@@ -418,7 +421,7 @@ export function NewsletterSignupPopup({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Join the mailing list"
+          aria-label={t("newsletter.join")}
           className={`sf-newsletter-popup funky-newsletter-popup relative w-full max-w-md overflow-hidden rounded-4xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 ${
             isVisible ? "translate-y-0 scale-[1] opacity-100" : "translate-y-6 scale-[0.98] opacity-0"
           }`}
@@ -453,7 +456,7 @@ export function NewsletterSignupPopup({
       <div
        role="dialog"
        aria-modal="true"
-       aria-label="Join the mailing list"
+       aria-label={t("newsletter.join")}
        className={`sf-newsletter-popup funky-newsletter-popup relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-200/80 bg-white shadow-soft-lg transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-950 sm:max-h-[calc(100dvh-3rem)] sm:rounded-4xl ${
          isVisible ? "translate-y-0 scale-[1] opacity-100" : "translate-y-6 scale-[0.98] opacity-0"
        }`}

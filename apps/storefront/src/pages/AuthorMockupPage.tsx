@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { PaginablePostGrid, ProfileHeader, ProfileStat, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { PaginablePostGrid, ProfileHeader, ProfileStat, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { getAuthorArchive } from "../lib/authors";
@@ -11,6 +11,7 @@ import { stringToHSL } from "./CommentThread";
 import { NotFoundMockupPage } from "./NotFoundMockupPage";
 
 export function AuthorMockupPage() {
+  const t = useT();
   const { slug = "", language: routeLanguage } = useParams();
   const [searchParams] = useSearchParams();
   const { configuredLanguageCodes, languageCode, languageOptions, syncLanguageCode } = useLanguage();
@@ -39,7 +40,7 @@ export function AuthorMockupPage() {
   }, [explicitLanguage, syncLanguageCode]);
 
   if (isLoading) return <ContentLoadingState label="Loading author" />;
-  if (error) return <AuthorStatus title="Author unavailable" message={error.message} />;
+  if (error) return <AuthorStatus title={t("error.author_unavailable")} message={error.message} />;
   if (!author) return <NotFoundMockupPage />;
 
   const initials = author.name

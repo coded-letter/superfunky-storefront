@@ -15,22 +15,24 @@ type UiStringsContextValue = {
   /** Translate a key, with optional named placeholder substitutions.
    *  Falls back to the English string, then the bare key. */
   t: (key: string, replacements?: Record<string, string | number>) => string;
-  /** Called by navigation data loader to merge in backend-supplied overrides. */
-  syncUiStrings: (overrides: UiStringsMap) => void;
+  /** Called by navigation data loader to replace backend-supplied overrides for one locale. */
+  syncUiStrings: (languageCode: string, overrides: UiStringsMap) => void;
 };
 
 const UiStringsContext = createContext<UiStringsContextValue | null>(null);
 
 export function UiStringsProvider({ children }: { children: ReactNode }) {
   const { languageCode } = useLanguage();
-  const [overrides, setOverrides] = useState<UiStringsMap>({});
+  const [overridesByLanguage, setOverridesByLanguage] = useState<Record<string, UiStringsMap>>({});
 
-  const syncUiStrings = useCallback((next: UiStringsMap) => {
-    setOverrides((current) => {
+  const syncUiStrings = useCallback((nextLanguageCode: string, next: UiStringsMap) => {
+    const language = nextLanguageCode.toLowerCase().split("-")[0] || "en";
+    setOverridesByLanguage((currentByLanguage) => {
+      const current = currentByLanguage[language] ?? {};
       const isSame =
         Object.keys(next).length === Object.keys(current).length &&
         Object.entries(next).every(([k, v]) => current[k] === v);
-      return isSame ? current : next;
+      return isSame ? currentByLanguage : { ...currentByLanguage, [language]: next };
     });
   }, []);
 
@@ -38,9 +40,15 @@ export function UiStringsProvider({ children }: { children: ReactNode }) {
     (key: string, replacements?: Record<string, string | number>): string => {
       const lang = languageCode.toLowerCase().split("-")[0];
       const builtIn = BUILTIN_STRINGS[lang] ?? BUILTIN_STRINGS["en"];
-      return resolveUiString(key, builtIn ?? {}, BUILTIN_STRINGS["en"] ?? {}, overrides, replacements);
+      return resolveUiString(
+        key,
+        builtIn ?? {},
+        BUILTIN_STRINGS["en"] ?? {},
+        overridesByLanguage[lang] ?? {},
+        replacements,
+      );
     },
-    [languageCode, overrides],
+    [languageCode, overridesByLanguage],
   );
 
   const value = useMemo(() => ({ t, syncUiStrings }), [t, syncUiStrings]);

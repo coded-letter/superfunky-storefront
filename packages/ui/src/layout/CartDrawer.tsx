@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import type { ProductCardData } from "../catalog/ProductCard";
+import { useT } from "../locale";
 import { useCart, useSoundUX } from "../state";
 import { ResponsiveImage } from "../media";
 
@@ -20,6 +21,7 @@ export type CartDrawerProps = {
  * on mobile so it stays reachable with a thumb.
  */
 export function CartDrawer({ featuredProduct, showPromotedProduct = true }: CartDrawerProps) {
+  const t = useT();
   const { items, itemCount, subtotalLabel, isDrawerOpen, closeDrawer, addItem, removeItem, updateQuantity } = useCart();
   const { playAction } = useSoundUX();
   const [isVisible, setIsVisible] = useState(false);
@@ -78,7 +80,7 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Shopping cart"
+        aria-label={t("cart.aria")}
         onClick={(event) => event.stopPropagation()}
         className={`funky-cart-drawer flex h-full w-full max-w-full flex-col bg-white shadow-soft-lg transition-transform duration-300 ease-out dark:bg-zinc-950 sm:max-w-md ${
           isVisible ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-y-0 sm:translate-x-full"
@@ -87,7 +89,7 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <h2 className="m-0 flex items-center gap-2 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
             <ShoppingBag className="h-5 w-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
-            Your cart
+            {t("cart.title")}
             {itemCount > 0 ? (
               <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
                 {itemCount}
@@ -97,7 +99,7 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
           <button
             type="button"
             onClick={handleClose}
-            aria-label="Close cart"
+            aria-label={t("cart.close")}
             className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-200 text-zinc-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-brand-500 dark:hover:text-brand-300"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -168,24 +170,24 @@ export function CartDrawer({ featuredProduct, showPromotedProduct = true }: Cart
         {items.length > 0 ? (
           <div className="shrink-0 space-y-3 border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">Subtotal</span>
+              <span className="text-zinc-500 dark:text-zinc-400">{t("cart.subtotal")}</span>
               <span className="text-base font-bold text-zinc-900 dark:text-zinc-100">{subtotalLabel}</span>
             </div>
-            <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">Shipping and taxes calculated at checkout.</p>
+            <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{t("cart.shipping_notice")}</p>
             <div className="flex gap-2">
               <Link
                 to="/cart"
                 onClick={handleClose}
                 className="flex-1 rounded-full border border-zinc-200 px-4 py-2.5 text-center text-sm font-semibold text-zinc-700 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
-                View cart
+                {t("cart.view_cart")}
               </Link>
               <Link
                 to="/checkout"
                 onClick={handleClose}
                 className="flex-1 rounded-full bg-brand-gradient px-4 py-2.5 text-center text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
               >
-                Checkout
+                {t("cart.checkout")}
               </Link>
             </div>
           </div>
@@ -206,6 +208,7 @@ function EmptyCartState({
   onNavigate: () => void;
   onAddToCart: (item: { id: string; name: string; imageUrl?: string; priceLabel: string }, quantity?: number) => void;
 }) {
+  const t = useT();
   const [justAdded, setJustAdded] = useState(false);
 
   return (
@@ -214,14 +217,14 @@ function EmptyCartState({
         <ShoppingBag className="h-7 w-7" aria-hidden="true" />
       </div>
       <div className="space-y-1.5">
-        <p className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">Your cart is empty</p>
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Looks like you haven't added anything yet.</p>
+        <p className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{t("cart.empty.heading")}</p>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t("cart.empty.body")}</p>
       </div>
 
       {showPromotedProduct && featuredProduct ? (
         <div className="w-full rounded-2xl border border-zinc-100 bg-zinc-50/60 p-4 text-left dark:border-zinc-800/80 dark:bg-zinc-900/40">
           <p className="m-0 mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
-            You might like
+            {t("cart.you_might_like")}
           </p>
           <Link
             to={`/shop/${featuredProduct.id}`}
@@ -254,7 +257,7 @@ function EmptyCartState({
             }}
             className="mt-3 w-full rounded-full bg-brand-gradient px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
           >
-            {justAdded ? "Added ✓" : "Add to cart"}
+            {justAdded ? t("cart.added") : t("cart.add")}
           </button>
         </div>
       ) : null}
@@ -264,7 +267,7 @@ function EmptyCartState({
         onClick={onNavigate}
         className="rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
       >
-        Continue shopping
+        {t("cart.continue_shopping")}
       </Link>
     </div>
   );

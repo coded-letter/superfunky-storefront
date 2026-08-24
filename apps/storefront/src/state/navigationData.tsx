@@ -29,7 +29,7 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   const { syncCurrencyOptions, setCurrencyCode, currencyOptions } = useCurrency();
   const { syncUiStrings } = useUiStrings();
   const rawState = useIncrementalData(
-    `navigation-data:v14:${languageCode}`,
+    `navigation-data:v15:${languageCode}`,
     () => getNavigationData(languageCode),
     enabled,
   );
@@ -78,10 +78,11 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   useEffect(() => {
     setStripePublishableKey(rawState.data?.storefrontConfig?.stripePublishableKey ?? null);
   }, [rawState.data?.storefrontConfig?.stripePublishableKey]);
-  useEffect(() => {
-    const uiStrings = rawState.data?.uiStrings;
-    if (uiStrings && Object.keys(uiStrings).length) syncUiStrings(uiStrings);
-  }, [rawState.data?.uiStrings, syncUiStrings]);
+  useLayoutEffect(() => {
+    if (!rawState.isLoading) {
+      syncUiStrings(languageCode, rawState.data?.uiStrings ?? {});
+    }
+  }, [languageCode, rawState.data?.uiStrings, rawState.isLoading, syncUiStrings]);
   // Auto-select currency from visitor country on first visit (no stored preference).
   // Runs once when currencies are available and backend geolocation is configured.
   useEffect(() => {

@@ -241,7 +241,7 @@ export function SocialFeedGrid({
                 className={layout === "masonry" ? "mb-4 break-inside-avoid" : "animate-rise-in flex h-full w-full items-stretch justify-center"}
                 style={layout === "masonry" ? undefined : { animationDelay: `${index * 30}ms`, animationFillMode: "backwards" }}
               >
-                <SocialPostCard post={post} layout={layout} imageLoading={index < 4 ? "eager" : "lazy"} onToggleLike={onToggleLike} />
+                <SocialPostCard post={post} layout={layout} imageLoading={index < 2 ? "eager" : "lazy"} onToggleLike={onToggleLike} />
               </div>
             ))}
           </div>
