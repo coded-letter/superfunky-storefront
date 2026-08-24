@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useReadingList, useSoundUX } from "../state";
 import { savedListEntityId } from "../state/savedListSync";
 import { ResponsiveImage } from "../media";
+import { useT } from "../locale";
 
 export type PostCardVariant = "default" | "compact" | "editorial" | "minimal";
 
@@ -112,6 +113,7 @@ function AuthorName({ author }: { author: PostCardData["author"] }) {
 }
 
 function PostBookmarkButton({ postId }: { postId: string }) {
+  const t = useT();
   const { has, toggle } = useReadingList();
   const { playAction } = useSoundUX();
   const isSaved = has(postId);
@@ -125,8 +127,8 @@ function PostBookmarkButton({ postId }: { postId: string }) {
         playAction(isSaved ? "click" : "success");
       }}
       aria-pressed={isSaved}
-      aria-label={isSaved ? "Remove from reading list" : "Save to reading list"}
-      title={isSaved ? "Remove from reading list" : "Save to reading list"}
+      aria-label={isSaved ? t("product.remove_reading") : t("product.save_reading")}
+      title={isSaved ? t("product.remove_reading") : t("product.save_reading")}
       className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-control shadow-soft backdrop-blur transition-all duration-300 hover:scale-110 ${
         isSaved
           ? "bg-brand-gradient text-white"

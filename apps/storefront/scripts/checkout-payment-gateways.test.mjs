@@ -17,7 +17,7 @@ test("Stripe's online payment option is hidden when its gateway isn't configured
   // availability flag confirms the backend actually exposes it — Stripe's "Pay
   // online" option must follow the same rule instead of always rendering.
   assert.match(paymentSection, /\{!isBackendConfigured \|\| isStripeGatewayEnabled \? \(/);
-  assert.match(paymentSection, /label="Pay online"[\s\S]*?<StripeCardElement/);
+  assert.match(paymentSection, /label=\{t\("checkout\.payment\.online"\)\}[\s\S]*?<StripeCardElement/);
 
   // When Stripe becomes unavailable while it's the selected method, checkout must
   // fall back to another real gateway instead of getting stuck on a hidden option.

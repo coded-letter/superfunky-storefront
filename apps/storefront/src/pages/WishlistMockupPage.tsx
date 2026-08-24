@@ -1,12 +1,13 @@
 import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ProductCard, savedListEntityId, useLayoutPreferences, useWishlist } from "@funky/ui";
+import { ProductCard, savedListEntityId, useLayoutPreferences, useT, useWishlist } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { useSavedListCap } from "../lib/savedLists";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useCommerceData } from "../state/commerceData";
 
 export function WishlistMockupPage() {
+  const t = useT();
   const { wishlistCardVariant: cardStyle } = useLayoutPreferences();
   const shopPath = useStorefrontPath("shop", "/shop");
   const { ids, clear, syncError } = useWishlist();
@@ -27,7 +28,7 @@ export function WishlistMockupPage() {
       </div>
       {syncError ? <SavedCollectionStatus message={`Your wishlist could not be synced: ${syncError}`} /> : null}
       {capError ? <SavedCollectionStatus message={`Your wishlist limit could not be loaded: ${capError}`} /> : null}
-      {ids.length > 0 && isLoading ? <ContentLoadingState compact label="Loading your saved products" /> : null}
+      {ids.length > 0 && isLoading ? <ContentLoadingState compact label={t("wishlist.loading")} /> : null}
       {ids.length > 0 && error ? (
         <SavedCollectionStatus message={`Your saved products could not be loaded: ${error.message}`} />
       ) : null}
@@ -44,7 +45,7 @@ export function WishlistMockupPage() {
             <Heart className="h-6 w-6" aria-hidden="true" />
           </span>
           <div className="grid gap-1">
-            <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">Your wishlist is empty</h2>
+            <h2 className="m-0 font-display text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("wishlist.empty")}</h2>
             <p className="m-0 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
               Tap the heart icon on any product card to save it here for later — it stays saved across visits.
             </p>

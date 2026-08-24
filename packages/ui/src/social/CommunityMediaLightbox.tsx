@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Film, X } from "lucide-react";
 import { ResponsiveImage } from "../media";
+import { useT } from "../locale";
 import type { SocialPostMedia } from "./CommunityMediaGallery";
 
 export type CommunityMediaLightboxProps = {
@@ -19,6 +20,7 @@ export function CommunityMediaLightbox({
   onClose,
   onIndexChange,
 }: CommunityMediaLightboxProps) {
+  const t = useT();
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -123,7 +125,7 @@ export function CommunityMediaLightbox({
       className="sf-community-media-lightbox fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/95 p-3 backdrop-blur-sm sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label={`${title} media viewer`}
+      aria-label={t("image.viewer_aria")}
       onClick={(event) => {
         event.stopPropagation();
         onClose();
@@ -135,7 +137,7 @@ export function CommunityMediaLightbox({
           ref={closeButtonRef}
           type="button"
           onClick={onClose}
-          aria-label="Close media viewer"
+          aria-label={t("image.close")}
           className="absolute right-0 top-0 z-20 inline-grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           <X className="h-5 w-5" aria-hidden="true" />
@@ -146,7 +148,7 @@ export function CommunityMediaLightbox({
             <button
               type="button"
               onClick={previousMedia}
-              aria-label="Previous media"
+              aria-label={t("image.prev")}
               className="absolute left-0 top-1/2 z-20 hidden -translate-y-1/2 rounded-full bg-black/60 p-4 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-grid"
             >
               <ChevronLeft className="h-6 w-6" aria-hidden="true" />
@@ -154,7 +156,7 @@ export function CommunityMediaLightbox({
             <button
               type="button"
               onClick={nextMedia}
-              aria-label="Next media"
+              aria-label={t("image.next")}
               className="absolute right-0 top-1/2 z-20 hidden -translate-y-1/2 rounded-full bg-black/60 p-4 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-grid"
             >
               <ChevronRight className="h-6 w-6" aria-hidden="true" />
@@ -201,7 +203,7 @@ export function CommunityMediaLightbox({
               <button
                 type="button"
                 onClick={previousMedia}
-                aria-label="Previous media"
+                aria-label={t("image.prev")}
                 className="inline-grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -212,7 +214,7 @@ export function CommunityMediaLightbox({
               <button
                 type="button"
                 onClick={nextMedia}
-                aria-label="Next media"
+                aria-label={t("image.next")}
                 className="inline-grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <ChevronRight className="h-5 w-5" aria-hidden="true" />

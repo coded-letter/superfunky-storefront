@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ChevronLeft, ChevronRight, Film, Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { ResponsiveImage } from "../media";
+import { useT } from "../locale";
 import { CommunityMediaLightbox } from "./CommunityMediaLightbox";
 
 export type SocialPostMedia = {
@@ -37,6 +38,7 @@ export function CommunityMediaGallery({
   fit = "cover",
   lockAspect = false,
 }: CommunityMediaGalleryProps) {
+  const t = useT();
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -56,7 +58,7 @@ export function CommunityMediaGallery({
   }, [mediaKey]);
 
   useEffect(() => {
-    if (media.length < 2) return;
+    if (variant !== "detail" || media.length < 2) return;
     const adjacent = [
       media[(activeIndex + 1) % media.length],
       media[(activeIndex - 1 + media.length) % media.length],
@@ -69,7 +71,7 @@ export function CommunityMediaGallery({
       if (item.srcSet) image.srcset = item.srcSet;
       image.sizes = item.sizes || "(min-width: 768px) 33vw, 100vw";
     }
-  }, [activeIndex, media, mediaKey]);
+  }, [activeIndex, media, mediaKey, variant]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -212,7 +214,7 @@ export function CommunityMediaGallery({
           <button
             type="button"
             onClick={openLightbox}
-            aria-label={`Open ${activeMedia.altText || title} in media viewer`}
+            aria-label={`${t("image.viewer_aria")}: ${activeMedia.altText || title}`}
             className="group relative h-full w-full cursor-zoom-in"
           >
             <ResponsiveImage
@@ -249,7 +251,7 @@ export function CommunityMediaGallery({
           <button
             type="button"
             onClick={openLightbox}
-            aria-label={`Open ${activeMedia.altText || title} in media viewer`}
+            aria-label={`${t("image.viewer_aria")}: ${activeMedia.altText || title}`}
             className="absolute right-3 top-3 z-20 inline-grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <Maximize2 className="h-4 w-4" aria-hidden="true" />
@@ -291,7 +293,7 @@ export function CommunityMediaGallery({
             <button
               type="button"
               onClick={(event) => selectMedia(event, activeIndex - 1)}
-              aria-label="Previous media"
+              aria-label={t("image.prev")}
               className="absolute left-2 top-1/2 z-20 inline-grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-white shadow-soft backdrop-blur transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -299,7 +301,7 @@ export function CommunityMediaGallery({
             <button
               type="button"
               onClick={(event) => selectMedia(event, activeIndex + 1)}
-              aria-label="Next media"
+              aria-label={t("image.next")}
               className="absolute right-2 top-1/2 z-20 inline-grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-white shadow-soft backdrop-blur transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />

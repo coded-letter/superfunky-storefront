@@ -21,10 +21,10 @@ test("checkout uses exact production English coupon copy", async () => {
   assert.deepEqual(englishStrings["checkout.coupon.title"], "Have a coupon?");
   assert.deepEqual(englishStrings["checkout.coupon.label"], "Coupon code");
   assert.deepEqual(englishStrings["checkout.coupon.apply"], "Apply code");
-  assert.match(source, /title: "Have a coupon\?"/);
-  assert.match(source, /label: "Coupon code"/);
-  assert.match(source, /apply: "Apply code"/);
-  assert.match(source, /placeholder=\{CHECKOUT_COUPON_COPY\.label\}/);
+  assert.match(source, /title: t\("checkout\.coupon\.title"\)/);
+  assert.match(source, /label: t\("checkout\.coupon\.label"\)/);
+  assert.match(source, /apply: t\("checkout\.coupon\.apply"\)/);
+  assert.match(source, /placeholder=\{couponCopy\.label\}/);
   assert.doesNotMatch(source, new RegExp(LONG_LOCALIZED_COUPON_FIXTURE.label));
   assert.doesNotMatch(source, new RegExp(LONG_LOCALIZED_COUPON_FIXTURE.apply));
 });
@@ -87,5 +87,5 @@ test("checkout restores old BLIK asset and scales its painted bounds to 20px", a
   assert.match(source, /aspectRatio: "95 \/ 40"/);
   assert.match(source, /objectFit: "contain"/);
   assert.match(source, /className="mt-0\.5 shrink-0 text-zinc-500/);
-  assert.match(source, /label="BLIK"/);
+  assert.match(source, /label=\{t\("checkout\.payment\.blik"\)\}/);
 });

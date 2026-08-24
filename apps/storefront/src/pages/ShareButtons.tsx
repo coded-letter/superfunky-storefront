@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Link2, Mail, MessageCircle, Send, Share2 } from "lucide-react";
-import { socialIconSrc } from "@funky/ui";
+import { socialIconSrc, useT } from "@funky/ui";
 
 const shareButtonClass =
   "inline-grid h-8 w-8 place-items-center rounded-full bg-zinc-100 text-zinc-600 transition hover:-translate-y-0.5 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700";
@@ -41,6 +41,7 @@ export function ShareButtonsRow({
    * directly on top of a photo, with no background card behind the row. */
   variant?: "default" | "on-image";
 }) {
+  const t = useT();
   const [isCopied, setIsCopied] = useState(false);
   const pageUrl = window.location.href;
   const links = buildShareLinks(title, pageUrl);
@@ -113,8 +114,8 @@ export function ShareButtonsRow({
         <button
           type="button"
           onClick={handleCopyLink}
-          title="Copy link"
-          aria-label="Copy link"
+          title={t("community.copy_link")}
+          aria-label={t("community.copy_link")}
           className={buttonClass}
         >
           {isCopied ? (

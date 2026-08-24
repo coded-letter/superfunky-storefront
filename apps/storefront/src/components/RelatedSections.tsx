@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { MessageSquareQuote, Star } from "lucide-react";
-import { PaginablePostGrid, PaginableProductGrid, SocialFeedGrid, ViewSwitch, avatarColorFor, type SocialPostCardData } from "@funky/ui";
+import { PaginablePostGrid, PaginableProductGrid, SocialFeedGrid, ViewSwitch, avatarColorFor, useT, type SocialPostCardData } from "@funky/ui";
 import { ContentLoadingState } from "./ContentLoadingState";
 import { MOCK_PRODUCTS } from "../pages/shared";
 import { PUBLIC_SOCIAL_POSTS, getSocialUserByHandle } from "../pages/socialShared";
@@ -55,11 +55,12 @@ export function RelatedSections({ kinds, idPrefix = "related" }: { kinds: Relate
 }
 
 function RelatedSection({ kind }: { kind: Exclude<RelatedSectionKind, "none"> }) {
+  const t = useT();
   const { data: blog, isLoading: isBlogLoading, error: blogError } = useBlogData();
   const { data: commerce, isLoading: isCommerceLoading, error: commerceError } = useCommerceData();
 
   if (kind === "products") {
-    if (isCommerceLoading) return <ContentLoadingState compact label="Loading related products" />;
+    if (isCommerceLoading) return <ContentLoadingState compact label={t("product.related_loading")} />;
     if (commerceError) return <RelatedContentStatus message={commerceError.message} isError />;
     if (!commerce?.products.length) return <RelatedContentStatus message="No published products are available." />;
     return (

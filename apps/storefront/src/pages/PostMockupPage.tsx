@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ResponsiveImage, Seo, useLayoutPreferences } from "@funky/ui";
+import { ResponsiveImage, Seo, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
@@ -43,6 +43,7 @@ type AuthorLayout = "fullwidth" | "compact" | "editorial";
  * and WordPress-rendered content with anchor-linked headings.
  */
 export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
+  const t = useT();
   const { pathname } = useLocation();
   const postUri = normalizePostUri(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -75,8 +76,8 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
     return mountPageStyles(post.themeStyles, BACKEND_ORIGIN);
   }, [post?.themeStyles]);
 
-  if (isLoading) return <ContentLoadingState label="Loading post" />;
-  if (error) return <PostStatus title="Post unavailable" message={error.message} />;
+  if (isLoading) return <ContentLoadingState label={t("loading.post")} />;
+  if (error) return <PostStatus title={t("error.post_unavailable")} message={error.message} />;
   if (!post) {
     return fallback ?? <PostStatus title="Post not found" message={`The site has no published post at “${postUri}”.`} />;
   }

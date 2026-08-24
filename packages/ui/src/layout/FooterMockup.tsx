@@ -442,7 +442,7 @@ export function FooterMockup({
                   html={column.description}
                   className="mb-4 mt-0 text-xs text-zinc-500"
                 />
-                <ul className="m-0 grid list-none gap-2.5 p-0">
+                <ul className="m-0 grid list-none p-0">
                   {column.links.map((link) => (
                     <FooterNavItem key={link.label} item={link} />
                   ))}
@@ -585,7 +585,7 @@ function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: numb
       {hasChildren ? (
         <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
           <div className="overflow-hidden" aria-hidden={!isExpanded}>
-            <ul className="m-0 mt-2 grid list-none gap-2 border-l border-zinc-800 p-0 pl-3">
+            <ul className="m-0 mt-2 grid list-none border-l border-zinc-800 p-0 pl-3">
               {item.children!.map((child) => (
                 <FooterNavItem key={`${child.label}:${child.href}`} item={child} depth={depth + 1} />
               ))}
@@ -723,7 +723,7 @@ function FooterColumnAccordion({ column }: { column: FooterColumn }) {
       />
       <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? "visible grid-rows-[1fr] opacity-100" : "invisible grid-rows-[0fr] opacity-0"}`}>
         <div className="overflow-hidden" aria-hidden={!isExpanded}>
-          <ul className="m-0 mt-3 grid list-none gap-2.5 p-0 pl-1">
+          <ul className="m-0 mt-3 grid list-none p-0 pl-1">
             {column.links.map((link) => (
               <FooterNavItem key={`${link.label}:${link.href}`} item={link} />
             ))}

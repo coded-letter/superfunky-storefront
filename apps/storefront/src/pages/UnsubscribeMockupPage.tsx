@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function UnsubscribeMockupPage() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [feedback, setFeedback] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -16,9 +18,9 @@ export function UnsubscribeMockupPage() {
     <div className="mx-auto flex min-h-[68vh] max-w-3xl items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
       <div className="w-full rounded-4xl border border-zinc-200/80 bg-white p-6 shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-950 sm:p-8 lg:p-10">
         <div className="max-w-2xl space-y-4">
-          <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Unsubscribe" }]} />
+          <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: t("newsletter.unsubscribe") }]} />
           <div className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
-            <span>Unsubscribe</span>
+            <span>{t("newsletter.unsubscribe")}</span>
           </div>
           <div className="space-y-3">
             <h1 className="font-display text-3xl font-semibold leading-tight text-zinc-900 dark:text-zinc-100 sm:text-4xl">
@@ -32,12 +34,12 @@ export function UnsubscribeMockupPage() {
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-200">Email address</span>
+            <span className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-200">{t("newsletter.email")}</span>
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder={t("newsletter.email_placeholder")}
               className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
             />
           </label>
@@ -58,7 +60,7 @@ export function UnsubscribeMockupPage() {
               type="submit"
               className="inline-flex items-center justify-center rounded-full bg-brand-gradient px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
             >
-              Unsubscribe
+              {t("newsletter.unsubscribe")}
             </button>
             <Link to="/" className="text-sm font-semibold text-zinc-500 transition hover:text-brand-600 dark:text-zinc-400 dark:hover:text-brand-300">
               Back to store

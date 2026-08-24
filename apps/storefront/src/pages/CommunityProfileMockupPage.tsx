@@ -25,6 +25,7 @@ import {
   useCurrency,
   useLanguage,
   useLayoutPreferences,
+  useT,
   useToast,
   type ListProductInitialValues,
   type SocialPostCardData,
@@ -77,6 +78,7 @@ type ProfileTab = "posts" | "shop" | "articles" | "followers" | "following";
  * the feed — unless you're viewing your own profile, matching Instagram's behaviour.
  */
 export function CommunityProfileMockupPage() {
+  const t = useT();
   const { handle = "" } = useParams();
   const { data: liveCommunity, viewer, refresh, isLoading, isRevalidating, error } = useCommunityData();
   const fallbackUser = isBackendConfigured ? null : getSocialUserByHandle(handle);
@@ -345,7 +347,7 @@ export function CommunityProfileMockupPage() {
     }
   };
 
-  if (!user && (isLoading || isRevalidating || isProfileLoading)) return <ContentLoadingState label="Loading community profile" />;
+  if (!user && (isLoading || isRevalidating || isProfileLoading)) return <ContentLoadingState label={t("loading.community_profile")} />;
   if (!user && (error || profileError)) {
     return (
       <section role="alert" className="mx-auto grid max-w-lg gap-3 rounded-3xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/60 dark:bg-red-950/30">
@@ -477,7 +479,7 @@ export function CommunityProfileMockupPage() {
       />
 
       {canViewFeed && (hasPublishingTabs || followersEnabled) ? (
-        <div role="tablist" aria-label="Profile sections" className="flex flex-wrap gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
+        <div role="tablist" aria-label={t("community.profile.sections")} className="flex flex-wrap gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
           <ProfileTabButton label={`Posts (${feedPosts.length})`} isActive={activeTab === "posts"} onClick={() => selectTab("posts")} />
           {hasPublishingTabs ? <ProfileTabButton label={`Shop (${creatorProducts.length})`} isActive={activeTab === "shop"} onClick={() => selectTab("shop")} /> : null}
           {hasPublishingTabs ? <ProfileTabButton label={`Articles (${creatorArticles.length})`} isActive={activeTab === "articles"} onClick={() => selectTab("articles")} /> : null}

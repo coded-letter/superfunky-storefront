@@ -1249,12 +1249,16 @@ function localizeMenu(
   }));
 }
 
-function parseUiStrings(raw: string | null | undefined): Record<string, string> {
+export function parseUiStrings(raw: string | null | undefined): Record<string, string> {
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, string>;
+      return Object.fromEntries(
+        Object.entries(parsed).filter(
+          ([key, value]) => key.trim().length > 0 && typeof value === "string",
+        ),
+      );
     }
   } catch {
     // Malformed JSON — fall through to empty map.

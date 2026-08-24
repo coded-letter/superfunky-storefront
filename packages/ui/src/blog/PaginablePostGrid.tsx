@@ -186,7 +186,7 @@ export function PaginablePostGrid({
         <div className={getGridClassName(gridVariant)}>
           {visibleItems.map((post, index) => (
             <div key={post.id} className="h-full min-w-0 animate-rise-in" style={{ animationDelay: `${index * 40}ms`, animationFillMode: "backwards" }}>
-              <PostCard post={post} variant={cardVariant} />
+              <PostCard post={post} variant={cardVariant} imageLoading={index < 2 ? "eager" : "lazy"} />
             </div>
           ))}
         </div>

@@ -189,7 +189,12 @@ export function PaginableProductGrid({
         <div className={getGridClassName(gridVariant)}>
           {visibleItems.map((product, index) => (
             <div key={product.id} className="h-full min-w-0 animate-rise-in" style={{ animationDelay: `${index * 40}ms`, animationFillMode: "backwards" }}>
-              <ProductCard product={product} variant={cardVariant} allowPurchaseActions={allowPurchaseActions} />
+              <ProductCard
+                product={product}
+                variant={cardVariant}
+                allowPurchaseActions={allowPurchaseActions}
+                imageLoading={index < 2 ? "eager" : "lazy"}
+              />
             </div>
           ))}
         </div>

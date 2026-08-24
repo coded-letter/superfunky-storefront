@@ -1,4 +1,5 @@
 import { CheckCircle2, X, XCircle } from "lucide-react";
+import { useT } from "../locale";
 import { useToast, type Toast } from "../state/ToastContext";
 
 /**
@@ -21,6 +22,7 @@ export function ToastContainer() {
 }
 
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+  const t = useT();
   const Icon = toast.tone === "error" ? XCircle : CheckCircle2;
   const iconClass = toast.tone === "error" ? "text-rose-500" : "text-brand-500 dark:text-brand-400";
 
@@ -49,7 +51,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Dismiss notification"
+        aria-label={t("notification.dismiss")}
         className="shrink-0 rounded-full p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
       >
         <X className="h-3.5 w-3.5" aria-hidden="true" />

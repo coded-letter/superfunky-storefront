@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Star } from "lucide-react";
-import { ViewSwitch } from "@funky/ui";
+import { ViewSwitch, useT } from "@funky/ui";
 import { primaryActionButtonClass, type ProductReview } from "./shared";
 import {
   buildReviewTree,
@@ -223,6 +223,7 @@ function ReviewCard({
  * reply is a plain WordPress comment) rendered directly under the review/reply it's
  * attached to, so a thread can grow deeper and deeper without leaving the list. */
 function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: string; content: string }) => Promise<void> }) {
+  const t = useT();
   const [identity] = useState(commentIdentity);
   const [author, setAuthor] = useState(identity.author);
   const [email, setEmail] = useState(identity.email);
@@ -234,11 +235,11 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
     event.preventDefault();
 
     if (!author.trim() || !email.trim() || !content.trim()) {
-      setFormError("All fields are required.");
+      setFormError(t("validation.required"));
       return;
     }
     if (!/\S+@\S+\.\S+/.test(email)) {
-      setFormError("Please enter a valid email address.");
+      setFormError(t("validation.email"));
       return;
     }
 
@@ -253,7 +254,7 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
       }
       setContent("");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "The reply could not be submitted.");
+      setFormError(error instanceof Error ? error.message : t("error.reply_failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -381,6 +382,7 @@ export function ReviewForm({
   formNote?: string;
   showRatingField?: boolean;
 }) {
+  const t = useT();
   const [identity] = useState(commentIdentity);
   const [author, setAuthor] = useState(identity.author);
   const [email, setEmail] = useState(identity.email);
@@ -417,7 +419,7 @@ export function ReviewForm({
       setRating(5);
       window.setTimeout(() => setShowSuccess(false), 4000);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "The review could not be submitted.");
+      setFormError(error instanceof Error ? error.message : t("error.review_failed"));
     } finally {
       setIsSubmitting(false);
     }

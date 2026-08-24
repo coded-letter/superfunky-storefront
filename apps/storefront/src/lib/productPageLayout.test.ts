@@ -24,7 +24,7 @@ test("studio layout keeps product details, reviews, and connections below its pr
 test("studio layout places only meaningful long descriptions below its actions", () => {
   assert.match(
     productPage,
-    /Add to wishlist[\s\S]*?productPageLayout === "studio" && hasLongDescription[\s\S]*?Product details[\s\S]*?<dl className=/,
+    /product\.add_wishlist[\s\S]*?productPageLayout === "studio" && hasLongDescription[\s\S]*?Product details[\s\S]*?<dl className=/,
   );
   assert.match(productPage, /hasMeaningfulProductHtml\(product\.descriptionHtml\)/);
   assert.match(productPage, /displayAttributes = product\.attributes\.flatMap/);
