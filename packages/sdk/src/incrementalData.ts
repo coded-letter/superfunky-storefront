@@ -172,7 +172,7 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
       || entry.cacheKey.startsWith("commerce-data:v4:")
       || entry.cacheKey.startsWith("blog-data:v4:")
       || entry.cacheKey.startsWith("blog-data:summary:v1:")
-      || entry.cacheKey.startsWith("community:v10:")
+      || entry.cacheKey.startsWith("community:v11:")
       || entry.cacheKey.startsWith("community:feed:v1:")
       || entry.cacheKey.startsWith("author:v2:")
       || entry.cacheKey.startsWith("page:/")

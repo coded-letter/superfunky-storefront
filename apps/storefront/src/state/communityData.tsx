@@ -9,6 +9,7 @@ import {
 import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 import { authStore } from "../lib/auth";
 import { useLanguage } from "@funky/ui";
+import { normalizeCommunityMemberTypes } from "../lib/communityMemberTypes";
 
 type CommunityDataContextValue = IncrementalDataState<CommunityData> & {
   viewer: CommunityViewer | null;
@@ -36,7 +37,7 @@ export function CommunityDataProvider({
     [],
   );
   const rawDataState = useIncrementalData(
-    `community:${feedOnly ? "feed:v1" : "v10"}:${languageCode}:${languageBackendCode}:${feedOnly ? "public" : userId}:${revision}`,
+    `community:${feedOnly ? "feed:v1" : "v11"}:${languageCode}:${languageBackendCode}:${feedOnly ? "public" : userId}:${revision}`,
     () => feedOnly
       ? getCommunityFeedData(languageCode, languageBackendCode)
       : getCommunityData(languageCode, languageBackendCode),
@@ -52,7 +53,12 @@ export function CommunityDataProvider({
     data: rawDataState.data
       ? {
           posts: Array.isArray(rawDataState.data.posts) ? rawDataState.data.posts : [],
-          members: Array.isArray(rawDataState.data.members) ? rawDataState.data.members : [],
+          members: Array.isArray(rawDataState.data.members)
+            ? rawDataState.data.members.map((member) => ({
+                ...member,
+                memberTypes: normalizeCommunityMemberTypes(member.memberTypes),
+              }))
+            : [],
           marketplaceItems: Array.isArray(rawDataState.data.marketplaceItems) ? rawDataState.data.marketplaceItems : [],
           profilesPublicEnabled: rawDataState.data.profilesPublicEnabled !== false,
           followersEnabled: rawDataState.data.followersEnabled !== false,

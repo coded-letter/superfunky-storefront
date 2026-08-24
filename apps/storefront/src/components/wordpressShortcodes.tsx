@@ -53,6 +53,10 @@ import { DigitalDownloadsPanel } from "./DigitalDownloadsPanel";
 import { isCommunityArticlePost } from "../lib/communityProfiles";
 import { requestNewsletterUnsubscribe } from "../lib/submissions";
 import { resolveHeadingLevel } from "../lib/headingLevels";
+import {
+  communityMemberMatchesRoles,
+  normalizeCommunityMemberTypes,
+} from "../lib/communityMemberTypes";
 
 export type WordPressShortcodeAttributes = Record<string, string>;
 export type WordPressShortcodeRenderer = (attributes: WordPressShortcodeAttributes) => ReactNode;
@@ -781,19 +785,14 @@ function CommunityTagPicksShortcode({ attributes }: ShortcodeProps) {
 function CommunityMembersShortcode({ attributes }: ShortcodeProps) {
   const { data, isLoading, error } = useCommunityData();
   const include = csv(attributes.include);
-  const normalizeRole = (type: string) => {
-    const normalized = type.trim().toLowerCase().replace(/\s+/g, "-");
-    return normalized === "administrator" ? "admin" : normalized;
-  };
-  const roles = csv(attributes.role).map(normalizeRole).filter((type) => type !== "all");
-  const memberAliasRoles = csv(attributes.members).map(normalizeRole).filter((type) => type !== "all");
-  const permissionRoles = csv(attributes.permission).map(normalizeRole).filter((type) => type !== "all");
+  const roles = normalizeCommunityMemberTypes(csv(attributes.role)).filter((type) => type !== "all");
+  const memberAliasRoles = normalizeCommunityMemberTypes(csv(attributes.members)).filter((type) => type !== "all");
+  const permissionRoles = normalizeCommunityMemberTypes(csv(attributes.permission)).filter((type) => type !== "all");
   const requestedRoles = roles.length ? roles : memberAliasRoles.length ? memberAliasRoles : permissionRoles;
   const members = withCollectionOffset(
     (data?.members || []).filter((member) =>
       member.isPublic &&
-      member.memberTypes.length > 0 &&
-      (!requestedRoles.length || requestedRoles.some((type) => member.memberTypes.includes(type))) &&
+      communityMemberMatchesRoles(member.memberTypes, requestedRoles) &&
       (!include.length || include.includes(member.handle)),
     ),
     attributes.offset,

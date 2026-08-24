@@ -76,7 +76,7 @@ test("avatar editing updates the account cache independently and invalidates pro
   assert.match(account, /invalidateIncrementalDataPrefix\("community-archive-data:v1:"\)/);
   assert.match(account, /invalidateIncrementalDataPrefix\("author:v2:"\)/);
   assert.match(account, /invalidateIncrementalDataPrefix\("blog-data:"\)/);
-  assert.match(incrementalData, /entry\.cacheKey\.startsWith\("community:v10:"\)/);
+  assert.match(incrementalData, /entry\.cacheKey\.startsWith\("community:v11:"\)/);
   assert.match(incrementalData, /entry\.cacheKey\.startsWith\("author:v2:"\)/);
   assert.match(authorPage, /`author:v2:/);
 });
