@@ -59,6 +59,15 @@ test("community post queries use the theme's safe multilingual fields", () => {
       communitySource.indexOf("withoutCommunityLocalizationFields(compatibleQuery)"),
     "the rolling-backend retry should remove translations before removing the supported language field",
   );
+  assert.ok(
+    communitySource.indexOf("commentAuthorUnavailable") <
+      communitySource.indexOf("translationsFieldUnavailable"),
+    "the legacy comment-author retry should run before multilingual schema fallbacks",
+  );
+  assert.match(
+    communitySource,
+    /removeNestedGraphqlFieldSelections\(compatibleQuery, "comments", "author"\)/,
+  );
 });
 
 test("community archives derive tags and authors only from localized posts", () => {
