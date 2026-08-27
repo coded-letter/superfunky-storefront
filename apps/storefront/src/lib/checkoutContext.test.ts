@@ -5,6 +5,7 @@ import {
   buildStoreCheckoutPayload,
   CHECKOUT_CONTEXT_NAMESPACE,
   withDigitalCheckoutAddress,
+  withDigitalStoreApiAddress,
 } from "./checkoutContext.ts";
 import { buildStripePaymentData, toStripeBillingDetails } from "./stripePaymentData.ts";
 import { validateCheckoutForm } from "./validation.ts";
@@ -104,7 +105,7 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.customer_password, "correct-horse-battery-staple");
 });
 
-test("digital checkout supplies a country-valid Store API and Stripe fallback address", () => {
+test("digital checkout supplies a country-agnostic Store API and gateway address", () => {
   const billing = {
     firstName: "Ada",
     lastName: "Lovelace",
@@ -126,48 +127,63 @@ test("digital checkout supplies a country-valid Store API and Stripe fallback ad
   );
   const stripeBilling = toStripeBillingDetails(paymentBilling);
 
-  assert.equal(payload.billing_address.address_1, "Dostawa cyfrowa 1");
-  assert.equal(payload.billing_address.city, "Warszawa");
-  assert.equal(payload.billing_address.state, "MZ");
-  assert.equal(payload.billing_address.postcode, "00-001");
+  assert.equal(payload.billing_address.address_1, "Digital delivery");
+  assert.equal(payload.billing_address.city, "Digital order");
+  assert.equal(payload.billing_address.state, "");
+  assert.equal(payload.billing_address.postcode, "");
   assert.equal(payload.billing_address.country, "PL");
   assert.deepEqual(payload.shipping_address, {
     ...payload.billing_address,
     email: undefined,
   });
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].digital_order, true);
-  assert.equal(stripePaymentData.get("billing_address_1"), "Dostawa cyfrowa 1");
-  assert.equal(stripePaymentData.get("billing_city"), "Warszawa");
-  assert.equal(stripePaymentData.get("billing_state"), "MZ");
-  assert.equal(stripePaymentData.get("billing_postcode"), "00-001");
-  assert.equal(stripeBilling.address.line1, "Dostawa cyfrowa 1");
-  assert.equal(stripeBilling.address.city, "Warszawa");
-  assert.equal(stripeBilling.address.state, "MZ");
-  assert.equal(stripeBilling.address.postal_code, "00-001");
+  assert.equal(stripePaymentData.get("billing_address_1"), "Digital delivery");
+  assert.equal(stripePaymentData.get("billing_city"), "Digital order");
+  assert.equal(stripePaymentData.get("billing_state"), "");
+  assert.equal(stripePaymentData.get("billing_postcode"), "");
+  assert.equal(stripeBilling.address.line1, "Digital delivery");
+  assert.equal(stripeBilling.address.city, "Digital order");
+  assert.equal(stripeBilling.address.state, undefined);
+  assert.equal(stripeBilling.address.postal_code, undefined);
 });
 
-test("digital checkout uses valid state and postcode formats for supported countries", () => {
-  const countries = [
-    { countryCode: "DE", state: "DE-BE", postcode: "10115" },
-    { countryCode: "FR", state: "75", postcode: "75001" },
-    { countryCode: "GB", state: "London", postcode: "SW1A 1AA" },
-    { countryCode: "NL", state: "NH", postcode: "1011 AA" },
-    { countryCode: "US", state: "CA", postcode: "94105" },
-  ];
-
-  for (const country of countries) {
-    const address = withDigitalCheckoutAddress({
-      firstName: "Ada",
-      lastName: "Lovelace",
-      addressLine1: "",
-      city: "",
-      postcode: "",
-      countryCode: country.countryCode,
-      email: "ada@example.com",
-      phone: "+48 123 456 789",
-    });
-    assert.equal(address.state, country.state);
-    assert.equal(address.postcode, country.postcode);
+test("digital checkout avoids country-specific state and postcode validation", () => {
+  for (let first = 65; first <= 90; first += 1) {
+    for (let second = 65; second <= 90; second += 1) {
+      const countryCode = String.fromCharCode(first, second);
+      const address = withDigitalCheckoutAddress({
+        firstName: "Ada",
+        lastName: "Lovelace",
+        addressLine1: "Old physical address",
+        city: "Old physical city",
+        state: "Old physical state",
+        postcode: "00000",
+        countryCode,
+        email: "ada@example.com",
+        phone: "+48 123 456 789",
+      });
+      const storeApiAddress = withDigitalStoreApiAddress({
+        first_name: "Ada",
+        last_name: "Lovelace",
+        address_1: "Old physical address",
+        city: "Old physical city",
+        state: "Old physical state",
+        postcode: "00000",
+        country: countryCode,
+        email: "ada@example.com",
+        phone: "+48 123 456 789",
+      });
+      assert.equal(address.countryCode, countryCode);
+      assert.equal(address.addressLine1, "Digital delivery");
+      assert.equal(address.city, "Digital order");
+      assert.equal(address.state, "");
+      assert.equal(address.postcode, "");
+      assert.equal(storeApiAddress.country, countryCode);
+      assert.equal(storeApiAddress.address_1, "Digital delivery");
+      assert.equal(storeApiAddress.city, "Digital order");
+      assert.equal(storeApiAddress.state, "");
+      assert.equal(storeApiAddress.postcode, "");
+    }
   }
 });
 
