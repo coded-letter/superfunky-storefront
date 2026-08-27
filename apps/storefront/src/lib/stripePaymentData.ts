@@ -12,18 +12,19 @@ export type StripeBillingInput = {
 };
 
 export function toStripeBillingDetails(details: StripeBillingInput) {
+  const address = {
+    ...(details.addressLine1.trim() ? { line1: details.addressLine1.trim() } : {}),
+    ...(details.addressLine2?.trim() ? { line2: details.addressLine2.trim() } : {}),
+    ...(details.city.trim() ? { city: details.city.trim() } : {}),
+    ...(details.state?.trim() ? { state: details.state.trim() } : {}),
+    ...(details.postcode.trim() ? { postal_code: details.postcode.trim() } : {}),
+    country: details.countryCode,
+  };
   return {
     name: `${details.firstName} ${details.lastName}`.trim(),
     email: details.email,
     phone: details.phone || null,
-    address: {
-      line1: details.addressLine1,
-      line2: details.addressLine2 || null,
-      city: details.city,
-      state: details.state || null,
-      postal_code: details.postcode,
-      country: details.countryCode,
-    },
+    address,
   };
 }
 

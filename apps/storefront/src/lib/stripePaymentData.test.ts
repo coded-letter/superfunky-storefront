@@ -56,12 +56,24 @@ test("maps billing data for Stripe.js without empty optional strings", () => {
     phone: "+48123456789",
     address: {
       line1: "Prosta 1",
-      line2: null,
       city: "Warsaw",
-      state: null,
       postal_code: "00-001",
       country: "PL",
     },
+  });
+});
+
+test("does not send synthetic-looking empty address fields to Stripe.js", () => {
+  assert.deepEqual(toStripeBillingDetails({
+    ...billing,
+    addressLine1: "",
+    city: "",
+    postcode: "",
+  }), {
+    name: "Anna Kowalska",
+    email: "anna@example.com",
+    phone: "+48123456789",
+    address: { country: "PL" },
   });
 });
 
