@@ -24,6 +24,7 @@ import { getPostByUri, type CmsPost } from "../lib/posts";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { createReview } from "../lib/comments";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
+import { backendPostUriFromStorefrontPath } from "../lib/postRoutePaths.mjs";
 import { CommentsSection, stringToHSL, summarizeReviews } from "./CommentThread";
 import { ShareButtonsRow } from "./ShareButtons";
 import { slugifyHeading } from "./shared";
@@ -45,7 +46,7 @@ type AuthorLayout = "fullwidth" | "compact" | "editorial";
 export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
   const t = useT();
   const { pathname } = useLocation();
-  const postUri = normalizePostUri(pathname);
+  const postUri = backendPostUriFromStorefrontPath(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
   const { data: post, isLoading, isRevalidating, error } = useIncrementalData(
     `post:${postUri}`,
@@ -580,11 +581,6 @@ function toInternalPath(url: string): string {
   } catch {
     return url;
   }
-}
-
-function normalizePostUri(pathname: string): string {
-  const withLeadingSlash = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
 function PostStatus({ title, message }: { title: string; message: string }) {

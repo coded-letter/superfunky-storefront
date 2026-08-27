@@ -70,6 +70,61 @@ test("prerender includes every routable WooCommerce product type", () => {
   }
 });
 
+test("prerender emits posts at the canonical storefront blog route", () => {
+  const postRoute = cmsRouteFromNode(
+    {
+      __typename: "Post",
+      title: "Custom WP plugins and their compatibility",
+      slug: "custom-wp-plugins-and-their-compatibility",
+      uri: "/custom-wp-plugins-and-their-compatibility/",
+      seo: {
+        breadcrumbs: [
+          { text: "Home", url: "https://cms.example.test/" },
+          {
+            text: "Custom WP plugins and their compatibility",
+            url: "https://cms.example.test/custom-wp-plugins-and-their-compatibility/",
+          },
+        ],
+      },
+    },
+    "contentNodes",
+    "en",
+    ["en"],
+  );
+  assert.equal(postRoute?.path, "/blog/custom-wp-plugins-and-their-compatibility");
+  assert.equal(postRoute?.redirectFrom, "/custom-wp-plugins-and-their-compatibility");
+  assert.equal(
+    cmsRouteFromNode(
+      {
+        __typename: "Post",
+        title: "Story",
+        slug: "story",
+        uri: "/story/",
+        seo: { breadcrumbs: [{ text: "Story", url: "https://cms.example.test/story/" }] },
+      },
+      "contentNodes",
+      "en",
+      ["en"],
+    )?.breadcrumbs.at(-1)?.url,
+    "/blog/story",
+  );
+  assert.equal(
+    cmsRouteFromNode(
+      {
+        __typename: "Post",
+        title: "Wtyczki",
+        slug: "wtyczki",
+        uri: "/pl/wtyczki/",
+        language: { code: "PL" },
+      },
+      "contentNodes",
+      "en",
+      ["en", "pl"],
+    )?.path,
+    "/pl/blog/wtyczki",
+  );
+});
+
 test("prerender preserves canonical multilingual CMS URIs", () => {
   assert.equal(
     cmsRouteFromNode(
@@ -218,7 +273,7 @@ test("prerender maps complete CMS metadata and always prefers the featured image
 
   assert.equal(route?.title, "SEO title");
   assert.equal(route?.description, "Authoritative description");
-  assert.equal(route?.canonical, "https://cms.example.test/journal/metadata/");
+  assert.equal(route?.canonical, "/blog/metadata");
   assert.equal(route?.image?.url, "https://cms.example.test/featured.webp");
   assert.deepEqual(route?.image, {
     url: "https://cms.example.test/featured.webp",

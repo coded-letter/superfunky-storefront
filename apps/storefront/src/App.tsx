@@ -765,6 +765,7 @@ export function App() {
                     <Route path="/author/:slug" element={<AuthorMockupPage />} />
                     <Route path="/:language/author/:slug" element={<AuthorMockupPage />} />
                     <Route path="/blog/:slug" element={<PostMockupPage />} />
+                    <Route path="/:language/blog/:slug" element={<PostMockupPage />} />
                     <Route path="/:year/:month/:day/:slug" element={<PostMockupPage />} />
                     <Route path="/:language/:year/:month/:day/:slug" element={<PostMockupPage />} />
                     <Route path="/sitemap" element={<SitemapPage />} />

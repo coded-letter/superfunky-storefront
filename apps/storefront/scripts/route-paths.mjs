@@ -1,4 +1,5 @@
 import { normalizePublicRoutePath } from "@funky/shared/route-policy";
+import { storefrontPostPath } from "../src/lib/postRoutePaths.mjs";
 
 export const ROUTABLE_CMS_TYPES = new Set([
   "Category",
@@ -74,7 +75,15 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
   if (type === "Page" && sourcePath === "/" && !isHomePage) return null;
   // Multilingual front pages can share "/" in WPGraphQL even though each one
   // must be emitted at its language root on the storefront.
-  const path = isHomePage
+  const path = type === "Post"
+    ? storefrontPostPath({
+        uri: sourcePath,
+        slug: node?.slug,
+        languageCode: language,
+        defaultLanguage,
+        configuredLanguageCodes,
+      })
+    : isHomePage
     ? language === defaultLanguage
       ? "/"
       : normalizeLanguageRoutePath(sourcePath, language, configuredLanguageCodes)
@@ -97,6 +106,17 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
   const robots = isHomePage
     ? "index, follow"
     : `${noindex ? "noindex" : "index"}, ${nofollow ? "nofollow" : "follow"}`;
+  const breadcrumbs = (seo.breadcrumbs || []).flatMap((breadcrumb) =>
+    breadcrumb?.text?.trim() && breadcrumb?.url?.trim()
+      ? [{ name: breadcrumb.text.trim(), url: breadcrumb.url.trim() }]
+      : [],
+  );
+  if (type === "Post" && breadcrumbs.length) {
+    breadcrumbs[breadcrumbs.length - 1] = {
+      ...breadcrumbs[breadcrumbs.length - 1],
+      url: path,
+    };
+  }
 
   const route = {
     path,
@@ -104,7 +124,7 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
     title: seo.title?.trim() || `${label} | FunkyCommerce`,
     description: seo.metaDesc?.trim() || seo.opengraphDescription?.trim() || description,
     keywords: seo.metaKeywords?.trim() || seo.focuskw?.trim() || "",
-    canonical: isHomePage ? path : seo.canonical?.trim() || seo.opengraphUrl?.trim() || "",
+    canonical: isHomePage || type === "Post" ? path : seo.canonical?.trim() || seo.opengraphUrl?.trim() || "",
     robots,
     image,
     opengraphAuthor: seo.opengraphAuthor?.trim() || "",
@@ -117,15 +137,12 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
     opengraphType: seo.opengraphType?.trim() || (type === "Post" ? "article" : type?.includes("Product") ? "product" : "website"),
     twitterDescription: seo.twitterDescription?.trim() || "",
     twitterTitle: seo.twitterTitle?.trim() || "",
-    breadcrumbs: (seo.breadcrumbs || []).flatMap((breadcrumb) =>
-      breadcrumb?.text?.trim() && breadcrumb?.url?.trim()
-        ? [{ name: breadcrumb.text.trim(), url: breadcrumb.url.trim() }]
-        : [],
-    ),
+    breadcrumbs,
     schemaType: seo.schema?.articleType?.find(Boolean)
       || seo.schema?.pageType?.find(Boolean)
       || (type === "Post" ? "Article" : type?.includes("Product") ? "Product" : "WebPage"),
     source: "cms",
+    redirectFrom: type === "Post" && sourcePath !== path ? sourcePath : "",
     robotsSource: publicRobots ? "explicit" : "seo",
     type,
     indexable: !robots.startsWith("noindex"),
