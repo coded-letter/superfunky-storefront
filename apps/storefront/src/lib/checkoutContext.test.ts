@@ -5,6 +5,7 @@ import {
   buildStoreCheckoutPayload,
   CHECKOUT_CONTEXT_NAMESPACE,
   withDigitalCheckoutAddress,
+  withDigitalGatewayAddress,
   withDigitalStoreApiAddress,
 } from "./checkoutContext.ts";
 import { buildStripePaymentData, toStripeBillingDetails } from "./stripePaymentData.ts";
@@ -116,16 +117,16 @@ test("digital checkout supplies a country-agnostic Store API and gateway address
     email: "ada@example.com",
     phone: "+48 123 456 789",
   };
-  const paymentBilling = withDigitalCheckoutAddress(billing);
+  const gatewayBilling = withDigitalGatewayAddress(billing);
   const payload = buildStoreCheckoutPayload(
     billing,
     "funkycommerce_crypto",
     { digitalOrder: true },
   );
   const stripePaymentData = new Map(
-    buildStripePaymentData(paymentBilling, "pm_digital").map(({ key, value }) => [key, value]),
+    buildStripePaymentData(gatewayBilling, "pm_digital").map(({ key, value }) => [key, value]),
   );
-  const stripeBilling = toStripeBillingDetails(paymentBilling);
+  const stripeBilling = toStripeBillingDetails(billing);
 
   assert.equal(payload.billing_address.address_1, "Digital delivery");
   assert.equal(payload.billing_address.city, "Digital order");
@@ -139,10 +140,11 @@ test("digital checkout supplies a country-agnostic Store API and gateway address
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].digital_order, true);
   assert.equal(stripePaymentData.get("billing_address_1"), "Digital delivery");
   assert.equal(stripePaymentData.get("billing_city"), "Digital order");
-  assert.equal(stripePaymentData.get("billing_state"), "");
-  assert.equal(stripePaymentData.get("billing_postcode"), "");
-  assert.equal(stripeBilling.address.line1, "Digital delivery");
-  assert.equal(stripeBilling.address.city, "Digital order");
+  assert.equal(stripePaymentData.get("billing_state"), "Digital order");
+  assert.equal(stripePaymentData.get("billing_postcode"), "00000");
+  assert.equal(stripePaymentData.get("billing_phone"), billing.phone);
+  assert.equal(stripeBilling.address.line1, undefined);
+  assert.equal(stripeBilling.address.city, undefined);
   assert.equal(stripeBilling.address.state, undefined);
   assert.equal(stripeBilling.address.postal_code, undefined);
 });

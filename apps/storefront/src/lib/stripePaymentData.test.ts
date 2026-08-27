@@ -30,6 +30,7 @@ test("builds the Woo Stripe UPE card payment-data contract", () => {
   assert.equal(values.get("payment_method"), "stripe");
   assert.equal(values.get("wc_stripe_selected_upe_payment_type"), "card");
   assert.equal(values.get("billing_email"), billing.email);
+  assert.equal(values.get("billing_phone"), billing.phone);
   assert.equal(values.has("wc-stripe-blik-code"), false);
 });
 

@@ -52,6 +52,7 @@ export function buildStripePaymentData(
     { key: "billing_state", value: billing.state || "" },
     { key: "billing_postcode", value: billing.postcode },
     { key: "billing_country", value: billing.countryCode },
+    { key: "billing_phone", value: billing.phone },
   ];
   if (options?.selectedPaymentType) {
     data.push({
