@@ -87,7 +87,7 @@ test("maps every searchable archive family to canonical storefront routes", () =
 
   assert.equal(byType.get("product")?.title, "Orbit & Bag");
   assert.equal(byType.get("product")?.href, "/product/orbit-bag");
-  assert.equal(byType.get("post")?.href, "/en/orbit-story/");
+  assert.equal(byType.get("post")?.href, "/en/blog/orbit-story");
   assert.equal(byType.get("post_category")?.href, "/blog/category/guides");
   assert.equal(byType.get("post_tag")?.href, "/blog/tag/orbit");
   assert.equal(byType.get("product_category")?.href, "/shop/category/accessories");
@@ -224,13 +224,13 @@ test("WordPress REST search avoids optional plugin fields and filters localized 
   assert.deepEqual(
     results.filter(({ type }) => type === "post" || type === "post_category")
       .map(({ href }) => href),
-    ["/ja/%E6%97%A5%E6%9C%AC%E8%AA%9E/", "/ja/category/%E6%97%A5%E6%9C%AC%E8%AA%9E/"],
+    ["/ja/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E", "/ja/category/%E6%97%A5%E6%9C%AC%E8%AA%9E/"],
   );
   assert.equal(results.some(({ title }) => title.includes("Polsk")), false);
   assert.deepEqual(
     polishResults.filter(({ type }) => type === "post" || type === "post_category")
       .map(({ href }) => href),
-    ["/polski/", "/category/polski/"],
+    ["/blog/polski", "/category/polski/"],
   );
   assert.equal(polishResults.some(({ title }) => title.includes("日本語")), false);
   assert.equal(results.some(({ type }) => type === "author"), false);

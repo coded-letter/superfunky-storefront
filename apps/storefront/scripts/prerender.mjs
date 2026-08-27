@@ -2517,6 +2517,8 @@ function renderRedirects(appleMerchantFileEnabled) {
     : [];
   const redirectRules = renderedRules.filter(({ status }) => status !== 200).map(({ rendered }) => rendered);
   const rewriteRules = renderedRules.filter(({ status }) => status === 200).map(({ rendered }) => rendered);
+  const cmsRouteRedirects = routes.flatMap(({ path, redirectFrom }) =>
+    redirectFrom && redirectFrom !== path ? [`${redirectFrom}  ${path}  301`] : []);
   const sitemapFallback = staticGenerationConfig.sitemapEnabled ? [] : ["/sitemap  /index.html  404"];
   const appleMerchantFallback = appleMerchantFileEnabled
     ? []
@@ -2524,6 +2526,7 @@ function renderRedirects(appleMerchantFileEnabled) {
   return [
     "/product.feed.xml  /product-feed.xml  301",
     ...redirectRules,
+    ...cmsRouteRedirects,
     ...sitemapFallback,
     ...appleMerchantFallback,
     ...(artifactDelivery?.mode === "artifact"

@@ -30,6 +30,7 @@ import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility";
 import {
   createProfilePostQuery,
 } from "./profileGraphqlCompatibility";
+import { storefrontPostPath } from "./postRoutePaths.mjs";
 
 export type CmsPostTerm = {
   id: string;
@@ -347,12 +348,21 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
   const contentText = htmlToText(post.content || "");
   const wordCount = contentText ? contentText.split(/\s+/).length : 0;
   const readingTime = post.seo?.readingTime;
+  const languageCode = post.language?.code?.toLowerCase() || resolveContentLanguage(post.uri || uri);
+  const storefrontUri = storefrontPostPath({
+    uri: post.uri || uri,
+    slug: post.slug,
+    languageCode,
+    defaultLanguage: STOREFRONT_DEFAULT_LANGUAGE,
+    configuredLanguageCodes: STOREFRONT_EXPECTED_LOCALES,
+  });
+  const seo = mapSeo(post.seo, post.funkycommercePublicRobots);
 
   return {
     id: post.id,
     databaseId: post.databaseId,
     slug: post.slug || "",
-    uri: post.uri || uri,
+    uri: storefrontUri,
     title: post.title?.trim() || "Untitled post",
     content: post.headlessContent || post.content || "",
     excerpt: htmlToText(post.excerpt || ""),
@@ -360,13 +370,18 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     modified: post.modified,
     wordCount,
     readingTimeMinutes: readingTime && readingTime > 0 ? Math.ceil(readingTime) : Math.max(1, Math.ceil(wordCount / 200)),
-    languageCode: post.language?.code?.toLowerCase() || resolveContentLanguage(post.uri || uri),
+    languageCode,
     translations:
       post.translations?.flatMap((translation) =>
         translation?.uri
           ? [{
               databaseId: translation.databaseId,
-              uri: translation.uri,
+              uri: storefrontPostPath({
+                uri: translation.uri,
+                languageCode: translation.language?.code,
+                defaultLanguage: STOREFRONT_DEFAULT_LANGUAGE,
+                configuredLanguageCodes: STOREFRONT_EXPECTED_LOCALES,
+              }),
               languageCode: translation.language?.code?.toLowerCase() || resolveContentLanguage(translation.uri),
             }]
           : [],
@@ -393,7 +408,11 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
         parentDatabaseId: comment.parentDatabaseId,
         rating: normalizeRating(comment.rating),
       })) || [],
-    seo: mapSeo(post.seo, post.funkycommercePublicRobots),
+    seo: {
+      ...seo,
+      canonical: storefrontUri,
+      opengraphUrl: storefrontUri,
+    },
     scripts: post.enqueuedScripts?.nodes.map(mapScript) || [],
     themeStyles: post.themeStyles || emptyThemeStyles(),
   };

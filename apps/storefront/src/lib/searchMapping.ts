@@ -1,5 +1,6 @@
 import type { SearchResultItem, SearchResultType } from "@funky/ui";
 import { normalizeCommunityHandle } from "./communityProfiles.ts";
+import { storefrontPostPath } from "./postRoutePaths.mjs";
 
 type SearchNode = {
   id: string;
@@ -55,7 +56,7 @@ export function mapStorefrontSearchResults(
     ...mapContentResults(data.products?.nodes, "product", t("search.type.product"), normalizeLabel, (node) =>
       resolveCanonicalPath("product", node.slug, node.uri)),
     ...mapContentResults(data.posts?.nodes, "post", t("search.type.post"), normalizeLabel, (node) =>
-      resolveInternalHref(node.uri, contentPath("blog", node.slug))),
+      storefrontPostPath({ uri: node.uri, slug: node.slug, languageCode: routeLanguageCode })),
     ...mapContentResults(data.pages?.nodes, "page", t("search.type.page"), normalizeLabel, (node) =>
       resolveInternalHref(node.uri, contentPath("", node.slug))),
     ...mapTermResults(data.postCategories?.nodes, "post_category", t("search.type.post_category"), "blog/category", normalizeLabel, true),

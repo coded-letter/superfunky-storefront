@@ -6,6 +6,7 @@ import {
   STOREFRONT_DEFAULT_LANGUAGE,
   STOREFRONT_EXPECTED_LOCALES,
 } from "@funky/sdk";
+import { storefrontPostPath } from "./postRoutePaths.mjs";
 import { resolvePathLanguageCode } from "@funky/ui/src/locale/urlPaths.ts";
 import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility.ts";
 import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
@@ -490,7 +491,13 @@ export function mapBlogPost(post: RawBlogPost): PostCardData {
   return {
     id: post.id,
     slug: post.slug || "",
-    href: post.uri || undefined,
+    href: storefrontPostPath({
+      uri: post.uri,
+      slug: post.slug,
+      languageCode,
+      defaultLanguage: STOREFRONT_DEFAULT_LANGUAGE,
+      configuredLanguageCodes: STOREFRONT_EXPECTED_LOCALES,
+    }),
     title: post.title?.trim() || "Untitled post",
     excerpt: htmlToPlainText(post.excerpt || ""),
     imageUrl: featuredImage?.sourceUrl || undefined,
