@@ -79,12 +79,28 @@ const DIGITAL_CHECKOUT_ADDRESS = {
   postcode: "",
 } as const;
 
+const DIGITAL_GATEWAY_ADDRESS = {
+  addressLine1: "Digital delivery",
+  city: "Digital order",
+  state: "Digital order",
+  postcode: "00000",
+} as const;
+
 export function withDigitalCheckoutAddress(
   details: CheckoutBillingDetails,
 ): CheckoutBillingDetails {
   return {
     ...details,
     ...DIGITAL_CHECKOUT_ADDRESS,
+  };
+}
+
+export function withDigitalGatewayAddress(
+  details: CheckoutBillingDetails,
+): CheckoutBillingDetails {
+  return {
+    ...details,
+    ...DIGITAL_GATEWAY_ADDRESS,
   };
 }
 

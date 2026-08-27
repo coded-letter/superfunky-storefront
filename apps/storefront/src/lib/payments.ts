@@ -12,6 +12,7 @@ import { getOrCreateCaptureKey } from "./abandonedCart";
 import {
   buildStoreCheckoutPayload,
   withDigitalCheckoutAddress,
+  withDigitalGatewayAddress,
 } from "./checkoutContext";
 import { BACKEND_ORIGIN, graphqlRequest, isBackendConfigured } from "@funky/sdk";
 import { getStripe } from "./stripe";
@@ -567,13 +568,16 @@ export async function submitCheckoutWithAccount(
   paymentMethod: "stripe" | "stripe_blik" | "cod" | "cheque" | "bacs" | "funkycommerce_crypto",
   options?: CheckoutSubmissionOptions,
 ): Promise<PaymentSubmissionResult> {
-  const paymentBilling = options?.digitalOrder
+  const storeBilling = options?.digitalOrder
     ? withDigitalCheckoutAddress(billing)
+    : billing;
+  const gatewayBilling = options?.digitalOrder
+    ? withDigitalGatewayAddress(billing)
     : billing;
   const stripePaymentData =
     (paymentMethod === "stripe" || paymentMethod === "stripe_blik") &&
     options?.stripePaymentMethodId
-      ? buildStripePaymentData(paymentBilling, options.stripePaymentMethodId, {
+      ? buildStripePaymentData(gatewayBilling, options.stripePaymentMethodId, {
           gatewayId: paymentMethod,
           blikCode: paymentMethod === "stripe_blik" ? options.blikCode : undefined,
           selectedPaymentType: options.stripePaymentType,
@@ -587,7 +591,7 @@ export async function submitCheckoutWithAccount(
 
   const result = await submitStoreCheckout(
     buildStoreCheckoutPayload(
-      paymentBilling,
+      storeBilling,
       paymentMethod,
       { ...options, captureKey: getOrCreateCaptureKey() || undefined },
       stripePaymentData,
