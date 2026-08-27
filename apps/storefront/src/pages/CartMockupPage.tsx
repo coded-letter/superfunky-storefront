@@ -12,6 +12,7 @@ import { useStorefrontPath } from "../lib/storefrontPaths";
 import { FREE_SHIPPING_THRESHOLD, MOCK_PRODUCTS, OrderSummaryCard, primaryActionButtonClass } from "./shared";
 import { type StoreApiAddress } from "../lib/wcStoreApi";
 import { useCommerceData } from "../state/commerceData";
+import { formatProductCardCurrency } from "../lib/productCardCurrency";
 import { useNavigationData } from "../state/navigationData";
 
 export function CartMockupPage() {
@@ -141,7 +142,8 @@ export function CartMockupPage() {
 
   if (items.length === 0) {
     const featuredProducts = isBackendConfigured
-      ? commerceData?.products.slice(0, 4) ?? []
+      ? commerceData?.products.slice(0, 4).map((product) =>
+          formatProductCardCurrency(product, formatBaseAmount)) ?? []
       : MOCK_PRODUCTS.slice(0, 4);
     return (
       <div className="grid gap-10">

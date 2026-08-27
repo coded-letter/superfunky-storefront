@@ -85,8 +85,12 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.customer_note, "Leave with reception.");
   assert.equal(payload.billing_address.first_name, "Ada");
   assert.equal(payload.billing_address.company, "Analytical Engines Ltd");
+  assert.equal(payload.billing_address.address_2, "");
   assert.equal(payload.shipping_address?.first_name, "Grace");
   assert.equal(payload.shipping_address?.address_1, "2 Shipping Lane");
+  assert.equal(payload.shipping_address?.company, "Analytical Engines Ltd");
+  assert.equal(payload.shipping_address?.address_2, "");
+  assert.equal(payload.shipping_address?.email, undefined);
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].language, "pl");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].backend_language, "PL");
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].currency, "PLN");
@@ -127,7 +131,10 @@ test("digital checkout supplies a country-valid Store API and Stripe fallback ad
   assert.equal(payload.billing_address.state, "MZ");
   assert.equal(payload.billing_address.postcode, "00-001");
   assert.equal(payload.billing_address.country, "PL");
-  assert.deepEqual(payload.shipping_address, payload.billing_address);
+  assert.deepEqual(payload.shipping_address, {
+    ...payload.billing_address,
+    email: undefined,
+  });
   assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].digital_order, true);
   assert.equal(stripePaymentData.get("billing_address_1"), "Dostawa cyfrowa 1");
   assert.equal(stripePaymentData.get("billing_city"), "Warszawa");

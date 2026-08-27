@@ -53,18 +53,21 @@ export function buildCheckoutExtensions(
   };
 }
 
-function toStoreApiAddress(details: CheckoutBillingDetails): StoreApiAddress {
+function toStoreApiAddress(
+  details: CheckoutBillingDetails,
+  addressType: "billing" | "shipping",
+): StoreApiAddress {
   return {
     first_name: details.firstName,
     last_name: details.lastName,
-    company: details.company,
+    company: details.company || "",
     address_1: details.addressLine1,
-    address_2: details.addressLine2,
+    address_2: details.addressLine2 || "",
     city: details.city,
-    state: details.state,
+    state: details.state || "",
     postcode: details.postcode,
     country: details.countryCode,
-    email: details.email,
+    email: addressType === "billing" ? details.email : undefined,
     phone: details.phone,
   };
 }
@@ -122,14 +125,18 @@ export function buildStoreCheckoutPayload(
   options?: CheckoutSubmissionOptions,
   stripePaymentData?: StoreApiCheckoutPayload["payment_data"],
 ): StoreApiCheckoutPayload {
+  const billingDetails = options?.digitalOrder ? withDigitalCheckoutAddress(billing) : billing;
   const billingAddress = toStoreApiAddress(
-    options?.digitalOrder ? withDigitalCheckoutAddress(billing) : billing,
+    billingDetails,
+    "billing",
+  );
+  const shippingAddress = toStoreApiAddress(
+    options?.shippingAddress || billingDetails,
+    "shipping",
   );
   return {
     billing_address: billingAddress,
-    shipping_address: options?.shippingAddress
-      ? toStoreApiAddress(options.shippingAddress)
-      : billingAddress,
+    shipping_address: shippingAddress,
     payment_method: paymentMethod,
     create_account: options?.createAccount,
     customer_password: options?.createAccount ? options.customerPassword : undefined,
