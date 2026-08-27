@@ -426,6 +426,7 @@ export function CheckoutMockupPage() {
     coupons: backendCoupons,
     loading: shippingLoading,
     error: shippingError,
+    syncedCartRevision,
     adoptCart: adoptCheckoutCart,
     selectMethod: selectCheckoutShippingMethod,
   } = useCheckoutCart(billingStoreAddress, deliveryStoreAddress, cartRevision, items);
@@ -554,6 +555,10 @@ export function CheckoutMockupPage() {
   // through the Store API can be submitted here. Crypto still remains preview-only
   // until the custom gateway is fully validated on the live backend.
   async function handlePlaceOrder(event: MouseEvent<HTMLAnchorElement>) {
+    if (orderSubmitting) {
+      event.preventDefault();
+      return;
+    }
     const canSubmitRealOrder =
       isBackendConfigured &&
       (
@@ -717,11 +722,13 @@ export function CheckoutMockupPage() {
     const requireAuthenticatedUser = isLoggedIn;
 
     setOrderSubmitting(true);
-    const syncResult = await syncCartToBackend(items, { force: true, verifyForCheckout: true });
-    if (!syncResult.ok) {
-      setOrderSubmitting(false);
-      setOrderError(syncResult.error);
-      return;
+    if (syncedCartRevision !== cartRevision) {
+      const syncResult = await syncCartToBackend(items, { verifyForCheckout: true });
+      if (!syncResult.ok) {
+        setOrderSubmitting(false);
+        setOrderError(syncResult.error);
+        return;
+      }
     }
 
     let stripePaymentMethodId: string | undefined;
@@ -833,7 +840,7 @@ export function CheckoutMockupPage() {
   const displayShippingMethods = mapShippingOptionsToDisplayMethods(
     backendShippingMethods,
     isBackendConfigured
-      ? checkoutCart && !shippingLoading && !shippingError
+      ? checkoutCart && !shippingError
         ? [DEFAULT_FREE_SHIPPING_METHOD]
         : []
       : FALLBACK_SHIPPING_METHODS,
@@ -875,7 +882,9 @@ export function CheckoutMockupPage() {
     : fallbackShippingValue;
   const taxValue = checkoutTotals
     ? storeApiAmount(checkoutTotals.total_tax, checkoutTotals)
-    : authoritativeSubtotal * 0.1;
+    : isBackendConfigured
+      ? 0
+      : authoritativeSubtotal * 0.1;
   const discountValue = checkoutTotals
     ? storeApiAmount(checkoutTotals.total_discount, checkoutTotals)
     : 0;
@@ -890,7 +899,10 @@ export function CheckoutMockupPage() {
       label: t("checkout.shipping"),
       value: shouldHideShipping ? t("cart.digital_delivery") : shippingValue === 0 ? t("checkout.free") : formatBaseAmount(shippingValue),
     },
-    { label: t("checkout.tax"), value: formatBaseAmount(taxValue) },
+    {
+      label: t("checkout.tax"),
+      value: isBackendConfigured && !checkoutTotals ? "—" : formatBaseAmount(taxValue),
+    },
   ];
 
   const couponSection = (

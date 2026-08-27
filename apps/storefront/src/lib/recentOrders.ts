@@ -196,7 +196,7 @@ function syncChatbotOffset(element: HTMLElement) {
 
 function createNotifierElement() {
   document.getElementById("storefront-recent-orders")?.remove();
-  const element = document.createElement("aside");
+  const element = document.createElement("div");
   element.id = "storefront-recent-orders";
   element.className = "storefront-recent-orders";
   element.setAttribute("role", "status");

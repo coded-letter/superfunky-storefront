@@ -6,6 +6,7 @@ import { useCart, useSoundUX, useToast } from "../state";
 import { useCurrency, useT } from "../locale";
 import type { ProductCardData } from "./ProductCard";
 import { ResponsiveImage } from "../media";
+import { shouldShowProductLearnMore } from "./productCardCta";
 import { hasProductCardPrice } from "./productCardPrice";
 
 export type ProductQuickViewModalProps = {
@@ -40,7 +41,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
     priceRangeLabel: rangeLabel,
     variationPriceAmounts: variationAmounts,
   });
-  const showLearnMore = product.productType !== "external" && product.productType !== "grouped" && product.productType !== "variable" && !hasPrice;
+  const showLearnMore = shouldShowProductLearnMore(product, hasPrice);
   const ctaLabel =
     showLearnMore
       ? t("product.cta.learn_more")

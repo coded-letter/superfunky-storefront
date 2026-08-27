@@ -1,13 +1,12 @@
 /** Checkout utilities — shipping, taxes, coupons, and related calculations. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CartLineItem } from "@funky/ui";
 import { syncCartToBackend } from "./backendCart";
 import { isBackendConfigured } from "@funky/sdk";
 import {
   applyCoupon,
   calculateTaxes,
-  getCart,
   getShippingMethods,
   removeCoupon,
   selectShippingMethod,
@@ -58,69 +57,117 @@ export function useCheckoutCart(
     cart: StoreApiCart | null;
     loading: boolean;
     error: string | null;
-  }>({ cart: null, loading: false, error: null });
+    syncedCartRevision: string | null;
+  }>({ cart: null, loading: false, error: null, syncedCartRevision: null });
   const addressKey = [billingAddress, shippingAddress]
     .map((address) => address
       ? [
-          address.first_name,
-          address.last_name,
           address.address_1,
           address.address_2 ?? "",
           address.city,
           address.state ?? "",
           address.postcode,
           address.country,
-          address.email ?? "",
-          address.phone ?? "",
         ].join("|")
       : "")
-    .concat(cartRevision)
     .join("::");
+  const latestAddressesRef = useRef({ billingAddress, shippingAddress });
+  latestAddressesRef.current = { billingAddress, shippingAddress };
+  const lastRequestedAddressKeyRef = useRef(addressKey);
 
   useEffect(() => {
     if (!isBackendConfigured || !billingAddress || !shippingAddress) {
-      setState({ cart: null, loading: false, error: null });
+      setState({ cart: null, loading: false, error: null, syncedCartRevision: null });
       return;
     }
 
     let cancelled = false;
-    setState((previous) => ({ ...previous, loading: true, error: null }));
+    lastRequestedAddressKeyRef.current = addressKey;
+    setState((previous) => ({
+      ...previous,
+      loading: true,
+      error: null,
+      syncedCartRevision: null,
+    }));
     void syncCartToBackend(frontendCart, {
-      force: true,
       verifyForCheckout: true,
       ignoreSuspension: true,
     }).then(async (syncResult) => {
       if (cancelled) return;
       if (!syncResult.ok) {
-        setState({ cart: null, loading: false, error: syncResult.error });
+        setState({
+          cart: null,
+          loading: false,
+          error: syncResult.error,
+          syncedCartRevision: null,
+        });
         return;
       }
-      const result = await updateCartCustomer(billingAddress, shippingAddress);
+      const latestAddresses = latestAddressesRef.current;
+      if (!latestAddresses.billingAddress || !latestAddresses.shippingAddress) {
+        setState({ cart: null, loading: false, error: null, syncedCartRevision: null });
+        return;
+      }
+      const result = await updateCartCustomer(
+        latestAddresses.billingAddress,
+        latestAddresses.shippingAddress,
+      );
       if (cancelled) return;
       if (!result.ok) {
-        setState({ cart: null, loading: false, error: result.error });
+        setState({
+          cart: null,
+          loading: false,
+          error: result.error,
+          syncedCartRevision: null,
+        });
         return;
       }
-      const refreshed = await getCart();
-      if (cancelled) return;
-      setState(refreshed.ok
-        ? { cart: refreshed.data, loading: false, error: null }
-        : { cart: result.data, loading: false, error: refreshed.error });
+      setState({
+        cart: result.data,
+        loading: false,
+        error: null,
+        syncedCartRevision: cartRevision,
+      });
     });
     return () => {
       cancelled = true;
     };
-  }, [addressKey]);
+  }, [cartRevision]);
+
+  useEffect(() => {
+    if (!isBackendConfigured || !billingAddress || !shippingAddress) {
+      lastRequestedAddressKeyRef.current = addressKey;
+      return;
+    }
+    if (lastRequestedAddressKeyRef.current === addressKey) return;
+
+    lastRequestedAddressKeyRef.current = addressKey;
+    let cancelled = false;
+    setState((previous) => ({ ...previous, loading: true, error: null }));
+    const timeoutId = window.setTimeout(() => {
+      void updateCartCustomer(billingAddress, shippingAddress).then((result) => {
+        if (cancelled) return;
+        setState((previous) => result.ok
+          ? { ...previous, cart: result.data, loading: false, error: null }
+          : { ...previous, loading: false, error: result.error });
+      });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [addressKey, cartRevision]);
 
   const adoptCart = useCallback((cart: StoreApiCart) => {
-    setState({ cart, loading: false, error: null });
+    setState((previous) => ({ ...previous, cart, loading: false, error: null }));
   }, []);
 
   const selectMethod = useCallback(async (packageId: number, rateId: string) => {
     setState((previous) => ({ ...previous, loading: true, error: null }));
     const result = await selectShippingMethod({ package_id: packageId, rate_id: rateId });
     if (result.ok) {
-      setState({ cart: result.data, loading: false, error: null });
+      setState((previous) => ({ ...previous, cart: result.data, loading: false, error: null }));
     } else {
       setState((previous) => ({ ...previous, loading: false, error: result.error }));
     }
