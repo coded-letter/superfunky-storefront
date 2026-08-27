@@ -88,6 +88,10 @@ test("recent orders preserve the visible order and interval across reload-style 
 
   const notifier = document.getElementById("storefront-recent-orders");
   assert.ok(notifier);
+  assert.equal(notifier.tagName, "DIV");
+  assert.equal(notifier.getAttribute("role"), "status");
+  assert.equal(notifier.getAttribute("aria-live"), "polite");
+  assert.equal(notifier.getAttribute("aria-atomic"), "true");
   assert.match(notifier.textContent || "", /Anna bought 2 × Gallery plugin/);
   assert.equal(notifier.dataset.chatbotOffset, "false");
   const productLink = notifier.querySelector<HTMLAnchorElement>(".storefront-recent-orders__product");

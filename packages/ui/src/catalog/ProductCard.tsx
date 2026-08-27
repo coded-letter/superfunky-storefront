@@ -6,6 +6,7 @@ import { useCart, useSoundUX, useToast, useWishlist } from "../state";
 import { savedListEntityId } from "../state/savedListSync";
 import { calculateDiscountPercent, useCurrency, useT } from "../locale";
 import { ProductQuickViewModal } from "./ProductQuickViewModal";
+import { shouldShowProductLearnMore } from "./productCardCta";
 import { hasProductCardPrice } from "./productCardPrice";
 import { resolveVariationSwatchColor } from "./variationSwatch";
 export { resolveVariationSwatchColor } from "./variationSwatch";
@@ -190,15 +191,7 @@ export function ProductCard({
     priceRangeLabel: convertedRangeLabel,
     variationPriceAmounts: variationAmounts,
   });
-  const usesAddToCartAction =
-    product.productType !== "external" &&
-    product.productType !== "grouped" &&
-    !(product.productType === "variable" && !product.variations?.length);
-  // A variable product that's entirely out of stock (every variation unavailable) has
-  // nothing purchasable to add to cart — send shoppers to the product page instead of a
-  // dead-end "Add to cart"/"Choose options" action that only ever shows a toast.
-  const isOutOfStockVariable = product.productType === "variable" && product.inStock === false;
-  const showLearnMore = usesAddToCartAction && (!hasPrice || isOutOfStockVariable);
+  const showLearnMore = shouldShowProductLearnMore(product, hasPrice);
 
   const discountPercent = convertedRangeLabel && !selectedVariation
     ? null

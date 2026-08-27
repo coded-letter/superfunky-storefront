@@ -34,6 +34,7 @@ test("builds the Store API checkout language and attribution bridge", () => {
         referrer: "https://example.com/campaign",
         user_agent: "Storefront test browser",
         session_start_time: "2026-08-06T01:00:00.000Z",
+        digital_order: false,
       },
     },
   );
@@ -99,7 +100,7 @@ test("checkout payload preserves language, order notes, and a different shipping
   assert.equal(payload.customer_password, "correct-horse-battery-staple");
 });
 
-test("digital checkout supplies required Store API and Stripe address placeholders", () => {
+test("digital checkout supplies a country-valid Store API and Stripe fallback address", () => {
   const billing = {
     firstName: "Ada",
     lastName: "Lovelace",
@@ -121,17 +122,46 @@ test("digital checkout supplies required Store API and Stripe address placeholde
   );
   const stripeBilling = toStripeBillingDetails(paymentBilling);
 
-  assert.equal(payload.billing_address.address_1, "Digital delivery");
-  assert.equal(payload.billing_address.city, "Digital order");
-  assert.equal(payload.billing_address.postcode, "00000");
+  assert.equal(payload.billing_address.address_1, "Dostawa cyfrowa 1");
+  assert.equal(payload.billing_address.city, "Warszawa");
+  assert.equal(payload.billing_address.state, "MZ");
+  assert.equal(payload.billing_address.postcode, "00-001");
   assert.equal(payload.billing_address.country, "PL");
   assert.deepEqual(payload.shipping_address, payload.billing_address);
-  assert.equal(stripePaymentData.get("billing_address_1"), "Digital delivery");
-  assert.equal(stripePaymentData.get("billing_city"), "Digital order");
-  assert.equal(stripePaymentData.get("billing_postcode"), "00000");
-  assert.equal(stripeBilling.address.line1, "Digital delivery");
-  assert.equal(stripeBilling.address.city, "Digital order");
-  assert.equal(stripeBilling.address.postal_code, "00000");
+  assert.equal(payload.extensions?.[CHECKOUT_CONTEXT_NAMESPACE].digital_order, true);
+  assert.equal(stripePaymentData.get("billing_address_1"), "Dostawa cyfrowa 1");
+  assert.equal(stripePaymentData.get("billing_city"), "Warszawa");
+  assert.equal(stripePaymentData.get("billing_state"), "MZ");
+  assert.equal(stripePaymentData.get("billing_postcode"), "00-001");
+  assert.equal(stripeBilling.address.line1, "Dostawa cyfrowa 1");
+  assert.equal(stripeBilling.address.city, "Warszawa");
+  assert.equal(stripeBilling.address.state, "MZ");
+  assert.equal(stripeBilling.address.postal_code, "00-001");
+});
+
+test("digital checkout uses valid state and postcode formats for supported countries", () => {
+  const countries = [
+    { countryCode: "DE", state: "DE-BE", postcode: "10115" },
+    { countryCode: "FR", state: "75", postcode: "75001" },
+    { countryCode: "GB", state: "London", postcode: "SW1A 1AA" },
+    { countryCode: "NL", state: "NH", postcode: "1011 AA" },
+    { countryCode: "US", state: "CA", postcode: "94105" },
+  ];
+
+  for (const country of countries) {
+    const address = withDigitalCheckoutAddress({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      addressLine1: "",
+      city: "",
+      postcode: "",
+      countryCode: country.countryCode,
+      email: "ada@example.com",
+      phone: "+48 123 456 789",
+    });
+    assert.equal(address.state, country.state);
+    assert.equal(address.postcode, country.postcode);
+  }
 });
 
 test("physical checkout does not invent missing address fields", () => {

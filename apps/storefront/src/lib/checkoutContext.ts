@@ -15,6 +15,7 @@ export type CheckoutContextInput = {
   referrer?: string;
   userAgent?: string;
   sessionStartTime?: string;
+  digitalOrder?: boolean;
 };
 
 function trimmed(value: string | undefined, maxLength: number): string {
@@ -47,6 +48,7 @@ export function buildCheckoutExtensions(
       referrer: trimmed(context.referrer, 500),
       user_agent: trimmed(context.userAgent, 500),
       session_start_time: trimmed(context.sessionStartTime, 40),
+      digital_order: context.digitalOrder === true,
     },
   };
 }
@@ -67,29 +69,50 @@ function toStoreApiAddress(details: CheckoutBillingDetails): StoreApiAddress {
   };
 }
 
-const DIGITAL_ADDRESS_FALLBACK = {
-  addressLine1: "Digital delivery",
-  city: "Digital order",
-  postcode: "00000",
-} as const;
+const DIGITAL_ADDRESS_FALLBACKS: Record<string, {
+  addressLine1: string;
+  city: string;
+  state: string;
+  postcode: string;
+}> = {
+  DE: { addressLine1: "Digital delivery 1", city: "Berlin", state: "DE-BE", postcode: "10115" },
+  FR: { addressLine1: "1 Livraison numerique", city: "Paris", state: "75", postcode: "75001" },
+  GB: { addressLine1: "1 Digital Delivery", city: "London", state: "London", postcode: "SW1A 1AA" },
+  NL: { addressLine1: "Digital delivery 1", city: "Amsterdam", state: "NH", postcode: "1011 AA" },
+  PL: { addressLine1: "Dostawa cyfrowa 1", city: "Warszawa", state: "MZ", postcode: "00-001" },
+  US: { addressLine1: "1 Digital Delivery", city: "San Francisco", state: "CA", postcode: "94105" },
+};
+
+function digitalAddressFallback(countryCode: string) {
+  return DIGITAL_ADDRESS_FALLBACKS[countryCode.trim().toUpperCase()] ?? {
+    addressLine1: "Digital delivery 1",
+    city: "Digital order",
+    state: "Digital order",
+    postcode: "00000",
+  };
+}
 
 export function withDigitalCheckoutAddress(
   details: CheckoutBillingDetails,
 ): CheckoutBillingDetails {
+  const fallback = digitalAddressFallback(details.countryCode);
   return {
     ...details,
-    addressLine1: details.addressLine1.trim() || DIGITAL_ADDRESS_FALLBACK.addressLine1,
-    city: details.city.trim() || DIGITAL_ADDRESS_FALLBACK.city,
-    postcode: details.postcode.trim() || DIGITAL_ADDRESS_FALLBACK.postcode,
+    addressLine1: details.addressLine1.trim() || fallback.addressLine1,
+    city: details.city.trim() || fallback.city,
+    state: details.state?.trim() || fallback.state,
+    postcode: details.postcode.trim() || fallback.postcode,
   };
 }
 
 export function withDigitalStoreApiAddress(address: StoreApiAddress): StoreApiAddress {
+  const fallback = digitalAddressFallback(address.country);
   return {
     ...address,
-    address_1: address.address_1.trim() || DIGITAL_ADDRESS_FALLBACK.addressLine1,
-    city: address.city.trim() || DIGITAL_ADDRESS_FALLBACK.city,
-    postcode: address.postcode.trim() || DIGITAL_ADDRESS_FALLBACK.postcode,
+    address_1: address.address_1.trim() || fallback.addressLine1,
+    city: address.city.trim() || fallback.city,
+    state: address.state?.trim() || fallback.state,
+    postcode: address.postcode.trim() || fallback.postcode,
   };
 }
 
@@ -124,6 +147,7 @@ export function buildStoreCheckoutPayload(
       referrer: typeof document !== "undefined" ? document.referrer : undefined,
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       sessionStartTime: new Date().toISOString(),
+      digitalOrder: options?.digitalOrder,
     }),
     payment_data:
       stripePaymentData ??

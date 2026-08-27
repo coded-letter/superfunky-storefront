@@ -24,6 +24,7 @@ import { useAuthHeartbeat, useAuthenticatedAccountId } from "./lib/auth";
 import { useSyncCartToBackend } from "./lib/backendCart";
 import { readingListRemote, wishlistRemote } from "./lib/savedLists";
 import type { StorefrontRouteKey } from "./lib/storefrontPaths";
+import { matchesStorefrontFallbackPath } from "./lib/routePathMatching";
 import { useResolvedStorefrontLanguageRoute, useResolvedStorefrontPath } from "./lib/storefrontPaths";
 import { applyLayoutConfiguration, useLayoutPreferencesFromBackendConfig } from "./lib/layoutPreferencesSync";
 import { CreatorContentProvider } from "./state/creatorContent";
@@ -485,7 +486,7 @@ function StorefrontRedirectRoute({
 
   useEffect(() => {
     if (isLoading || resolvedPath === currentPath) return;
-    if (currentPath === normalizeBrowserPath(fallback)) {
+    if (matchesStorefrontFallbackPath(currentPath, fallback, routeLanguage)) {
       navigate(`${path}${location.search}${location.hash}`, { replace: true });
     }
   }, [currentPath, fallback, isLoading, location.hash, location.search, navigate, path, resolvedPath]);
