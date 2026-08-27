@@ -741,7 +741,7 @@ export function CheckoutMockupPage() {
         return;
       }
       try {
-        const preparedPayment = await controller.createPaymentMethod(paymentBilling);
+        const preparedPayment = await controller.createPaymentMethod(billing);
         stripePaymentMethodId = preparedPayment.paymentMethodId;
         stripePaymentType = preparedPayment.selectedPaymentType;
       } catch (error) {
@@ -750,7 +750,7 @@ export function CheckoutMockupPage() {
         return;
       }
     } else if (paymentMethod === "blik") {
-      const preparedPayment = await createBlikPaymentMethod(paymentBilling);
+      const preparedPayment = await createBlikPaymentMethod(billing);
       if (!preparedPayment.ok) {
         setOrderSubmitting(false);
         setOrderError(preparedPayment.error);
