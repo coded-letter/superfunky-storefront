@@ -9,6 +9,7 @@ import {
   languageHomePath,
   resolveLanguageUrlAction,
   useCart,
+  useCurrency,
   useLanguage,
   useLayoutPreferences,
   useT,
@@ -42,6 +43,7 @@ import { submitNewsletterSubmission } from "./lib/submissions";
 import { isBackendConfigured, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { useIncrementalData } from "@funky/sdk/react";
 import { getFeaturedProducts } from "./lib/commerce";
+import { formatProductCardCurrency } from "./lib/productCardCurrency";
 import { mountCmsScripts } from "./lib/pageScripts";
 import { getExistingSubscription, getPushPreferences, subscribeToPush, unsubscribeFromPush } from "./lib/push";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -87,6 +89,7 @@ function ConnectedStorefrontChrome() {
   const { data, isLoading: navigationLoading, error: navigationError } = useNavigationData();
   const location = useLocation();
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
+  const { formatBaseAmount } = useCurrency();
   const { path: checkoutPath } = useResolvedStorefrontPath("checkout", "/checkout", languageCode);
   const t = useT();
   const { showToast } = useToast();
@@ -213,7 +216,12 @@ function ConnectedStorefrontChrome() {
   return (
     <>
       <StorefrontChromeMockup
-        featuredProducts={isBackendConfigured ? featuredProducts ?? [] : MOCK_PRODUCTS.slice(0, 4)}
+        featuredProducts={
+          isBackendConfigured
+            ? featuredProducts?.map((product) =>
+                formatProductCardCurrency(product, formatBaseAmount)) ?? []
+            : MOCK_PRODUCTS.slice(0, 4)
+        }
         primaryNavigation={hideCheckoutNavigation ? [] : headerNavigation}
         mobileNavigation={hideCheckoutNavigation ? [] : mobileNavigation}
         footerColumns={hideCheckoutNavigation ? [] : footerColumns}
