@@ -11,14 +11,9 @@ import { LanguageProvider } from "../locale/LanguageContext";
 import { CurrencyProvider } from "../locale/CurrencyContext";
 import { UiStringsProvider } from "../locale/UiStringsContext";
 
-const MOCK_BACKEND_SOUND_CONFIG: SoundUXBackendConfig = {
-  enabled: true,
+const STOREFRONT_SOUND_CONFIG: SoundUXBackendConfig = {
+  enabled: false,
   volume: 0.7,
-  mappings: {
-    link: { type: "sine", frequency: 720, duration: 0.08, gain: 0.028 },
-    button: { type: "triangle", frequency: 560, duration: 0.06, gain: 0.032 },
-    focus: { type: "square", frequency: 860, duration: 0.05, gain: 0.02 },
-  },
 };
 
 /**
@@ -47,7 +42,7 @@ export function AppStateProvider({
       <UiStringsProvider>
         <CurrencyProvider>
         <ThemeProvider>
-          <SoundUXProvider backendConfig={MOCK_BACKEND_SOUND_CONFIG}>
+          <SoundUXProvider backendConfig={STOREFRONT_SOUND_CONFIG}>
             <ToastProvider>
               <WishlistProvider accountId={accountId} remote={wishlistRemote}>
                 <ReadingListProvider accountId={accountId} remote={readingListRemote}>

@@ -8,6 +8,7 @@ import {
   discoverWordPressSitemapChildren,
   generateSeoFiles,
   normalizeAtomDocument,
+  normalizeTextDocument,
 } from "./generate-seo-files.mjs";
 
 async function withOutputDirectory(run) {
@@ -96,15 +97,49 @@ test("never overwrites route sitemap, robots, or configured AI documents", async
   });
 });
 
+test("mirrors public llms documents only when prerender did not already write them", async () => {
+  await withOutputDirectory(async (outputDirectory) => {
+    await writeFile(join(outputDirectory, "llms-full.txt"), "Configured full content\n", "utf8");
+
+    await generateSeoFiles({
+      graphqlEndpoint: "https://cms.example.com/graphql",
+      outputDirectory,
+      fetchImpl: async (url) => {
+        if (url.pathname === "/llms.txt") return new Response("# Site\n\nPublic summary");
+        if (url.pathname === "/llms-full.txt") return new Response("Backend full content");
+        return new Response("", { status: 404 });
+      },
+      maxAttempts: 1,
+    });
+
+    assert.equal(await readFile(join(outputDirectory, "llms.txt"), "utf8"), "# Site\n\nPublic summary\n");
+    assert.equal(await readFile(join(outputDirectory, "llms-full.txt"), "utf8"), "Configured full content\n");
+  });
+});
+
+test("rejects HTML fallback pages and PHP diagnostics when mirroring text documents", () => {
+  assert.equal(normalizeTextDocument("<!doctype html><html><body>Fallback</body></html>"), null);
+  assert.equal(normalizeTextDocument("<br><b>Warning</b>: Undefined variable"), null);
+  assert.equal(normalizeTextDocument("PHP Notice: Undefined index"), null);
+  assert.equal(normalizeTextDocument("Deprecated: Legacy API"), null);
+  assert.equal(normalizeTextDocument("Fatal error: Uncaught RuntimeException"), null);
+  assert.equal(normalizeTextDocument("  # Site\n"), "# Site\n");
+  assert.equal(
+    normalizeTextDocument("# Examples\n\nUse `<html>` for a document.\n\nWarning: preserve this prose."),
+    "# Examples\n\nUse `<html>` for a document.\n\nWarning: preserve this prose.\n",
+  );
+});
+
 test("stores the WordPress sitemap separately from the storefront route sitemap", async () => {
   await withOutputDirectory(async (outputDirectory) => {
     const routeSitemap = "<?xml version=\"1.0\"?><urlset><url><loc>https://shop.example.com/</loc></url></urlset>\n";
-    const wordpressSitemap = "<?xml version=\"1.0\"?><sitemapindex><sitemap><loc>https://cms.example.com/wp-sitemap-posts.xml</loc></sitemap></sitemapindex>";
+    const wordpressSitemap = "<?xml version=\"1.0\"?><sitemapindex><sitemap><loc>https://shop.example.com/wp-sitemap-posts.xml</loc></sitemap></sitemapindex>";
     const childSitemap = "<?xml version=\"1.0\"?><urlset><url><loc>https://cms.example.com/post/</loc></url></urlset>";
     await writeFile(join(outputDirectory, "sitemap.xml"), routeSitemap, "utf8");
 
     await generateSeoFiles({
       graphqlEndpoint: "https://cms.example.com/graphql",
+      siteUrl: "https://shop.example.com",
       outputDirectory,
       fetchImpl: async (url) => {
         if (url.pathname === "/wp-sitemap.xml") return new Response(wordpressSitemap);
@@ -119,18 +154,23 @@ test("stores the WordPress sitemap separately from the storefront route sitemap"
   });
 });
 
-test("discovers only root-level WordPress child sitemaps from the configured backend", () => {
+test("discovers only root-level WordPress child sitemaps from configured backend and frontend origins", () => {
   const sitemap = `<?xml version="1.0"?>
 <sitemapindex>
   <sitemap><loc>https://cms.example.com/wp-sitemap-posts-post-1.xml?page=2&amp;lang=en</loc></sitemap>
   <sitemap><loc>/wp-sitemap-taxonomies-category-1.xml</loc></sitemap>
+  <sitemap><loc>https://shop.example.com/wp-sitemap-users-1.xml</loc></sitemap>
   <sitemap><loc>https://other.example.com/wp-sitemap-users-1.xml</loc></sitemap>
   <sitemap><loc>https://cms.example.com/nested/wp-sitemap-posts-page-1.xml</loc></sitemap>
   <sitemap><loc>https://cms.example.com/sitemap.xml</loc></sitemap>
 </sitemapindex>`;
 
   assert.deepEqual(
-    discoverWordPressSitemapChildren(sitemap, "https://cms.example.com"),
+    discoverWordPressSitemapChildren(
+      sitemap,
+      "https://cms.example.com",
+      "https://shop.example.com",
+    ),
     [
       {
         filename: "wp-sitemap-posts-post-1.xml",
@@ -139,6 +179,10 @@ test("discovers only root-level WordPress child sitemaps from the configured bac
       {
         filename: "wp-sitemap-taxonomies-category-1.xml",
         path: "/wp-sitemap-taxonomies-category-1.xml",
+      },
+      {
+        filename: "wp-sitemap-users-1.xml",
+        path: "/wp-sitemap-users-1.xml",
       },
     ],
   );

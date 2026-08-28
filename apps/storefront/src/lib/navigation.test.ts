@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import {
   hasOnlyMenuSchemaCompatibilityErrors,
   mapBestAvailableMenu,
+  normalizeStorefrontConfiguration,
   omitUnsupportedNavigationLeafFields,
   omitUnsupportedLayoutFields,
   parseUiStrings,
@@ -38,6 +39,14 @@ test("UI string payloads keep only string values under non-empty keys", () => {
   );
   assert.deepEqual(parseUiStrings("not-json"), {});
   assert.deepEqual(parseUiStrings(JSON.stringify(["not", "a", "map"])), {});
+});
+
+test("interaction sounds remain disabled unless the backend explicitly enables them", () => {
+  assert.equal(normalizeStorefrontConfiguration(null).soundsEnabled, false);
+  assert.equal(normalizeStorefrontConfiguration({
+    ...normalizeStorefrontConfiguration(null),
+    soundsEnabled: true,
+  }).soundsEnabled, true);
 });
 
 test("layout GraphQL compatibility retries can omit unsupported child fields without dropping the layout object", () => {
@@ -76,6 +85,7 @@ test("layout GraphQL compatibility retries can omit unsupported child fields wit
 test("navigation compatibility retries omit optional fields missing from a rolling backend", () => {
   const query = `
     storefrontConfig {
+      soundsEnabled
       recentOrders {
         enabled
         quietSeconds
@@ -90,6 +100,7 @@ test("navigation compatibility retries omit optional fields missing from a rolli
   `;
   const compatible = omitUnsupportedNavigationLeafFields(query, [
     { message: 'Cannot query field "quietSeconds" on type "FunkyCommerceRecentOrders".' },
+    { message: 'Cannot query field "soundsEnabled" on type "FunkyCommerceStorefrontConfig".' },
     { message: 'Cannot query field "openLinksInNewTab" on type "FunkyCommerceRecentOrders".' },
     { message: 'Cannot query field "accountMode" on type "FunkyCommerceCheckoutPresentation".' },
     { message: 'Cannot query field "distractionFree" on type "FunkyCommerceCheckoutPresentation".' },
@@ -98,7 +109,7 @@ test("navigation compatibility retries omit optional fields missing from a rolli
   assert.ok(compatible);
   assert.match(compatible, /enabled/);
   assert.match(compatible, /heading/);
-  assert.doesNotMatch(compatible, /quietSeconds|openLinksInNewTab|accountMode|distractionFree/);
+  assert.doesNotMatch(compatible, /soundsEnabled|quietSeconds|openLinksInNewTab|accountMode|distractionFree/);
   assert.equal(
     omitUnsupportedNavigationLeafFields(query, [{ message: 'Cannot query field "heading" on type "Other".' }]),
     null,

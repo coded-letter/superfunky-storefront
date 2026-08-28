@@ -82,7 +82,7 @@ function HeroShortcode({ attributes }: ShortcodeProps) {
     ? homeHeroLayout === "classic" ? "glow" : "fullbleed"
     : oneOf<HeroVariant>(attributes.variant, ["glow", "fullbleed", "split", "minimal", "strip"], "fullbleed");
   const headingLevel = resolveHeadingLevel(
-    attributes["heading-level"],
+    attributes["heading-level"] || attributes.heading_level,
     attributes.h2 && !attributes.h1 ? "h2" : "h1",
   );
   return (
@@ -108,6 +108,10 @@ function VideoHeroShortcode({ attributes }: ShortcodeProps) {
       poster={resolveShortcodeImage(attributes.poster || attributes.image || "") || undefined}
       kicker={attributes.kicker || attributes.pill || undefined}
       title={attributes.title || attributes.h1 || attributes.h2 || "Video hero"}
+      headingLevel={resolveHeadingLevel(
+        attributes["heading-level"] || attributes.heading_level,
+        attributes.h1 && !attributes.h2 ? "h1" : "h2",
+      )}
       description={attributes.description || attributes.p || undefined}
       primaryCta={resolveShortcodeCta(attributes, "primary")}
       secondaryCta={resolveShortcodeCta(attributes, "secondary")}

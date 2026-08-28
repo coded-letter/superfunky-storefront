@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 const root = resolve(import.meta.dirname, "..");
 const defaultOutputDirectory = resolve(root, "dist");
 const defaultRetryDelay = (attempt) => new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 500));
+const PHP_DIAGNOSTIC_PATTERN = /(?:<b>\s*)?(?:PHP\s+)?(?:Warning|Notice|Deprecated|Fatal error)(?:\s*<\/b>)?\s*:/i;
+const LEADING_PHP_DIAGNOSTIC_PATTERN = /^(?:(?:<br\s*\/?>)\s*)*(?:<b>\s*)?(?:PHP\s+)?(?:Warning|Notice|Deprecated|Fatal error)(?:\s*<\/b>)?\s*:/i;
 
 async function loadEnvironmentFile(filename) {
   try {
@@ -78,6 +80,30 @@ async function writeDocument(outputDirectory, filename, contents) {
   console.log(`[seo-files] wrote ${filename}`);
 }
 
+async function writeDocumentIfMissing(outputDirectory, filename, contents) {
+  try {
+    await readFile(resolve(outputDirectory, filename), "utf8");
+    return false;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  await writeDocument(outputDirectory, filename, contents);
+  return true;
+}
+
+export function normalizeTextDocument(contents) {
+  if (typeof contents !== "string") return null;
+  const document = contents.trim();
+  if (
+    !document
+    || /^(?:<!doctype\s+html|<html\b|<body\b)/i.test(document)
+    || LEADING_PHP_DIAGNOSTIC_PATTERN.test(document)
+  ) {
+    return null;
+  }
+  return `${document}\n`;
+}
+
 export function normalizeXmlDocument(contents, { rootPattern, closingPattern }) {
   if (typeof contents !== "string") return null;
   const declarationIndex = contents.indexOf("<?xml");
@@ -89,7 +115,7 @@ export function normalizeXmlDocument(contents, { rootPattern, closingPattern }) 
   if (
     !rootPattern.test(document)
     || !closingPattern.test(document)
-    || /(?:<b>\s*)?(?:Warning|Notice|Deprecated|Fatal error)\b/i.test(document)
+    || PHP_DIAGNOSTIC_PATTERN.test(document)
   ) {
     return null;
   }
@@ -162,10 +188,12 @@ export function normalizeAtomDocument(contents, { backendOrigin, frontendOrigin 
   return document;
 }
 
-export function discoverWordPressSitemapChildren(contents, backendOrigin) {
+export function discoverWordPressSitemapChildren(contents, backendOrigin, frontendOrigin = null) {
   if (!/<sitemapindex\b/i.test(contents)) return [];
 
   const origin = new URL(backendOrigin).origin;
+  const allowedOrigins = new Set([origin]);
+  if (frontendOrigin) allowedOrigins.add(new URL(frontendOrigin).origin);
   const children = new Map();
   const locations = [...contents.matchAll(/<loc>\s*([^<]+?\.xml(?:\?[^<]*)?)\s*<\/loc>/gi)]
     .map((match) => match[1].replace(/&amp;/g, "&"));
@@ -177,7 +205,7 @@ export function discoverWordPressSitemapChildren(contents, backendOrigin) {
     } catch {
       continue;
     }
-    if (url.origin !== origin) continue;
+    if (!allowedOrigins.has(url.origin)) continue;
 
     const filename = url.pathname.slice(1);
     if (!/^wp-sitemap-[A-Za-z0-9_-]+\.xml$/.test(filename)) continue;
@@ -240,6 +268,10 @@ export async function generateSeoFiles({
   }
   const productFeed = await fetchFromBackend("/product-feed.xml");
   const sitemap = await fetchFromBackend("/wp-sitemap.xml");
+  const llmsDocument = await fetchFromBackend("/llms.txt");
+  const llmsFullDocument = await fetchFromBackend("/llms-full.txt");
+  const llms = normalizeTextDocument(llmsDocument);
+  const llmsFull = normalizeTextDocument(llmsFullDocument);
   const normalizedRss = rss === null
     ? null
     : normalizeXmlDocument(rss, {
@@ -281,10 +313,24 @@ export async function generateSeoFiles({
   } else if (sitemap !== null) {
     warn("[seo-files] WordPress sitemap response was not a valid XML document; keeping existing build output.");
   }
+  if (llms) {
+    writes.push(writeDocumentIfMissing(outputDirectory, "llms.txt", llms));
+  } else if (llmsDocument !== null) {
+    warn("[seo-files] llms.txt response was not a valid text document; keeping existing build output.");
+  }
+  if (llmsFull) {
+    writes.push(writeDocumentIfMissing(outputDirectory, "llms-full.txt", llmsFull));
+  } else if (llmsFullDocument !== null) {
+    warn("[seo-files] llms-full.txt response was not a valid text document; keeping existing build output.");
+  }
   await Promise.all(writes);
 
   if (!normalizedSitemap) return;
-  for (const { filename, path } of discoverWordPressSitemapChildren(normalizedSitemap, backendOrigin)) {
+  for (const { filename, path } of discoverWordPressSitemapChildren(
+    normalizedSitemap,
+    backendOrigin,
+    frontendOrigin,
+  )) {
     const child = await fetchFromBackend(path);
     const normalizedChild = child === null
       ? null

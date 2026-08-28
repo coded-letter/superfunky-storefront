@@ -2,6 +2,7 @@ import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLayoutPreferences } from "@funky/ui";
+import type { HeadingLevel } from "../lib/headingLevels";
 
 type VideoSource =
   | { kind: "direct"; url: string }
@@ -36,6 +37,7 @@ export type VideoHeroProps = {
   poster?: string;
   kicker?: string;
   title: string;
+  headingLevel?: HeadingLevel;
   description?: string;
   primaryCta?: { label: string; href: string };
   secondaryCta?: { label: string; href: string };
@@ -53,6 +55,7 @@ export function VideoHero({
   poster,
   kicker,
   title,
+  headingLevel = "h2",
   description,
   primaryCta,
   secondaryCta,
@@ -134,6 +137,7 @@ export function VideoHero({
     ? `flex flex-col justify-center gap-5 p-8 sm:p-12 ${alignment}`
     : `relative z-10 flex w-full flex-col ${isStrip ? "justify-center gap-2 p-6 sm:p-8" : variant === "fullbleed" ? "justify-center gap-5 p-8 sm:p-12" : "justify-end gap-5 p-8 sm:p-12"} ${alignment}`;
   const headingClass = isStrip ? "text-xl sm:text-2xl" : "text-4xl sm:text-6xl";
+  const Heading = headingLevel;
 
   return (
     <section
@@ -144,9 +148,9 @@ export function VideoHero({
       }}
     >
       <div className={mediaClass}>
-        {poster ? <img src={poster} alt="" aria-hidden="true" className={`absolute inset-0 h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} /> : null}
+        {poster ? <img src={poster} alt="" aria-hidden="true" className={`absolute inset-0 !h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} /> : null}
         {resolved?.kind === "direct" ? (
-          <video ref={videoRef} src={resolved.url} poster={poster} autoPlay={autoplay && muted} muted={audioMuted} loop={loop} playsInline aria-hidden="true" className={`absolute inset-0 h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} />
+          <video ref={videoRef} src={resolved.url} poster={poster} autoPlay={autoplay && muted} muted={audioMuted} loop={loop} playsInline aria-hidden="true" className={`absolute inset-0 !h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} />
         ) : playing && iframeUrl ? (
           <iframe ref={iframeRef} src={iframeUrl} title="Background video" tabIndex={-1} aria-hidden="true" allow="autoplay; fullscreen" onLoad={startProviderPlayback} className={`pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2 border-0 ${isMinimal ? "opacity-15" : ""}`} />
         ) : null}
@@ -155,7 +159,7 @@ export function VideoHero({
       </div>
       <div className={contentClass} style={variant === "fullbleed" ? { maxWidth: `${themeMaxWidthPx}px`, marginInline: "auto" } : undefined}>
         {kicker ? <span className="inline-flex rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide backdrop-blur">{kicker}</span> : null}
-        <h2 className={`m-0 max-w-3xl font-display font-extrabold leading-tight ${headingClass}`}>{title}</h2>
+        <Heading className={`m-0 max-w-3xl font-display font-extrabold leading-tight ${headingClass}`}>{title}</Heading>
         {description ? <p className={`m-0 max-w-2xl text-base sm:text-lg ${isSplit || isMinimal ? "text-zinc-600 dark:text-zinc-300" : "text-white/85"}`}>{description}</p> : null}
         <div className="flex flex-wrap gap-3">
           {primaryCta ? <Link to={primaryCta.href} className="rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline">{primaryCta.label}</Link> : null}

@@ -138,6 +138,7 @@ test("photo and video heroes use theme radius only when width-constrained", () =
   assert.doesNotMatch(photoHeroSource, /fullWidth \?[^:\n]+:\s*"rounded-(?:2xl|3xl)"/);
   assert.match(videoHeroSource, /borderRadius: variant === "fullbleed" \? 0 : "var\(--theme-radius\)"/);
   assert.doesNotMatch(videoHeroSource, /variant === "fullbleed" \? "rounded-none/);
+  assert.equal(videoHeroSource.match(/absolute inset-0 !h-full w-full object-cover/g)?.length, 2);
   assert.match(
     bundledCss,
     /\[data-funkycommerce-fullwidth="true"\][\s\S]{0,220}:where\(\.sf-hero,\s*\.wp-block-cover\)[\s\S]{0,100}border-radius:\s*0\s*!important/,

@@ -78,7 +78,7 @@ export function SitemapPage() {
     <div className="grid gap-8">
       <Seo
         title="Sitemap"
-        description="Browse every public page, product, story, archive, author, community profile, tag, and post on Superfunky."
+        description="Browse every public URL available in the latest generated site build."
         canonical="/sitemap"
         schema={{ pageType: "CollectionPage" }}
       />
@@ -87,7 +87,7 @@ export function SitemapPage() {
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">Directory</span>
         <h1 className="m-0 font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">Sitemap</h1>
         <p className="m-0 max-w-2xl text-zinc-500 dark:text-zinc-400">
-          Every public storefront and content URL included in the latest generated build.
+          Every public URL included in the latest generated site build.
         </p>
       </header>
 

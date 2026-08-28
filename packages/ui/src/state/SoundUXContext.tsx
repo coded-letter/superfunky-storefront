@@ -19,6 +19,7 @@ export type SoundUXBackendConfig = {
 export type SoundUXContextValue = {
   isEnabled: boolean;
   toggleEnabled: () => void;
+  setBackendEnabled: (enabled: boolean) => void;
   playAction: (action: SoundAction) => void;
 };
 
@@ -79,12 +80,13 @@ export function SoundUXProvider({
   backendConfig?: SoundUXBackendConfig;
 }) {
   const [isEnabled, setIsEnabled] = useState(readStoredEnabled);
+  const [backendEnabled, setBackendEnabled] = useState(backendConfig?.enabled ?? true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const userActivatedRef = useRef(false);
 
   const soundConfig = useMemo(() => {
     const merged = {
-      enabled: backendConfig?.enabled ?? true,
+      enabled: backendEnabled,
       volume: backendConfig?.volume ?? 0.65,
       mappings: {
         ...DEFAULT_SOUND_CONFIG,
@@ -97,7 +99,7 @@ export function SoundUXProvider({
     };
 
     return merged;
-  }, [backendConfig]);
+  }, [backendConfig?.mappings, backendConfig?.volume, backendEnabled]);
 
   const playAction = useCallback(
     (action: SoundAction) => {
@@ -237,6 +239,7 @@ export function SoundUXProvider({
     () => ({
       isEnabled,
       toggleEnabled: () => setIsEnabled((previous) => !previous),
+      setBackendEnabled,
       playAction,
     }),
     [isEnabled, playAction]

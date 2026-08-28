@@ -42,6 +42,7 @@ import {
   createShellManifest,
   publishShellManifestForMode,
 } from "./artifact-publish.mjs";
+import { stableRouteIsAvailable } from "./route-availability.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -84,7 +85,7 @@ const stableRoutes = [
   { path: "/product-brand", lang: "en", title: "Product brands | FunkyCommerce", description: "Browse every brand with products available in the FunkyCommerce catalog.", type: "ProductBrandDirectory", indexable: true },
   { path: "/blog", lang: "en", title: "Journal | FunkyCommerce", description: "Stories, guides, and inspiration from FunkyCommerce.", indexable: true },
   { path: "/author", lang: "en", title: "Authors | FunkyCommerce", description: "Meet the authors publishing stories on FunkyCommerce.", type: "AuthorDirectory", indexable: true },
-  { path: "/sitemap", lang: "en", title: "Sitemap | FunkyCommerce", description: "Browse every public page, product, story, archive, author, and community post.", indexable: true },
+  { path: "/sitemap", lang: "en", title: "Sitemap | FunkyCommerce", description: "Browse every public URL available in the latest generated site build.", indexable: true },
   { path: "/cart", lang: "en", title: "Cart | FunkyCommerce", description: "Review the products in your FunkyCommerce cart.", indexable: false },
   { path: "/checkout", lang: "en", title: "Checkout | FunkyCommerce", description: "Complete your FunkyCommerce order securely.", indexable: false },
   { path: "/account", lang: "en", title: "My account | FunkyCommerce", description: "Manage your FunkyCommerce account and orders.", indexable: false },
@@ -2675,6 +2676,7 @@ if (backendProfile === "full") {
 const routesByPath = new Map();
 for (const route of cmsRoutes) routesByPath.set(route.path, route);
 for (const route of communityRoutes) routesByPath.set(route.path, route);
+const discoveredRoutes = [...cmsRoutes, ...communityRoutes];
 const stableLanguageCodes = configuredLanguageCodes.length >= 2 ? configuredLanguageCodes : [configuredLanguageCodes[0] || defaultLanguage];
 const hiddenPresentationPaths = new Set(
   ["/shortcodes", "/layout-studio"].flatMap((path) => [
@@ -2686,6 +2688,7 @@ const hiddenPresentationPaths = new Set(
 for (const path of hiddenPresentationPaths) routesByPath.delete(path);
 for (const stableRoute of stableRoutes) {
   for (const languageCode of stableLanguageCodes) {
+    if (!stableRouteIsAvailable(stableRoute, discoveredRoutes, languageCode)) continue;
     const route = {
       ...stableRoute,
       path: normalizeLanguageRoutePath(stableRoute.path, languageCode, configuredLanguageCodes),

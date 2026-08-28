@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import {
   NATIVE_LINK_ATTRIBUTE,
   classifyAnchor,
+  mountHashAnchorScroll,
   mountSmartLinkNavigation,
   shouldAvoidPrefetch,
 } from "./internalLinks.ts";
@@ -39,6 +40,11 @@ test("classifies relative, same-origin, language, query, and backend content URL
     mappedFromBackend: false,
   });
   assert.equal(classify("https://store.test/pl/sklep/?sort=new").kind, "internal");
+  const rootAnchor = classify("/#faq");
+  assert.equal(rootAnchor.kind, "internal");
+  if (rootAnchor.kind === "internal") {
+    assert.equal(rootAnchor.to, "/#faq");
+  }
 
   const backend = classify("https://v3.superfunky.pro/documentation/setup/?step=2#start");
   assert.equal(backend.kind, "internal");
@@ -53,6 +59,37 @@ test("classifies relative, same-origin, language, query, and backend content URL
     assert.equal(taxonomy.to, "/pro-category/plugins/");
     assert.equal(taxonomy.mappedFromBackend, true);
   }
+});
+
+test("keeps routed hash scrolling active through prerender replacement", async () => {
+  const target = dom.window.document.createElement("section");
+  target.id = "faq";
+  let scrollCalls = 0;
+  target.scrollIntoView = () => {
+    scrollCalls += 1;
+  };
+  dom.window.document.body.append(target);
+
+  const cleanup = mountHashAnchorScroll({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    hash: "#faq",
+    timeoutMs: 50,
+  });
+  assert.equal(scrollCalls, 1);
+
+  dom.window.document.body.append(dom.window.document.createElement("div"));
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+  assert.equal(scrollCalls, 1);
+
+  const replacement = target.cloneNode() as HTMLElement;
+  replacement.scrollIntoView = () => {
+    scrollCalls += 1;
+  };
+  target.replaceWith(replacement);
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+  assert.ok(scrollCalls >= 2);
+  cleanup();
 });
 
 test("leaves external, backend application, special-scheme, and native anchors alone", () => {

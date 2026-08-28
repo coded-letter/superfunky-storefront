@@ -71,6 +71,31 @@ test("mountCmsScripts executes editor code, preserves attributes, and does not r
   remountCleanup();
 });
 
+test("mountCmsScripts rejects HTML responses embedded as inline JavaScript", () => {
+  const root = document.querySelector<HTMLElement>("#root")!;
+  root.innerHTML = `
+    <script data-wp-block-html="js">
+      &lt;!doctype html&gt;&lt;html&gt;&lt;body&gt;Authentication required&lt;/body&gt;&lt;/html&gt;
+    </script>
+  `;
+  const errors: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => errors.push(args);
+
+  try {
+    const cleanup = mountCmsScripts(root);
+    const rejected = root.querySelector<HTMLScriptElement>("script")!;
+
+    assert.equal(rejected.dataset.funkyCmsRejected, "true");
+    assert.equal(rejected.dataset.funkyCmsExecuted, undefined);
+    assert.equal(errors.length, 1);
+    assert.match(String(errors[0][0]), /HTML instead of JavaScript/);
+    cleanup();
+  } finally {
+    console.error = originalError;
+  }
+});
+
 test("service worker caches a clone before returning the network response", () => {
   assert.match(serviceWorkerSource, /await cache\.put\(request, response\.clone\(\)\)/);
   assert.equal(serviceWorkerSource.match(/event\.respondWith\(/g)?.length, 2);

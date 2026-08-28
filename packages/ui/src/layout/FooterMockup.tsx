@@ -272,7 +272,7 @@ export function FooterMockup({
   const visiblePaymentMethods = paymentMethods.filter((method) => !hiddenPaymentMethodKeys.includes(method.key));
   const visibleSocialLinks = filterVisibleSocialLinks(socialLinks, hiddenSocialLinkKeys);
   const safeExtraWrapperHtml = sanitizeStorefrontHtml(extraWrapperHtml);
-  const visibleCopyrightText = copyrightText.trim();
+  const safeCopyrightHtml = sanitizeStorefrontHtml(copyrightText);
   const logoNode = showLogo ? (
     <div className="mb-10 flex items-center justify-center gap-2.5">
       {logoVariant !== "text" ? (
@@ -486,7 +486,12 @@ export function FooterMockup({
               </div>
             ) : null}
 
-            {showCopyright && visibleCopyrightText ? <p className="m-0 text-xs text-zinc-500">{visibleCopyrightText}</p> : null}
+            {showCopyright && safeCopyrightHtml ? (
+              <SafeHtmlContent
+                html={safeCopyrightHtml}
+                className="m-0 text-xs text-zinc-500 [&_a]:text-zinc-300 [&_a]:underline [&_p]:m-0"
+              />
+            ) : null}
           </section>
         ) : (
           <>
@@ -524,7 +529,12 @@ export function FooterMockup({
               ) : null}
             </section>
 
-            {showCopyright && visibleCopyrightText ? <p className="mb-0 mt-8 text-xs text-zinc-500">{visibleCopyrightText}</p> : null}
+            {showCopyright && safeCopyrightHtml ? (
+              <SafeHtmlContent
+                html={safeCopyrightHtml}
+                className="mb-0 mt-8 text-xs text-zinc-500 [&_a]:text-zinc-300 [&_a]:underline [&_p]:m-0"
+              />
+            ) : null}
           </>
         )}
 
