@@ -12,6 +12,20 @@ type ContentLanguageFallbackDependencies = {
   getNodeInfo: (uri: string) => Promise<object | null>;
 };
 
+export function resolveConfiguredContentLanguage(
+  contentLanguageCode: string | null | undefined,
+  selectedLanguageCode: string,
+  configuredLanguageCodes: readonly string[],
+): string {
+  const contentLanguage = contentLanguageCode?.trim().toLowerCase() || "";
+  const selectedLanguage = selectedLanguageCode.trim().toLowerCase();
+  const configuredLanguages = configuredLanguageCodes.map((code) => code.trim().toLowerCase());
+  if (contentLanguage && (!configuredLanguages.length || configuredLanguages.includes(contentLanguage))) {
+    return contentLanguage;
+  }
+  return selectedLanguage || configuredLanguages[0] || contentLanguage || "en";
+}
+
 export function getContentLanguageFallbackCandidates(
   pathname: string,
   configuredLanguageCodes: readonly string[],

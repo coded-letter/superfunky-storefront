@@ -27,7 +27,7 @@ import type { CurrencyOption, LanguageOption, SocialPlatform } from "@funky/ui/s
 import type { ProductPageLayout } from "@funky/ui/src/state/productPageLayout.ts";
 import type { RelatedProductsColumns } from "@funky/ui/src/state/LayoutPreferencesContext.tsx";
 import { BACKEND_ORIGIN, graphqlRequest, hasOnlyMissingGraphqlFields, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
-import { mapBackendLanguages } from "./languageMapping.ts";
+import { mapBackendLanguages, mapBackendSiteLanguages } from "./languageMapping.ts";
 import { normalizeContentHref } from "./internalLinks.ts";
 import { mapFooterColumns, mapMenuItems, type RawMenuItem } from "./menuMapping.ts";
 import {
@@ -919,6 +919,14 @@ const STOREFRONT_LANGUAGES_QUERY = /* GraphQL */ `
   }
 `;
 
+const STOREFRONT_CONFIG_LANGUAGES_QUERY = /* GraphQL */ `
+  query StorefrontConfigLanguages {
+    storefrontConfig: funkycommerceStorefrontConfig {
+      languages { code name }
+    }
+  }
+`;
+
 const NAVIGATION_COMPATIBILITY_FIELDS = [
  "language",
  "languages",
@@ -1026,6 +1034,12 @@ type StorefrontLanguagesQueryResult = {
   languages: { code: string; name: string; slug: string; isDefault?: boolean }[] | null;
 };
 
+type StorefrontConfigLanguagesQueryResult = {
+  storefrontConfig: {
+    languages: { code: string; name: string }[] | null;
+  } | null;
+};
+
 type PolylangRestLanguage = {
   name: string;
   slug: string;
@@ -1038,6 +1052,15 @@ type WordPressRestIndex = {
 
 function mapNavigationLanguages(languages: StorefrontLanguagesQueryResult["languages"]): LanguageOption[] {
   return mapBackendLanguages(languages || []).map((language) => ({
+    ...language,
+    flagCode: getLanguageFlagCode(language.code),
+  }));
+}
+
+function mapNavigationSiteLanguages(
+  languages: { code: string; name: string }[] | null,
+): LanguageOption[] {
+  return mapBackendSiteLanguages(languages || []).map((language) => ({
     ...language,
     flagCode: getLanguageFlagCode(language.code),
   }));
@@ -1092,21 +1115,34 @@ async function getOptionalPolylangRestLanguages(): Promise<StorefrontLanguagesQu
   }
 }
 
+async function getStorefrontConfigLanguages(): Promise<LanguageOption[]> {
+  const { data, errors } = await graphqlRequest<StorefrontConfigLanguagesQueryResult>(
+    STOREFRONT_CONFIG_LANGUAGES_QUERY,
+  );
+  if (errors?.length) {
+    if (hasOnlyMissingGraphqlFields(errors, ["funkycommerceStorefrontConfig", "languages"])) return [];
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
+  return mapNavigationSiteLanguages(data?.storefrontConfig?.languages || []);
+}
+
 export async function getStorefrontLanguages(): Promise<LanguageOption[]> {
   if (STOREFRONT_BACKEND_PROFILE === "shell") return [];
   if (STOREFRONT_BACKEND_PROFILE === "blog") {
-    return mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+    const restLanguages = mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+    return restLanguages.length ? restLanguages : getStorefrontConfigLanguages();
   }
   const graphqlResponse = await graphqlRequest<StorefrontLanguagesQueryResult>(STOREFRONT_LANGUAGES_QUERY);
   const { data, errors } = graphqlResponse;
   if (errors?.length) {
     if (isNavigationCompatibilityError(errors)) {
-      return mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+      const restLanguages = mapNavigationLanguages(await getOptionalPolylangRestLanguages());
+      return restLanguages.length ? restLanguages : getStorefrontConfigLanguages();
     }
     throw new Error(errors.map(({ message }) => message).join("; "));
   }
-  if (!data) return [];
-  return mapNavigationLanguages(data.languages);
+  const languages = mapNavigationLanguages(data?.languages || []);
+  return languages.length ? languages : getStorefrontConfigLanguages();
 }
 
 async function getNavigationMenuData(): Promise<NavigationQueryResult> {

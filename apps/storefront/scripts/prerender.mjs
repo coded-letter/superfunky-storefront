@@ -128,6 +128,14 @@ const LANGUAGES_QUERY = `
   }
 `;
 
+const STOREFRONT_CONFIG_LANGUAGES_QUERY = `
+  query StorefrontConfigLanguages {
+    storefrontConfig: funkycommerceStorefrontConfig {
+      languages { code name }
+    }
+  }
+`;
+
 const STATIC_GENERATION_CONFIG_QUERY = `
   query StorefrontStaticGenerationConfig {
     funkycommerceStaticGenerationConfig
@@ -906,6 +914,24 @@ async function discoverLanguages() {
       const backendCode = (code || "").trim().toUpperCase();
       return routeCode && backendCode ? [{ routeCode, backendCode }] : [];
     });
+  const hasGraphqlLanguages = languages.length > 0;
+  if (!languages.length) {
+    const configPayload = await requestGraphql(
+      STOREFRONT_CONFIG_LANGUAGES_QUERY,
+      {},
+      "storefront config languages",
+      { optionalRootField: "funkycommerceStorefrontConfig", attempts: 1 },
+    );
+    for (const language of configPayload.data?.storefrontConfig?.languages || []) {
+      const routeCode = typeof language?.code === "string" ? language.code.trim().toLowerCase() : "";
+      if (routeCode) {
+        languages.push({
+          routeCode,
+          backendCode: routeCode.toUpperCase(),
+        });
+      }
+    }
+  }
   try {
     const response = await fetch(new URL("/wp-json/pll/v1/languages", graphqlEndpoint), {
       signal: AbortSignal.timeout(10_000),
@@ -925,7 +951,10 @@ async function discoverLanguages() {
       `[prerender] Polylang default-language discovery failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  backendLanguageFieldsAvailable = languages.length > 0;
+  if (!hasGraphqlLanguages && languages[0]) {
+    defaultLanguage = languages[0].routeCode;
+  }
+  backendLanguageFieldsAvailable = hasGraphqlLanguages;
   return languages;
 }
 

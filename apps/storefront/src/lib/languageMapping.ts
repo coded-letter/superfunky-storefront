@@ -5,6 +5,11 @@ export type BackendLanguageRecord = {
   isDefault?: boolean;
 };
 
+export type BackendSiteLanguageRecord = {
+  code: string;
+  name: string;
+};
+
 export type StorefrontLanguage = {
   code: string;
   label: string;
@@ -20,4 +25,14 @@ export function mapBackendLanguages(languages: BackendLanguageRecord[]): Storefr
       if (!code || !backendCode) return [];
       return [{ code, label: language.name, backendCode }];
     });
+}
+
+export function mapBackendSiteLanguages(languages: BackendSiteLanguageRecord[]): StorefrontLanguage[] {
+  return languages.flatMap((language) => {
+    const code = language.code.trim().toLowerCase();
+    const label = language.name.trim();
+    return code && label
+      ? [{ code, label, backendCode: code.toUpperCase() }]
+      : [];
+  });
 }
