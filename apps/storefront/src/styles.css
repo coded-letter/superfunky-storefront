@@ -410,6 +410,28 @@ html[data-storefront-checkout="true"] .storefront-recent-orders {
   padding-top: .5rem;
 }
 
+.shortcode-prerender-hero__play {
+  align-items: center;
+  background: rgb(0 0 0 / 0.6);
+  border: 0;
+  border-radius: 999px;
+  bottom: 1rem;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  position: absolute;
+  right: 1rem;
+  width: 2.75rem;
+  z-index: 2;
+}
+
+.shortcode-prerender-hero__play:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
 .shortcode-prerender-hero .shortcode-prerender-hero__cta {
   border: 1px solid rgb(255 255 255 / .4);
   border-radius: 999px;

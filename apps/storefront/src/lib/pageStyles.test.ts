@@ -143,6 +143,7 @@ test("photo and video heroes use theme radius only when width-constrained", () =
 
 test("posterless video heroes defer heavy media until visitor interaction", () => {
   assert.match(videoHeroSource, /const mediaActivated = !resolved \|\| Boolean\(poster\) \|\| activatedMediaSource === source/);
+  assert.match(videoHeroSource, /window\.__funkyStorefrontMediaActivationRequested === true/);
   assert.match(videoHeroSource, /const events = \["pointerdown", "keydown", "touchstart", "wheel"\] as const/);
   assert.match(videoHeroSource, /target\.closest\("\[data-video-hero-control\]"\)/);
   assert.match(videoHeroSource, /removeActivationListeners\(\);\s*setActivatedMediaSource\(source\)/);

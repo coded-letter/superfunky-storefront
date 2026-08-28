@@ -55,14 +55,37 @@ test("hero shortcodes render semantic first-paint content instead of an empty lo
 
 test("video heroes render a static poster and activate on demand", () => {
   const output = normalizeStaticShortcodes(
-    '[video-hero title="Play the story" poster="https://example.com/poster.jpg" height="70vh"]',
+    '[video-hero title="Play the story" src="https://example.com/story.mp4" poster="https://example.com/poster.jpg" height="70vh"]',
     { placeholders: true },
   );
   assert.match(output, /data-prerendered-shortcode="video-hero"/);
+  assert.match(output, /data-prerender-video-poster="true"/);
+  assert.match(output, /data-storefront-control="video-hero-play"/);
   assert.match(output, /data-storefront-activate/);
   assert.match(output, /src="https:\/\/example\.com\/poster\.jpg"/);
   assert.match(output, />Play the story<\/h1>/);
   assert.doesNotMatch(output, /role="status"|Loading video hero/);
+});
+
+test("posterless video heroes preserve static paint until their Play control activates React", () => {
+  const output = normalizeStaticShortcodes(
+    '[video-hero title="Play the story" src="https://example.com/story.mp4"]',
+    { placeholders: true },
+  );
+
+  assert.match(output, /data-prerender-video-poster="false"/);
+  assert.match(output, /data-storefront-activate-only/);
+  assert.match(output, /aria-label="Play background video"/);
+});
+
+test("video heroes without a supported source do not create unmatched static controls", () => {
+  const output = normalizeStaticShortcodes(
+    '[video-hero title="Unavailable story" src="javascript:alert(1)"]',
+    { placeholders: true },
+  );
+
+  assert.doesNotMatch(output, /data-prerender-video-poster/);
+  assert.doesNotMatch(output, /data-storefront-control="video-hero-play"/);
 });
 
 test("static hero markup rejects executable URLs and unsafe CSS lengths", () => {
