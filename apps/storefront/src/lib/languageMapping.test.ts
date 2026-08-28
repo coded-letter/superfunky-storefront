@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { mapBackendLanguages } from "./languageMapping.ts";
+import { mapBackendLanguages, mapBackendSiteLanguages } from "./languageMapping.ts";
 import {
   resolveSyncedLanguageCode,
   shouldRenderLanguageSwitcher,
@@ -18,6 +18,7 @@ import {
 import { parseSpotifyReference } from "../../../../packages/ui/src/layout/spotifyEmbed.ts";
 import {
   getContentLanguageFallbackCandidates,
+  resolveConfiguredContentLanguage,
   resolveContentLanguageFallback,
 } from "./contentLanguageFallback.ts";
 import { resolveRouteLanguageSync } from "./contentRouteLanguageSync.ts";
@@ -36,6 +37,22 @@ test("maps backend EN and JA records without deriving enum values from slugs", (
     ],
   );
   assert.equal(languageHomePath("ja", ["en", "ja"]), "/ja");
+});
+
+test("maps the WordPress site language without requiring a Polylang slug", () => {
+  assert.deepEqual(
+    mapBackendSiteLanguages([
+      { code: " pl ", name: " Polski " },
+      { code: "", name: "Invalid" },
+    ]),
+    [{ code: "pl", label: "Polski", backendCode: "PL" }],
+  );
+});
+
+test("uses the discovered site language when content has no Polylang language field", () => {
+  assert.equal(resolveConfiguredContentLanguage("en", "pl", ["pl"]), "pl");
+  assert.equal(resolveConfiguredContentLanguage("ja", "pl", ["pl", "ja"]), "ja");
+  assert.equal(resolveConfiguredContentLanguage("en", "en", []), "en");
 });
 
 test("orders the backend default first and adopts it without a visitor preference", () => {

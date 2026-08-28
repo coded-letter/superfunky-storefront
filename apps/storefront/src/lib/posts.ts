@@ -30,6 +30,7 @@ import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility";
 import {
   createProfilePostQuery,
 } from "./profileGraphqlCompatibility";
+import { requestPostWithSlugFallback } from "./postLookup";
 import { storefrontPostPath } from "./postRoutePaths.mjs";
 
 export type CmsPostTerm = {
@@ -285,6 +286,10 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
   }
 `;
 
+const POST_BY_SLUG_QUERY = POST_BY_URI_QUERY
+  .replace("StorefrontPostByUri", "StorefrontPostBySlug")
+  .replace("idType: URI", "idType: SLUG");
+
 const POST_COMPATIBILITY_RULES = [
   ...POST_GRAPHQL_COMPATIBILITY_RULES,
   missingGraphqlFieldRule("headlessContent"),
@@ -324,12 +329,19 @@ const POST_COMMENTS_QUERY = /* GraphQL */ `
 `;
 
 export async function getPostByUri(uri: string): Promise<CmsPost | null> {
-  const query = createProfilePostQuery(POST_BY_URI_QUERY, STOREFRONT_BACKEND_PROFILE);
-  const response = await requestGraphqlWithCompatibility<PostByUriResult>(
-    graphqlRequest,
-    query,
-    { uri },
-    POST_COMPATIBILITY_RULES,
+  const response = await requestPostWithSlugFallback(
+    uri,
+    (identifier, idType) => {
+      const sourceQuery = idType === "URI" ? POST_BY_URI_QUERY : POST_BY_SLUG_QUERY;
+      const query = createProfilePostQuery(sourceQuery, STOREFRONT_BACKEND_PROFILE);
+      return requestGraphqlWithCompatibility<PostByUriResult>(
+        graphqlRequest,
+        query,
+        { uri: identifier },
+        POST_COMPATIBILITY_RULES,
+      );
+    },
+    (result) => !result.errors?.length && result.data?.post === null,
   );
   const { data, errors } = response;
 

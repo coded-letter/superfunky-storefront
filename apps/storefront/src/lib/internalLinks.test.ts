@@ -45,6 +45,11 @@ test("classifies relative, same-origin, language, query, and backend content URL
   if (rootAnchor.kind === "internal") {
     assert.equal(rootAnchor.to, "/#faq");
   }
+  const samePageAnchor = classify("/en/documentation/guide/?view=full#section");
+  assert.equal(samePageAnchor.kind, "internal");
+  if (samePageAnchor.kind === "internal") {
+    assert.equal(samePageAnchor.to, "/en/documentation/guide/?view=full#section");
+  }
 
   const backend = classify("https://v3.superfunky.pro/documentation/setup/?step=2#start");
   assert.equal(backend.kind, "internal");
@@ -105,7 +110,6 @@ test("leaves external, backend application, special-scheme, and native anchors a
     ["data:text/plain,hello"],
     ["blob:https://store.test/id"],
     ["#section"],
-    ["/en/documentation/guide/?view=full#section"],
     ["/download", { download: "" }],
     ["/new-tab", { target: "_blank" }],
     ["/external-contract", { rel: "nofollow external" }],
@@ -141,6 +145,25 @@ test("delegates dynamic CMS anchors while preserving modified clicks and editabl
   cleanup();
   dynamic.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, button: 0 }));
   assert.deepEqual(navigations, ["/documentation/dynamic/?q=1#intro"]);
+});
+
+test("delegates same-page path anchors so locked mobile layouts can release before scrolling", () => {
+  const navigations: string[] = [];
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    backendOrigin: "https://v3.superfunky.pro",
+    navigate: (to) => navigations.push(to),
+    prefetch: () => undefined,
+  });
+  const root = dom.window.document.querySelector("#root")!;
+  root.innerHTML = '<a id="same-page" href="/en/documentation/guide/?view=full#faq">FAQ</a>';
+  const click = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  root.querySelector("#same-page")!.dispatchEvent(click);
+
+  assert.equal(click.defaultPrevented, true);
+  assert.deepEqual(navigations, ["/en/documentation/guide/?view=full#faq"]);
+  cleanup();
 });
 
 test("leaves the authoritative prerender shell links native until handoff", () => {

@@ -309,10 +309,10 @@ export function HeaderMockup({
   // Close the mobile drawer whenever the route changes, and lock body scroll while it's
   // open. Uses the position:fixed technique (not just overflow:hidden) so the page behind
   // the drawer can't be scrolled on iOS Safari, and restores the exact scroll position on close.
-  useEffect(() => setIsMenuOpen(false), [location.pathname]);
+  useEffect(() => setIsMenuOpen(false), [location.hash, location.pathname, location.search]);
   useEffect(() => {
     setIsSearchExpanded(false);
-  }, [location.pathname]);
+  }, [location.hash, location.pathname, location.search]);
   useEffect(() => {
     if (!showSearch || searchVariant !== "expandable") setIsSearchExpanded(false);
   }, [searchVariant, showSearch]);

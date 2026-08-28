@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ResponsiveImage, Seo, useLayoutPreferences, useT } from "@funky/ui";
+import { ResponsiveImage, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
@@ -25,6 +25,7 @@ import { useStorefrontPath } from "../lib/storefrontPaths";
 import { createReview } from "../lib/comments";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
 import { backendPostUriFromStorefrontPath } from "../lib/postRoutePaths.mjs";
+import { resolveConfiguredContentLanguage } from "../lib/contentLanguageFallback";
 import { CommentsSection, stringToHSL, summarizeReviews } from "./CommentThread";
 import { ShareButtonsRow } from "./ShareButtons";
 import { slugifyHeading } from "./shared";
@@ -46,15 +47,21 @@ type AuthorLayout = "fullwidth" | "compact" | "editorial";
 export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
   const t = useT();
   const { pathname } = useLocation();
+  const { languageCode, configuredLanguageCodes } = useLanguage();
   const postUri = backendPostUriFromStorefrontPath(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
   const { data: post, isLoading, isRevalidating, error } = useIncrementalData(
     `post:${postUri}`,
     () => getPostByUri(postUri),
   );
+  const contentLanguageCode = resolveConfiguredContentLanguage(
+    post?.languageCode,
+    languageCode,
+    configuredLanguageCodes,
+  );
 
   useCanonicalContentLanguage(
-    post?.languageCode,
+    contentLanguageCode,
     post?.translations || [],
     pathname,
     !isLoading && !isRevalidating,
@@ -83,10 +90,24 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
     return fallback ?? <PostStatus title="Post not found" message={`The site has no published post at “${postUri}”.`} />;
   }
 
-  return <PostMockupPageInner post={post} contentRef={contentRef} />;
+  return (
+    <PostMockupPageInner
+      post={post}
+      contentRef={contentRef}
+      languageCode={contentLanguageCode}
+    />
+  );
 }
 
-function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: RefObject<HTMLDivElement> }) {
+function PostMockupPageInner({
+  post,
+  contentRef,
+  languageCode,
+}: {
+  post: CmsPost;
+  contentRef: RefObject<HTMLDivElement>;
+  languageCode: string;
+}) {
   const blogPath = useStorefrontPath("blog", "/blog");
   const { postTocLayout: tocLayout, postSharePosition: sharePosition, postAuthorLayout: authorLayout, discussionLayout } =
     useLayoutPreferences();
@@ -103,7 +124,7 @@ function PostMockupPageInner({ post, contentRef }: { post: CmsPost; contentRef: 
         title={post.seo.title || post.title}
         description={description || undefined}
         canonical={post.seo.canonical || post.seo.opengraphUrl || undefined}
-        languageCode={post.languageCode}
+        languageCode={languageCode}
         keywords={post.seo.keywords || undefined}
         siteName={post.seo.siteName || undefined}
         appendSiteName={false}

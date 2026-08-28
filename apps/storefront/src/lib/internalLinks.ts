@@ -93,8 +93,8 @@ export function classifyAnchor(
   }
 
   const current = new URL(environment.currentUrl);
-  if (url.pathname === current.pathname && url.search === current.search) {
-    return { kind: "native", reason: url.hash ? "same-page-anchor" : "current-url" };
+  if (url.pathname === current.pathname && url.search === current.search && !url.hash) {
+    return { kind: "native", reason: "current-url" };
   }
 
   return {

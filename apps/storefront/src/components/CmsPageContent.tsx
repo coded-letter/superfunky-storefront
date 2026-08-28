@@ -17,6 +17,7 @@ import {
 import { ContentLoadingState } from "./ContentLoadingState";
 import { getInitialCmsPageMarkup } from "../lib/prerenderSnapshot";
 import { activatePrerenderImages } from "../lib/prerenderImages";
+import { resolveConfiguredContentLanguage } from "../lib/contentLanguageFallback";
 import {
   normalizeShortcodeName,
   normalizeRenderedShortcodeOutput,
@@ -53,7 +54,7 @@ export function CmsPageContent({
 }: CmsPageContentProps) {
   const t = useT();
   const { pathname } = useLocation();
-  const { configuredLanguageCodes } = useLanguage();
+  const { languageCode, configuredLanguageCodes } = useLanguage();
   const pageUri = normalizePageUri(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
   const snapshotRef = useRef<HTMLElement>(null);
@@ -62,8 +63,13 @@ export function CmsPageContent({
     pageCacheKey || `page:${pageUri}`,
     loadPage || (() => getPageByUri(pageUri)),
   );
+  const contentLanguageCode = resolveConfiguredContentLanguage(
+    page?.languageCode,
+    languageCode,
+    configuredLanguageCodes,
+  );
   useCanonicalContentLanguage(
-    synchronizeLanguage ? page?.languageCode : undefined,
+    synchronizeLanguage ? contentLanguageCode : undefined,
     synchronizeLanguage ? page?.translations || [] : [],
     pathname,
     !isLoading && !isRevalidating,
@@ -150,7 +156,7 @@ export function CmsPageContent({
         canonical={homePath
           ? `${window.location.origin}${pathname === "/" ? "" : pathname.replace(/\/+$/, "")}`
           : page.seo.canonical || page.seo.opengraphUrl || `${window.location.origin}${pathname}`}
-        languageCode={page.languageCode}
+        languageCode={contentLanguageCode}
           keywords={page.seo.keywords || undefined}
           siteName={page.seo.siteName || undefined}
           appendSiteName={false}

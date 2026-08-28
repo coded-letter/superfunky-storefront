@@ -27,3 +27,10 @@ test("expandable search is focusable when open and does not clip its results", (
   assert.match(headerSource, /autoFocus=\{isSearchExpanded\}/);
   assert.match(searchSource, /if \(autoFocus\) inputRef\.current\?\.focus\(\)/);
 });
+
+test("same-page fragment navigation closes mobile overlays before anchor scrolling", () => {
+  assert.match(
+    headerSource,
+    /useEffect\(\(\) => setIsMenuOpen\(false\), \[location\.hash, location\.pathname, location\.search\]\)/,
+  );
+});

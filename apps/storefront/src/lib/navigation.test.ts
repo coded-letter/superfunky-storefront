@@ -135,8 +135,10 @@ test("optional language discovery cannot invalidate layout configuration", () =>
   assert.doesNotMatch(navigationSource, /const \[graphqlResponse, restLanguageResult\] = await Promise\.all\(/);
   assert.match(
     navigationSource,
-    /if \(isNavigationCompatibilityError\(errors\)\) \{\s*return mapNavigationLanguages\(await getOptionalPolylangRestLanguages\(\)\)/,
+    /if \(isNavigationCompatibilityError\(errors\)\) \{[\s\S]*?restLanguages\.length \? restLanguages : getStorefrontConfigLanguages\(\)/,
   );
+  assert.match(navigationSource, /storefrontConfig: funkycommerceStorefrontConfig \{\s*languages \{ code name \}/);
+  assert.match(navigationSource, /mapBackendSiteLanguages\(languages \|\| \[]\)/);
   assert.match(navigationSource, /STOREFRONT_BACKEND_PROFILE === "shell"/);
   assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
   assert.match(navigationDataSource, /syncUiStrings\(languageCode, rawState\.data\?\.uiStrings \?\? \{\}\)/);
