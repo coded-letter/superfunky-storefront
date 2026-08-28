@@ -43,6 +43,7 @@ import {
   publishShellManifestForMode,
 } from "./artifact-publish.mjs";
 import { stableRouteIsAvailable } from "./route-availability.mjs";
+import { navigationDataCacheKey } from "../src/lib/navigationCacheKey.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -2240,7 +2241,7 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         },
         entries: ({ assistant, navigation }) => [
           {
-            cacheKey: `navigation-data:v14:${languageCode}`,
+            cacheKey: navigationDataCacheKey(languageCode),
             value: navigation,
             dependencies: ["config:storefront", "menu:global", `translation:${languageCode}`],
           },
