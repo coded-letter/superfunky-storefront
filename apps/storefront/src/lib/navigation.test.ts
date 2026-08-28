@@ -17,9 +17,11 @@ import {
   type RawMenuItem,
 } from "./menuMapping.ts";
 import { sanitizeStorefrontHtml } from "../../../../packages/ui/src/layout/sanitizeStorefrontHtml.ts";
+import { navigationDataCacheKey } from "./navigationCacheKey.mjs";
 
 const navigationSource = readFileSync(new URL("navigation.ts", import.meta.url), "utf8");
 const navigationDataSource = readFileSync(new URL("../state/navigationData.tsx", import.meta.url), "utf8");
+const prerenderSource = readFileSync(new URL("../../scripts/prerender.mjs", import.meta.url), "utf8");
 
 let dom: JSDOM;
 
@@ -47,6 +49,13 @@ test("interaction sounds remain disabled unless the backend explicitly enables t
     ...normalizeStorefrontConfiguration(null),
     soundsEnabled: true,
   }).soundsEnabled, true);
+});
+
+test("prerender and runtime share the current navigation hydration cache key", () => {
+  assert.equal(navigationDataCacheKey("en"), "navigation-data:v15:en");
+  assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
+  assert.match(prerenderSource, /cacheKey: navigationDataCacheKey\(languageCode\)/);
+  assert.doesNotMatch(prerenderSource, /navigation-data:v14/);
 });
 
 test("layout GraphQL compatibility retries can omit unsupported child fields without dropping the layout object", () => {
@@ -129,7 +138,7 @@ test("optional language discovery cannot invalidate layout configuration", () =>
     /if \(isNavigationCompatibilityError\(errors\)\) \{\s*return mapNavigationLanguages\(await getOptionalPolylangRestLanguages\(\)\)/,
   );
   assert.match(navigationSource, /STOREFRONT_BACKEND_PROFILE === "shell"/);
-  assert.match(navigationDataSource, /navigation-data:v15/);
+  assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
   assert.match(navigationDataSource, /syncUiStrings\(languageCode, rawState\.data\?\.uiStrings \?\? \{\}\)/);
   assert.match(navigationDataSource, /lastResolvedData/);
   assert.match(navigationDataSource, /canRenderChildren = !enabled \|\| Boolean\(state\.data\) \|\| !rawState\.isLoading/);

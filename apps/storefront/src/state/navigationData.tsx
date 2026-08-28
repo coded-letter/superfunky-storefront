@@ -9,6 +9,7 @@ import {
 import { useIncrementalData, type IncrementalDataState } from "@funky/sdk/react";
 import { setStripePublishableKey } from "../lib/stripe";
 import { fetchGeolocation, isGeolocationBackendConfigured } from "../lib/geolocation";
+import { navigationDataCacheKey } from "../lib/navigationCacheKey.mjs";
 
 /** Best-effort mapping: ISO 3166-1 alpha-2 country code → ISO 4217 currency code.
  *  Covers the most-common e-commerce markets; falls back to baseCurrency otherwise. */
@@ -29,7 +30,7 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   const { syncCurrencyOptions, setCurrencyCode, currencyOptions } = useCurrency();
   const { syncUiStrings } = useUiStrings();
   const rawState = useIncrementalData(
-    `navigation-data:v15:${languageCode}`,
+    navigationDataCacheKey(languageCode),
     () => getNavigationData(languageCode),
     enabled,
   );
