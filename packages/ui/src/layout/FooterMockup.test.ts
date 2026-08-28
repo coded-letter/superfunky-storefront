@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { filterVisibleSocialLinks } from "./FooterMockup.socialVisibility.ts";
+import { sanitizeStorefrontHtml } from "./sanitizeStorefrontHtml.ts";
 
 const chromeSource = readFileSync(new URL("StorefrontChromeMockup.tsx", import.meta.url), "utf8");
 const footerSource = readFileSync(new URL("FooterMockup.tsx", import.meta.url), "utf8");
@@ -30,4 +31,14 @@ test("footer crypto marks share an intrinsic transparent presentation", () => {
 test("footer payment visibility follows layout controls without a crypto feature override", () => {
   assert.match(chromeSource, /hiddenPaymentMethodKeys=\{hiddenFooterPaymentMethodKeys\}/);
   assert.doesNotMatch(chromeSource, /features\.crypto[\s\S]{0,100}\["btc", "eth"\]/);
+});
+
+test("footer copyright preserves safe links and removes executable markup", () => {
+  const html = sanitizeStorefrontHtml(
+    '&copy; Example <a href="/privacy" onclick="alert(1)">Privacy</a><script>alert(1)</script>',
+  );
+
+  assert.equal(html, '&copy; Example <a href="/privacy">Privacy</a>');
+  assert.match(footerSource, /const safeCopyrightHtml = sanitizeStorefrontHtml\(copyrightText\)/);
+  assert.equal((footerSource.match(/<SafeHtmlContent[\s\S]*?html=\{safeCopyrightHtml\}/g) || []).length, 2);
 });

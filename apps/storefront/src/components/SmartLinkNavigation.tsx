@@ -1,14 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { normalizeLanguagePath, useLanguage } from "@funky/ui";
 import { BACKEND_ORIGIN } from "@funky/sdk";
-import { mountSmartLinkNavigation } from "../lib/internalLinks";
+import { mountHashAnchorScroll, mountSmartLinkNavigation } from "../lib/internalLinks";
 import { prefetchStorefrontRoute } from "../lib/routePrefetch";
 
 export function SmartLinkNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const navigationType = useNavigationType();
+  const initialLocation = useRef(true);
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
 
   useEffect(() => mountSmartLinkNavigation({
@@ -26,8 +27,10 @@ export function SmartLinkNavigation() {
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {
-    if (navigationType === "POP") return;
+    const isInitialLocation = initialLocation.current;
+    initialLocation.current = false;
     if (!location.hash) {
+      if (navigationType === "POP") return;
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       const main = document.querySelector<HTMLElement>("main");
       if (main) {
@@ -38,31 +41,12 @@ export function SmartLinkNavigation() {
       }
       return;
     }
-
-    const rawId = location.hash.slice(1);
-    let id = rawId;
-    try {
-      id = decodeURIComponent(rawId);
-    } catch {
-      // Browsers leave malformed percent-escapes untouched in fragment identifiers.
-    }
-    const revealAnchor = () => {
-      const target = document.getElementById(id);
-      if (!target) return false;
-      target.scrollIntoView();
-      return true;
-    };
-    if (revealAnchor()) return;
-
-    const observer = new MutationObserver(() => {
-      if (revealAnchor()) observer.disconnect();
+    if (navigationType === "POP" && !isInitialLocation) return;
+    return mountHashAnchorScroll({
+      document,
+      window,
+      hash: location.hash,
     });
-    observer.observe(document.body, { childList: true, subtree: true });
-    const timeout = window.setTimeout(() => observer.disconnect(), 2_000);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timeout);
-    };
   }, [location.hash, location.key, navigationType]);
 
   return null;

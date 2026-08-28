@@ -2,6 +2,8 @@ import type { CmsPageScript } from "./pages";
 
 const CMS_SCRIPT_SELECTOR = 'script[data-wp-block-html="js"]';
 const EXECUTED_ATTRIBUTE = "data-funky-cms-executed";
+const REJECTED_ATTRIBUTE = "data-funky-cms-rejected";
+const HTML_PAYLOAD_PATTERN = /^\s*<(?!\!--)/;
 const BUNDLED_SCRIPT_HANDLES = new Set([
   "wc-add-to-cart",
   "woocommerce",
@@ -17,7 +19,7 @@ function decodeHtmlEntities(value: string): string {
 }
 
 function executeCmsScript(source: HTMLScriptElement): void {
-  if (source.hasAttribute(EXECUTED_ATTRIBUTE)) return;
+  if (source.hasAttribute(EXECUTED_ATTRIBUTE) || source.hasAttribute(REJECTED_ATTRIBUTE)) return;
 
   const executable = document.createElement("script");
   for (const attribute of Array.from(source.attributes)) {
@@ -28,7 +30,16 @@ function executeCmsScript(source: HTMLScriptElement): void {
   if (source.src && !source.hasAttribute("async")) {
     executable.async = false;
   } else if (!source.src) {
-    executable.text = decodeHtmlEntities(source.textContent ?? "");
+    const scriptText = decodeHtmlEntities(source.textContent ?? "");
+    if (HTML_PAYLOAD_PATTERN.test(scriptText)) {
+      source.setAttribute(REJECTED_ATTRIBUTE, "true");
+      console.error(
+        "[CMS content] Refused to execute an inline script because its body contains HTML instead of JavaScript.",
+        source,
+      );
+      return;
+    }
+    executable.text = scriptText;
   }
 
   source.replaceWith(executable);

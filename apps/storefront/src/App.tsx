@@ -12,6 +12,7 @@ import {
   useCurrency,
   useLanguage,
   useLayoutPreferences,
+  useSoundUX,
   useT,
   useToast,
 } from "@funky/ui";
@@ -541,6 +542,19 @@ function LayoutPreferencesBackendSync() {
   return null;
 }
 
+function SoundUXBackendSync() {
+  const { data, isLoading } = useNavigationData();
+  const { setBackendEnabled } = useSoundUX();
+
+  useEffect(() => {
+    if (!isLoading) {
+      setBackendEnabled(data?.storefrontConfig.soundsEnabled === true);
+    }
+  }, [data?.storefrontConfig.soundsEnabled, isLoading, setBackendEnabled]);
+
+  return null;
+}
+
 function LayoutStudioSessionControls() {
   const navigate = useNavigate();
   const { data } = useNavigationData();
@@ -726,6 +740,7 @@ export function App() {
           <LanguageUrlNormalizer />
           <WordPressThemeStylesProvider enabled={isBackendConfigured}>
             <NavigationDataProvider enabled={isBackendConfigured}>
+              <SoundUXBackendSync />
               <LayoutPreferencesBackendSync />
               <LayoutStudioSessionControls />
               <StorefrontVisibleReadySignal />

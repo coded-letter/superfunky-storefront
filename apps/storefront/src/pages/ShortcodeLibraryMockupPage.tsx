@@ -715,6 +715,7 @@ export function ShortcodeLibraryMockupPage() {
                 poster: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
                 kicker: "Motion campaign",
                 title: "Stories made to move",
+                heading_level: "h1",
                 description: "A cinematic banner with a resilient poster fallback, readable overlay, and accessible playback control.",
                 primary_cta_label: "Shop the collection",
                 primary_cta_href: "/shop",
@@ -730,6 +731,7 @@ export function ShortcodeLibraryMockupPage() {
               poster="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
               kicker="Motion campaign"
               title="Stories made to move"
+              headingLevel="h1"
               description="A cinematic banner with a resilient poster fallback, readable overlay, and accessible playback control."
               primaryCta={{ label: "Shop the collection", href: "/shop" }}
               secondaryCta={{ label: "Read the journal", href: "/blog" }}

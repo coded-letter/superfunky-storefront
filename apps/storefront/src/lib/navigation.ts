@@ -280,6 +280,7 @@ export type StorefrontConfiguration = {
     quietSeconds: number;
     openLinksInNewTab: boolean;
   };
+  soundsEnabled: boolean;
   features: {
     promo: boolean;
     search: boolean;
@@ -500,6 +501,7 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     quietSeconds: 8,
     openLinksInNewTab: true,
   },
+  soundsEnabled: false,
   features: {
     promo: true,
     search: true,
@@ -601,6 +603,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         quietSeconds
         openLinksInNewTab
       }
+      soundsEnabled
       features {
         promo
         search
@@ -945,6 +948,7 @@ const NAVIGATION_COMPATIBILITY_FIELDS = [
 const NAVIGATION_ROLLING_LEAF_FIELDS = [
   "quietSeconds",
   "openLinksInNewTab",
+  "soundsEnabled",
   "accountMode",
   "distractionFree",
 ] as const;
@@ -1406,6 +1410,7 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
       quietSeconds: clampConfigurationInteger(configuration.recentOrders?.quietSeconds, 2, 300, 8),
       openLinksInNewTab: configuration.recentOrders?.openLinksInNewTab !== false,
     },
+    soundsEnabled: configuration.soundsEnabled === true,
     features: {
       ...DEFAULT_STOREFRONT_CONFIGURATION.features,
       ...configuration.features,

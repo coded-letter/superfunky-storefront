@@ -127,6 +127,61 @@ export function shouldAvoidPrefetch(navigatorLike: Navigator): boolean {
   );
 }
 
+export function mountHashAnchorScroll({
+  document,
+  window,
+  hash,
+  timeoutMs = 2_000,
+}: {
+  document: Document;
+  window: Window;
+  hash: string;
+  timeoutMs?: number;
+}): () => void {
+  const rawId = hash.replace(/^#/, "");
+  let id = rawId;
+  try {
+    id = decodeURIComponent(rawId);
+  } catch {
+    // Browsers leave malformed percent-escapes untouched in fragment identifiers.
+  }
+
+  let currentTarget: HTMLElement | null = null;
+  const revealAnchor = (target = document.getElementById(id)) => {
+    if (!target) return;
+    currentTarget = target;
+    target.scrollIntoView();
+  };
+  revealAnchor();
+
+  // Route hydration can briefly expose the prerendered target before replacing
+  // it with the final layout. Keep observing so the final target is revealed too.
+  const observer = new window.MutationObserver(() => {
+    const target = document.getElementById(id);
+    if (target && target !== currentTarget) revealAnchor(target);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  let retry = 0;
+  let timeout = 0;
+  const cancelOnInteraction = () => {
+    observer.disconnect();
+    window.clearTimeout(retry);
+    window.clearTimeout(timeout);
+    window.removeEventListener("wheel", cancelOnInteraction);
+    window.removeEventListener("pointerdown", cancelOnInteraction);
+    window.removeEventListener("touchstart", cancelOnInteraction);
+  };
+  retry = window.setTimeout(revealAnchor, Math.min(500, timeoutMs));
+  timeout = window.setTimeout(cancelOnInteraction, timeoutMs);
+  window.addEventListener("wheel", cancelOnInteraction, { once: true });
+  window.addEventListener("pointerdown", cancelOnInteraction, { once: true });
+  window.addEventListener("touchstart", cancelOnInteraction, { once: true });
+
+  return () => {
+    cancelOnInteraction();
+  };
+}
+
 function isBackendContentUrl(url: URL): boolean {
   return (
     !NON_CONTENT_BACKEND_PATHS.some((pattern) => pattern.test(url.pathname))
