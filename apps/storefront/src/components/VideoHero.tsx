@@ -73,24 +73,67 @@ export function VideoHero({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Browsers block audible autoplay. Keep unmuted heroes on their poster until
   // the visitor explicitly starts playback.
-  const [playing, setPlaying] = useState(autoplay && muted);
+  const [playing, setPlaying] = useState(() =>
+    autoplay
+    && muted
+    && (typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+  );
   const [audioMuted, setAudioMuted] = useState(muted);
+  const [activatedMediaSource, setActivatedMediaSource] = useState<string | null>(() =>
+    typeof navigator !== "undefined" && navigator.userActivation?.hasBeenActive ? source : null,
+  );
+  const mediaActivated = !resolved || Boolean(poster) || activatedMediaSource === source;
+  const playbackActive = playing && mediaActivated;
 
   useEffect(() => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const applyReducedMotion = () => {
+      if (!reducedMotion.matches) return;
       setPlaying(false);
       videoRef.current?.pause();
-    }
+    };
+    applyReducedMotion();
+    reducedMotion.addEventListener("change", applyReducedMotion);
+    return () => reducedMotion.removeEventListener("change", applyReducedMotion);
   }, []);
 
-  const togglePlayback = () => {
-    const next = !playing;
-    setPlaying(next);
-    if (videoRef.current) {
-      if (next) void videoRef.current.play();
-      else videoRef.current.pause();
+  useEffect(() => {
+    if (!resolved || poster || activatedMediaSource === source) return;
+    if (navigator.userActivation?.hasBeenActive) {
+      setActivatedMediaSource(source);
+      return;
     }
+
+    const events = ["pointerdown", "keydown", "touchstart", "wheel"] as const;
+    const removeActivationListeners = () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, activateMedia));
+    };
+    function activateMedia(event: Event) {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-video-hero-control]")) return;
+      removeActivationListeners();
+      setActivatedMediaSource(source);
+    }
+    events.forEach((eventName) => {
+      window.addEventListener(eventName, activateMedia, { passive: true });
+    });
+    return removeActivationListeners;
+  }, [activatedMediaSource, poster, resolved, source]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !mediaActivated) return;
+    if (!playing) {
+      video.pause();
+      return;
+    }
+    void video.play().catch(() => setPlaying(false));
+  }, [mediaActivated, playing]);
+
+  const togglePlayback = () => {
+    const next = !playbackActive;
+    setActivatedMediaSource(source);
+    setPlaying(next);
   };
   const startProviderPlayback = () => {
     if (!iframeRef.current || !resolved) return;
@@ -104,6 +147,7 @@ export function VideoHero({
   };
   const toggleMute = () => {
     const next = !audioMuted;
+    setActivatedMediaSource(source);
     setAudioMuted(next);
     if (videoRef.current) {
       videoRef.current.muted = next;
@@ -150,8 +194,8 @@ export function VideoHero({
       <div className={mediaClass}>
         {poster ? <img src={poster} alt="" aria-hidden="true" className={`absolute inset-0 !h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} /> : null}
         {resolved?.kind === "direct" ? (
-          <video ref={videoRef} src={resolved.url} poster={poster} autoPlay={autoplay && muted} muted={audioMuted} loop={loop} playsInline aria-hidden="true" className={`absolute inset-0 !h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} />
-        ) : playing && iframeUrl ? (
+          <video ref={videoRef} src={mediaActivated ? resolved.url : undefined} poster={poster} preload={mediaActivated ? "auto" : "none"} autoPlay={playbackActive} muted={audioMuted} loop={loop} playsInline aria-hidden="true" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} className={`absolute inset-0 !h-full w-full object-cover ${isMinimal ? "opacity-15" : ""}`} />
+        ) : playbackActive && iframeUrl ? (
           <iframe ref={iframeRef} src={iframeUrl} title="Background video" tabIndex={-1} aria-hidden="true" allow="autoplay; fullscreen" onLoad={startProviderPlayback} className={`pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2 border-0 ${isMinimal ? "opacity-15" : ""}`} />
         ) : null}
         {!isMinimal ? <div className="absolute inset-0 bg-black" style={{ opacity: Math.min(90, Math.max(0, overlayOpacity)) / 100 }} aria-hidden="true" /> : null}
@@ -168,11 +212,11 @@ export function VideoHero({
       </div>
       {resolved ? (
         <div className={`absolute bottom-5 z-20 ${variant === "fullbleed" ? "inset-x-0 mx-auto flex w-full justify-end gap-2 px-4 sm:px-6 lg:px-8" : "right-5 flex gap-2"}`} style={variant === "fullbleed" ? { maxWidth: `${themeMaxWidthPx}px` } : undefined}>
-            <button type="button" onClick={toggleMute} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={audioMuted ? "Unmute background video" : "Mute background video"}>
+            <button type="button" data-video-hero-control onClick={toggleMute} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={audioMuted ? "Unmute background video" : "Mute background video"}>
               {audioMuted ? <VolumeX className="h-5 w-5" aria-hidden="true" /> : <Volume2 className="h-5 w-5" aria-hidden="true" />}
             </button>
-            <button type="button" onClick={togglePlayback} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={playing ? "Pause background video" : "Play background video"}>
-              {playing ? <Pause className="h-5 w-5" aria-hidden="true" /> : <Play className="h-5 w-5" aria-hidden="true" />}
+            <button type="button" data-video-hero-control onClick={togglePlayback} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={playbackActive ? "Pause background video" : "Play background video"}>
+              {playbackActive ? <Pause className="h-5 w-5" aria-hidden="true" /> : <Play className="h-5 w-5" aria-hidden="true" />}
             </button>
         </div>
       ) : null}

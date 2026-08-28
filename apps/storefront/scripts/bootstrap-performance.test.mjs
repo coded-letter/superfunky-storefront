@@ -66,6 +66,7 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /activationRequested = true;\s*alignHiddenReactStage\(\);/);
   assert.doesNotMatch(mainSource, /prerenderRoot\.classList\.add\("is-replaced"\)/);
   assert.match(indexSource, /#storefront-react-root\[inert\] \{[\s\S]*display: block;[\s\S]*visibility: hidden;/);
+  assert.match(headerSource, /useLayoutEffect\(\(\) => \{[\s\S]*setHeaderHeight\(node\.getBoundingClientRect\(\)\.height\)/);
   assert.match(mainSource, /resizeObserver\.observe\(root\)/);
   assert.match(mainSource, /stopTimer = setTimeout\(stop, 2_000\)/);
   assert.match(mainSource, /activationShortcodeAnchor/);

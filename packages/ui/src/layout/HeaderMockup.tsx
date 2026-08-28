@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   AlignJustify,
@@ -294,7 +294,7 @@ export function HeaderMockup({
   // height (which changes as the announcement bar collapses) is measured here and fed
   // into a same-height spacer below so page content is never covered nor left with a
   // gap.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = headerRef.current;
     if (!node) return;
 
