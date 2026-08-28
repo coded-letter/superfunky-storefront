@@ -64,6 +64,7 @@ let reactVisibleReady = false;
 let reactShellReady = false;
 let activationRequested = false;
 let activationScrollY = 0;
+let activationTracksCurrentScroll = false;
 let activationShortcodeAnchor: {
   name: string;
   index: number;
@@ -82,6 +83,8 @@ let pendingControlActivation: {
   name: string;
   ariaLabel: string;
   text: string;
+  controlIndex: number;
+  replayClick: boolean;
 } | null = null;
 let dynamicHydrationObserver: IntersectionObserver | null = null;
 let stopPrerenderImageLoading: () => void = () => undefined;
@@ -90,12 +93,14 @@ let stopStaticSubmenus: () => void = () => undefined;
 let stopStaticMobileNavigation: () => void = () => undefined;
 let stopStaticHeaderBehavior: () => void = () => undefined;
 let stopStaticCmsBehaviors: () => void = () => undefined;
+let stopInteractionModeActivation: () => void = () => undefined;
 declare global {
   interface Window {
     __funkyStorefrontStaticNavigation?: {
       container: HTMLElement;
       cleanup: () => void;
     };
+    __funkyStorefrontMediaActivationRequested?: boolean;
   }
 }
 const preparationEvents = ["pointerover", "focusin", "pointerdown", "keydown", "touchstart"] as const;
@@ -291,7 +296,7 @@ const alignHiddenReactStage = () => {
 const revealReactShell = () => {
   if (reactShellRevealed) return;
   reactShellRevealed = true;
-  const handoffScrollY = activationScrollY;
+  const handoffScrollY = activationTracksCurrentScroll ? window.scrollY : activationScrollY;
   performance.mark("storefront:handoff");
   prepareReactShell();
   if (!prerenderRoot) return;
@@ -309,7 +314,11 @@ const revealReactShell = () => {
   stopStaticMobileNavigation();
   stopStaticHeaderBehavior();
   stopStaticCmsBehaviors();
-  restoreHandoffScrollPosition(handoffScrollY, true);
+  if (activationTracksCurrentScroll) {
+    window.scrollTo({ top: handoffScrollY, left: window.scrollX, behavior: "auto" });
+  } else {
+    restoreHandoffScrollPosition(handoffScrollY, true);
+  }
   document.documentElement.classList.remove("storefront-instant-handoff");
   removeActivationListeners();
   queueMicrotask(() => {
@@ -379,11 +388,12 @@ const replayLanguageSwitcherActivation = (attempt = 0) => {
 const replayControlActivation = (attempt = 0) => {
   const pending = pendingControlActivation;
   if (!pending) return;
-  const identifiedControl = pending.storefrontControl
-    ? root.querySelector<HTMLElement>(
+  const identifiedControls = pending.storefrontControl
+    ? [...root.querySelectorAll<HTMLElement>(
         `[data-storefront-control="${CSS.escape(pending.storefrontControl)}"]`,
-      )
-    : null;
+      )]
+    : [];
+  const identifiedControl = identifiedControls[pending.controlIndex] || null;
   if (
     pending.storefrontControl
     && (!identifiedControl || !identifiedControl.matches('button, a[href], input, select, textarea, [role="button"]'))
@@ -414,9 +424,20 @@ const replayControlActivation = (attempt = 0) => {
     }
     return;
   }
+  const targetAriaLabel = target.getAttribute("aria-label") || "";
+  const waitsForReducedMotionPlay = !pending.replayClick
+    && pending.ariaLabel === "Play background video"
+    && targetAriaLabel !== pending.ariaLabel
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (waitsForReducedMotionPlay && attempt < 120) {
+    window.requestAnimationFrame(() => replayControlActivation(attempt + 1));
+    return;
+  }
   pendingControlActivation = null;
   target?.focus({ preventScroll: true });
-  target?.click();
+  if (pending.replayClick || targetAriaLabel === pending.ariaLabel) {
+    target.click();
+  }
 };
 
 const finishBootstrap = () => {
@@ -489,6 +510,7 @@ const removePreparationListeners = () => {
 };
 const removeActivationListeners = () => {
   removePreparationListeners();
+  stopInteractionModeActivation();
   prerenderRoot?.removeEventListener("click", activateLanguageSwitcher);
   initialRoot.removeEventListener("click", activateStaticControl, true);
 };
@@ -521,13 +543,21 @@ const activateStaticControl = (event: MouseEvent) => {
   event.preventDefault();
   event.stopPropagation();
   waitingControl = control;
+  const storefrontControl = control.dataset.storefrontControl || control.dataset.staticControl || "";
+  const matchingControls = storefrontControl
+    ? [...initialRoot.querySelectorAll<HTMLElement>(
+        `[data-storefront-control="${CSS.escape(storefrontControl)}"]`,
+      )]
+    : [];
   pendingControlActivation = {
-    storefrontControl: control.dataset.storefrontControl || control.dataset.staticControl || "",
+    storefrontControl,
     tagName: control.tagName.toLowerCase(),
     id: control.id,
     name: control.getAttribute("name") || "",
     ariaLabel: control.getAttribute("aria-label") || "",
     text: control.textContent?.trim() || "",
+    controlIndex: Math.max(0, matchingControls.indexOf(control)),
+    replayClick: !control.hasAttribute("data-storefront-activate-only"),
   };
   requestReactActivation(event);
 };
@@ -583,7 +613,12 @@ if (prerenderRoot) {
       section.matches('[role="status"][aria-label^="Loading"]')
       || section.querySelector('[role="status"][aria-label^="Loading"]')
     );
-  if (!isFlagshipStorefront && dynamicSections.length && "IntersectionObserver" in window) {
+  if (
+    prerenderActivationMode !== "interaction"
+    && !isFlagshipStorefront
+    && dynamicSections.length
+    && "IntersectionObserver" in window
+  ) {
     const observeDynamicSections = () => {
       if (activationRequested || dynamicHydrationObserver) return;
       const observer = new IntersectionObserver((entries) => {
@@ -606,7 +641,10 @@ if (prerenderRoot) {
     };
     observeDynamicSections();
   }
-  if (prerenderRoot.querySelector('[data-generated-route-snapshot][data-route-type$="Product"]')) {
+  if (
+    prerenderActivationMode !== "interaction"
+    && prerenderRoot.querySelector('[data-generated-route-snapshot][data-route-type$="Product"]')
+  ) {
     window.requestAnimationFrame(() => requestReactActivation());
   }
 
@@ -1006,6 +1044,38 @@ function requestReactPreparation(event: Event) {
 
 if (!prerenderRoot) {
   void mountApplication();
+} else if (prerenderActivationMode === "interaction") {
+  // The complete static page remains authoritative until a visitor requests an
+  // interactive control. Pointer/focus preparation above keeps activation fast.
+  const scrollKeys = new Set(["ArrowDown", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "]);
+  const activateAfterScrollIntent = (event: Event) => {
+    if (event instanceof KeyboardEvent) {
+      const target = event.target;
+      if (
+        !scrollKeys.has(event.key)
+        || (
+          target instanceof Element
+          && target.closest('button, a[href], input, select, textarea, [role="button"], [contenteditable]')
+        )
+      ) {
+        return;
+      }
+    }
+    window.__funkyStorefrontMediaActivationRequested = true;
+    activationTracksCurrentScroll = true;
+    stopInteractionModeActivation();
+    window.requestAnimationFrame(() => requestReactActivation());
+  };
+  const interactionEvents = ["wheel", "touchmove", "keydown"] as const;
+  stopInteractionModeActivation = () => {
+    interactionEvents.forEach((eventName) => {
+      window.removeEventListener(eventName, activateAfterScrollIntent);
+    });
+    stopInteractionModeActivation = () => undefined;
+  };
+  interactionEvents.forEach((eventName) => {
+    window.addEventListener(eventName, activateAfterScrollIntent, { passive: true });
+  });
 } else if (isManagedStorefront) {
   let hasPreparedApplicationVisit = false;
   try {

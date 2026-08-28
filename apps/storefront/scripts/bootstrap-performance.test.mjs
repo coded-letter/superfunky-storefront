@@ -57,9 +57,10 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(prerenderSource, /data-static-control=.*data-storefront-activate/);
   assert.match(prerenderSource, /hasInteractiveStaticChrome/);
   assert.match(mainSource, /if \(!activationRequested\) activationScrollY = window\.scrollY/);
-  assert.match(mainSource, /const handoffScrollY = activationScrollY/);
+  assert.match(mainSource, /const handoffScrollY = activationTracksCurrentScroll \? window\.scrollY : activationScrollY/);
   assert.doesNotMatch(mainSource, /restoreHandoffScrollPosition\(targetScrollY, attempt \+ 1\)/);
   assert.match(mainSource, /restoreHandoffScrollPosition\(handoffScrollY, true\)/);
+  assert.match(mainSource, /if \(activationTracksCurrentScroll\) \{\s*window\.scrollTo\(\{ top: handoffScrollY, left: window\.scrollX, behavior: "auto" \}\);\s*\} else \{\s*restoreHandoffScrollPosition\(handoffScrollY, true\)/);
   assert.match(mainSource, /prerenderRoot\.replaceWith\(root\)/);
   assert.match(mainSource, /root\.style\.removeProperty\("top"\);\s*void root\.offsetHeight;\s*root\.removeAttribute\("inert"\);\s*root\.id = "root"/);
   assert.match(mainSource, /root\.style\.top = `\$\{Math\.max\(0, window\.scrollY \+ staticMain\.getBoundingClientRect\(\)\.top\)\}px`/);
@@ -88,13 +89,25 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.doesNotMatch(appSource, /\}, 180\);\s*\};\s*const observer/);
 });
 
-test("client landing pages retain an idle hydration path without interactive controls", () => {
-  assert.match(prerenderSource, /data-prerender-activation="idle"/);
+test("client landing pages retain idle hydration except for posterless video paint", () => {
+  assert.match(prerenderSource, /data-prerender-activation="\$\{prerenderActivationMode\}"/);
   assert.match(mainSource, /const prerenderActivationMode = prerenderRoot/);
   assert.match(mainSource, /if \(prerenderActivationMode === "idle"\)/);
   assert.match(mainSource, /requestIdleCallback\(requestReactActivation, \{ timeout: 500 \}\)/);
   assert.match(mainSource, /DOMContentLoaded", scheduleIdleActivation/);
   assert.doesNotMatch(mainSource, /addEventListener\("load", scheduleIdleActivation/);
+  assert.match(prerenderSource, /data-prerender-video-poster="false"[\s\S]*\? "interaction"[\s\S]*: "idle"/);
+  assert.match(mainSource, /\} else if \(prerenderActivationMode === "interaction"\) \{[\s\S]*\} else if \(isManagedStorefront\)/);
+  assert.match(mainSource, /prerenderActivationMode !== "interaction"[\s\S]*dynamicSections\.length/);
+  assert.match(mainSource, /prerenderActivationMode !== "interaction"[\s\S]*data-generated-route-snapshot/);
+  assert.match(mainSource, /const interactionEvents = \["wheel", "touchmove", "keydown"\] as const/);
+  assert.match(mainSource, /const scrollKeys = new Set\(\["ArrowDown", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "\]\)/);
+  assert.match(mainSource, /target\.closest\('button, a\[href\], input, select, textarea, \[role="button"\], \[contenteditable\]'\)/);
+  assert.match(mainSource, /__funkyStorefrontMediaActivationRequested = true;\s*activationTracksCurrentScroll = true;\s*stopInteractionModeActivation\(\);\s*window\.requestAnimationFrame\(\(\) => requestReactActivation\(\)\)/);
+  assert.match(mainSource, /controlIndex: Math\.max\(0, matchingControls\.indexOf\(control\)\)/);
+  assert.match(mainSource, /replayClick: !control\.hasAttribute\("data-storefront-activate-only"\)/);
+  assert.match(mainSource, /waitsForReducedMotionPlay[\s\S]*requestAnimationFrame\(\(\) => replayControlActivation\(attempt \+ 1\)\)/);
+  assert.match(mainSource, /pending\.replayClick \|\| targetAriaLabel === pending\.ariaLabel/);
 });
 
 test("route loading covers the viewport while application styles settle", () => {

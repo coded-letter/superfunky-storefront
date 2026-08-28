@@ -1497,10 +1497,13 @@ async function renderRoute(route) {
     const staticHeaderLayout = staticChromeConfig.showAnnouncementBar && staticChromeConfig.promoHtml
       ? "announcement"
       : "standard";
+    const prerenderActivationMode = routeSnapshot.includes('data-prerender-video-poster="false"')
+      ? "interaction"
+      : "idle";
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${staticChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="idle">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${staticChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }

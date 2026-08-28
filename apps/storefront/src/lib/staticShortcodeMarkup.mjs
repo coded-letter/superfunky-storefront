@@ -68,9 +68,19 @@ function renderStaticHero(opening, name) {
     ? `<p class="shortcode-prerender-hero__description">${escapeAttribute(description)}</p>`
     : "";
   const heightAttribute = height ? ` data-prerender-min-height="${escapeAttribute(height)}"` : "";
-  const activationAttribute = name === "video-hero" ? " data-storefront-activate" : "";
+  const isVideoHero = name === "video-hero";
+  const hasSupportedVideo = isVideoHero && isSupportedVideoSource(
+    readDataAttribute(opening, "src") || readDataAttribute(opening, "video"),
+  );
+  const activationAttribute = hasSupportedVideo ? " data-storefront-activate" : "";
+  const posterAttribute = hasSupportedVideo ? ` data-prerender-video-poster="${image ? "true" : "false"}"` : "";
+  const startsAutomatically = readBooleanAttribute(opening, "autoplay", true)
+    && readBooleanAttribute(opening, "muted", true);
+  const videoControl = hasSupportedVideo
+    ? `<button type="button" class="shortcode-prerender-hero__play" data-storefront-control="video-hero-play" data-storefront-activate${startsAutomatically ? " data-storefront-activate-only" : ""} aria-label="Play background video"><span aria-hidden="true">&#9654;</span></button>`
+    : "";
 
-  return `<section class="shortcode-prerender-hero shortcode-prerender-hero--${variant}" data-prerendered-shortcode="${escapeAttribute(name)}"${heightAttribute}${activationAttribute} aria-label="${escapeAttribute(title)}">
+  return `<section class="shortcode-prerender-hero shortcode-prerender-hero--${variant}" data-prerendered-shortcode="${escapeAttribute(name)}"${heightAttribute}${activationAttribute}${posterAttribute} aria-label="${escapeAttribute(title)}">
     ${imageMarkup}
     <span class="shortcode-prerender-hero__overlay" aria-hidden="true"></span>
     <div class="shortcode-prerender-hero__container">
@@ -81,6 +91,7 @@ function renderStaticHero(opening, name) {
         ${primaryCta || secondaryCta ? `<div class="shortcode-prerender-hero__actions">${primaryCta}${secondaryCta}</div>` : ""}
       </div>
     </div>
+    ${videoControl}
   </section>`;
 }
 
@@ -97,6 +108,12 @@ function readDataAttribute(opening, name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = opening.match(new RegExp(`\\sdata-${escapedName}=(["'])(.*?)\\1`, "i"));
   return decodeAttribute(match?.[2]?.trim() || "");
+}
+
+function readBooleanAttribute(opening, name, fallback) {
+  const value = readDataAttribute(opening, name).toLowerCase();
+  if (!value) return fallback;
+  return !["0", "false", "no", "off"].includes(value);
 }
 
 function decodeAttribute(value) {
@@ -126,6 +143,24 @@ function safeMediaUrl(value) {
   } catch {
     return "";
   }
+}
+
+function isSupportedVideoSource(value) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    if (/\.(mp4|webm)(?:$|\?)/i.test(url.href)) return true;
+    if (url.hostname === "youtu.be") return Boolean(url.pathname.split("/").filter(Boolean)[0]);
+    if (/(^|\.)youtube\.com$/.test(url.hostname)) {
+      return Boolean(url.searchParams.get("v") || url.pathname.match(/\/(?:embed|shorts)\/([^/?]+)/)?.[1]);
+    }
+    if (/(^|\.)vimeo\.com$/.test(url.hostname)) {
+      return Boolean(url.pathname.match(/\/(?:video\/)?(\d+)/)?.[1]);
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function safeCssLength(value) {

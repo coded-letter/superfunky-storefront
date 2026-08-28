@@ -9,6 +9,20 @@ type VideoSource =
   | { kind: "youtube"; id: string }
   | { kind: "vimeo"; id: string };
 
+declare global {
+  interface Window {
+    __funkyStorefrontMediaActivationRequested?: boolean;
+  }
+}
+
+function hasMediaActivationIntent() {
+  return typeof window !== "undefined"
+    && (
+      navigator.userActivation?.hasBeenActive
+      || window.__funkyStorefrontMediaActivationRequested === true
+    );
+}
+
 function resolveVideoSource(value: string): VideoSource | null {
   if (!value) return null;
   try {
@@ -80,7 +94,7 @@ export function VideoHero({
   );
   const [audioMuted, setAudioMuted] = useState(muted);
   const [activatedMediaSource, setActivatedMediaSource] = useState<string | null>(() =>
-    typeof navigator !== "undefined" && navigator.userActivation?.hasBeenActive ? source : null,
+    hasMediaActivationIntent() ? source : null,
   );
   const mediaActivated = !resolved || Boolean(poster) || activatedMediaSource === source;
   const playbackActive = playing && mediaActivated;
@@ -99,7 +113,7 @@ export function VideoHero({
 
   useEffect(() => {
     if (!resolved || poster || activatedMediaSource === source) return;
-    if (navigator.userActivation?.hasBeenActive) {
+    if (hasMediaActivationIntent()) {
       setActivatedMediaSource(source);
       return;
     }
@@ -215,7 +229,7 @@ export function VideoHero({
             <button type="button" data-video-hero-control onClick={toggleMute} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={audioMuted ? "Unmute background video" : "Mute background video"}>
               {audioMuted ? <VolumeX className="h-5 w-5" aria-hidden="true" /> : <Volume2 className="h-5 w-5" aria-hidden="true" />}
             </button>
-            <button type="button" data-video-hero-control onClick={togglePlayback} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={playbackActive ? "Pause background video" : "Play background video"}>
+            <button type="button" data-video-hero-control data-storefront-control="video-hero-play" onClick={togglePlayback} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur" aria-label={playbackActive ? "Pause background video" : "Play background video"}>
               {playbackActive ? <Pause className="h-5 w-5" aria-hidden="true" /> : <Play className="h-5 w-5" aria-hidden="true" />}
             </button>
         </div>
