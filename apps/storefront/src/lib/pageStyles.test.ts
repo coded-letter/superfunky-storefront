@@ -139,6 +139,23 @@ test("photo and video heroes use theme radius only when width-constrained", () =
   assert.match(videoHeroSource, /borderRadius: variant === "fullbleed" \? 0 : "var\(--theme-radius\)"/);
   assert.doesNotMatch(videoHeroSource, /variant === "fullbleed" \? "rounded-none/);
   assert.equal(videoHeroSource.match(/absolute inset-0 !h-full w-full object-cover/g)?.length, 2);
+});
+
+test("posterless video heroes defer heavy media until visitor interaction", () => {
+  assert.match(videoHeroSource, /const mediaActivated = !resolved \|\| Boolean\(poster\) \|\| activatedMediaSource === source/);
+  assert.match(videoHeroSource, /const events = \["pointerdown", "keydown", "touchstart", "wheel"\] as const/);
+  assert.match(videoHeroSource, /target\.closest\("\[data-video-hero-control\]"\)/);
+  assert.match(videoHeroSource, /removeActivationListeners\(\);\s*setActivatedMediaSource\(source\)/);
+  assert.doesNotMatch(videoHeroSource, /addEventListener\(eventName, activateMedia, \{ passive: true, once: true \}\)/);
+  assert.match(videoHeroSource, /src=\{mediaActivated \? resolved\.url : undefined\}/);
+  assert.match(videoHeroSource, /preload=\{mediaActivated \? "auto" : "none"\}/);
+  assert.match(videoHeroSource, /autoPlay=\{playbackActive\}/);
+  assert.match(videoHeroSource, /reducedMotion\.addEventListener\("change", applyReducedMotion\)/);
+  assert.match(videoHeroSource, /reducedMotion\.removeEventListener\("change", applyReducedMotion\)/);
+  assert.match(videoHeroSource, /video\.play\(\)\.catch\(\(\) => setPlaying\(false\)\)/);
+  assert.match(videoHeroSource, /onPlay=\{\(\) => setPlaying\(true\)\}/);
+  assert.match(videoHeroSource, /onPause=\{\(\) => setPlaying\(false\)\}/);
+  assert.match(videoHeroSource, /onEnded=\{\(\) => setPlaying\(false\)\}/);
   assert.match(
     bundledCss,
     /\[data-funkycommerce-fullwidth="true"\][\s\S]{0,220}:where\(\.sf-hero,\s*\.wp-block-cover\)[\s\S]{0,100}border-radius:\s*0\s*!important/,
