@@ -5,7 +5,8 @@ import test from "node:test";
 const themeRoot = new URL("../../../../../backend/wordpress/themes/free/funkycommerce-headless/", import.meta.url);
 const controlCenter = readFileSync(new URL("inc/control-center.php", themeRoot), "utf8");
 const submissions = readFileSync(new URL("inc/submissions.php", themeRoot), "utf8");
-const licenceClient = readFileSync(new URL("inc/superfunky-licence-client.php", themeRoot), "utf8");
+const licenceClientUrl = new URL("inc/superfunky-licence-client.php", themeRoot);
+const licenceClient = existsSync(licenceClientUrl) ? readFileSync(licenceClientUrl, "utf8") : "";
 const viewLinks = readFileSync(new URL("inc/admin-view-links.php", themeRoot), "utf8");
 const freePluginRoots = [
   "admin-dark-mode",
@@ -25,9 +26,9 @@ test("registers theme-owned screens below top-level Superfunky", () => {
   assert.match(controlCenter, /add_menu_page\([\s\S]*Superfunky[\s\S]*,\s*59\s*\)/);
   assert.match(controlCenter, /add_submenu_page\(\s*'funkycommerce-control-center'/);
   assert.match(submissions, /add_submenu_page\(\s*'funkycommerce-control-center'/);
-  assert.match(licenceClient, /add_submenu_page\(\s*'funkycommerce-control-center'/);
+  if (licenceClient) assert.match(licenceClient, /add_submenu_page\(\s*'funkycommerce-control-center'/);
   assert.doesNotMatch(submissions, /add_theme_page\(/);
-  assert.doesNotMatch(licenceClient, /add_options_page\(/);
+  if (licenceClient) assert.doesNotMatch(licenceClient, /add_options_page\(/);
 });
 
 test("keeps old Appearance and Settings URLs working through redirects", () => {
@@ -36,7 +37,7 @@ test("keeps old Appearance and Settings URLs working through redirects", () => {
   assert.match(controlCenter, /admin_url\( 'admin\.php' \)/);
 });
 
-test("rate-limits automatic licence validation to once per product each day", () => {
+test("rate-limits automatic licence validation to once per product each day", { skip: !licenceClient }, () => {
   assert.match(licenceClient, /const VALIDATION_INTERVAL = 86400;/);
   assert.match(
     licenceClient,

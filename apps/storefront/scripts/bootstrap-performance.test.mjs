@@ -223,7 +223,7 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(indexSource, /\[data-static-react-parity\] \.storefront-static-header-nav-row/);
   assert.match(indexSource, /\.storefront-static-search \{[\s\S]*display: none/);
   assert.match(indexSource, /@media \(min-width: 1024px\) \{[\s\S]*\.storefront-static-search \{ display: flex; \}/);
-  assert.match(headerSource, /ml-auto flex flex-wrap items-center justify-end gap-2/);
+  assert.match(headerSource, /arrangement === "centered"[\s\S]*?flex flex-wrap items-center gap-2/);
   assert.match(headerSource, /\[&_ol\]:m-0 \[&_p\]:m-0 \[&_ul\]:m-0/);
   assert.match(assistantSource, /reserveHeaderAction = themeConfig\.enabled && themeConfig\.showHeader/);
   assert.match(assistantSource, /const \[pendingOpen, setPendingOpen\] = useState\(false\)/);

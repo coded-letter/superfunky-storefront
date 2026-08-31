@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { Bookmark, Heart, Star } from "lucide-react";
 import {
   calculateDiscountPercent,
   ProductCard,
@@ -56,7 +57,7 @@ export function ProductMockupPage() {
 
   if (isLoading) return <ContentLoadingState label={t("product.loading")} />;
   if (error) return <ProductStatus title={t("product.unavailable")} message={error.message} />;
-  if (!normalizedProduct) return <ProductStatus title="Product not found" message={`The store has no published product matching “${identifier}”.`} />;
+  if (!normalizedProduct) return <ProductStatus title={t("product.not_found")} message={t("product.not_found_message", { identifier })} />;
 
   return <ProductTemplate key={normalizedProduct.id} product={normalizedProduct} />;
 }
@@ -70,6 +71,9 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     productPageLayout,
     relatedProductsColumns,
     showStudioRelatedProductsUnderMeta,
+    productPageWishlistButtonLayout,
+    productPageWishlistIcon,
+    productDescriptionsOrder,
     discussionLayout,
   } = useLayoutPreferences();
   const { data: navigationData } = useNavigationData();
@@ -133,13 +137,20 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     ? gallery.find((image) => image.src === selectedVariation.imageUrl)?.id
     : undefined;
   const breadcrumbs = [
-    { label: "Home", href: "/" },
-    { label: "Shop", href: shopPath },
+    { label: t("nav.home"), href: "/" },
+    { label: t("nav.shop"), href: shopPath },
     ...product.categories.slice(0, 1).map((category) => ({ label: category.name, href: category.uri })),
     { label: product.name },
   ];
   const reviewSummary = summarizeReviews(product.reviews);
-  const hasLongDescription = hasMeaningfulProductHtml(product.descriptionHtml);
+  const primaryDescriptionHtml = productDescriptionsOrder === "long-first"
+    ? product.descriptionHtml
+    : product.shortDescriptionHtml;
+  const secondaryDescriptionHtml = productDescriptionsOrder === "long-first"
+    ? product.shortDescriptionHtml
+    : product.descriptionHtml;
+  const hasPrimaryDescription = hasMeaningfulProductHtml(primaryDescriptionHtml);
+  const hasSecondaryDescription = hasMeaningfulProductHtml(secondaryDescriptionHtml);
   const displayAttributes = product.attributes.flatMap((attribute) => {
     const label = (attribute.label || attribute.name).trim();
     const options = attribute.options.map((option) => option.trim()).filter(Boolean);
@@ -228,12 +239,22 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
               </span>
             ) : null}
             <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${canPurchase ? "text-emerald-600" : "text-rose-500"}`}>
-              {canPurchase ? "In stock" : "Out of stock"}
+              {canPurchase ? t("product.in_stock") : t("product.out_of_stock")}
             </span>
           </div>
 
           <div className="grid gap-3">
-            <h1 className="m-0 font-display text-4xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{product.name}</h1>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="m-0 font-display text-4xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">{product.name}</h1>
+              {productPageWishlistButtonLayout === "icon" ? (
+                <ProductWishlistIconButton
+                  active={has(wishlistId)}
+                  icon={productPageWishlistIcon}
+                  label={has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
+                  onClick={() => toggle(wishlistId)}
+                />
+              ) : null}
+            </div>
             <GuestStarRating
               targetType="product"
               targetId={product.databaseId}
@@ -242,7 +263,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             <div className="flex flex-wrap items-baseline gap-2">
               {!isInquiry ? (
                 <>
-                  <p className="m-0 text-2xl font-bold text-zinc-950 dark:text-zinc-50">{price || "Price unavailable"}</p>
+                  <p className="m-0 text-2xl font-bold text-zinc-950 dark:text-zinc-50">{price || t("product.price_unavailable")}</p>
                   {discountPercent !== null && regularPrice ? (
                     <del className="text-base font-medium text-zinc-400 dark:text-zinc-500">{regularPrice}</del>
                   ) : null}
@@ -255,9 +276,9 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             </div>
           </div>
 
-          {product.shortDescriptionHtml ? (
+          {hasPrimaryDescription ? (
             <div className="prose prose-zinc max-w-none text-sm dark:prose-invert">
-              {renderProductContent(product.shortDescriptionHtml)}
+              {renderProductContent(primaryDescriptionHtml)}
             </div>
           ) : null}
 
@@ -309,20 +330,20 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 buttonLabel={productPresentation.inquiryButtonLabel}
                 copy={productPresentation.inquiryCopy}
               />
-              <button
-                type="button"
-                aria-pressed={has(wishlistId)}
-                onClick={() => toggle(wishlistId)}
-                className="justify-self-start rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
-              >
-                {has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
-              </button>
+              {productPageWishlistButtonLayout === "full" ? (
+                <ProductWishlistTextButton
+                  active={has(wishlistId)}
+                  label={has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
+                  onClick={() => toggle(wishlistId)}
+                  className="justify-self-start"
+                />
+              ) : null}
             </div>
           ) : (
           <div className="flex flex-wrap gap-3">
             {!isExternal && !isGrouped ? (
               <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                Quantity
+                {t("product.quantity")}
                 <input
                   type="number"
                   min={1}
@@ -349,7 +370,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                   disabled
                   className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white opacity-50"
                 >
-                  Product link unavailable
+                  {t("product.link_unavailable")}
                 </button>
               )
             ) : (
@@ -362,35 +383,35 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 {isGrouped ? t("product.grouped") : isVariable && !selectedVariation ? t("product.choose_options") : t("product.add_to_cart")}
               </button>
             )}
-            <button
-              type="button"
-              aria-pressed={has(wishlistId)}
-              onClick={() => toggle(wishlistId)}
-              className="self-end rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
-            >
-              {has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
-            </button>
+            {productPageWishlistButtonLayout === "full" ? (
+              <ProductWishlistTextButton
+                active={has(wishlistId)}
+                label={has(wishlistId) ? t("product.remove_wishlist") : t("product.add_wishlist")}
+                onClick={() => toggle(wishlistId)}
+                className="self-end"
+              />
+            ) : null}
           </div>
           )}
 
-          {productPageLayout === "studio" && hasLongDescription ? (
+          {productPageLayout === "studio" && hasSecondaryDescription ? (
             <section className="grid gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-              <h2 className="m-0 font-display text-2xl font-bold">Product details</h2>
+              <h2 className="m-0 font-display text-2xl font-bold">{t("product.details_heading")}</h2>
               <div className="prose prose-zinc max-w-none dark:prose-invert">
-                {renderProductContent(product.descriptionHtml)}
+                {renderProductContent(secondaryDescriptionHtml)}
               </div>
             </section>
           ) : null}
 
           <dl className="grid gap-2 border-t border-zinc-200 pt-5 text-sm dark:border-zinc-800">
-            {product.sku ? <MetaRow label="SKU" value={product.sku} /> : null}
+            {product.sku ? <MetaRow label={t("product.meta.sku")} value={product.sku} /> : null}
             {product.categories.length ? (
-              <MetaLinks label="Categories" items={product.categories.map((item) => ({ name: item.name, uri: item.uri }))} />
+              <MetaLinks label={t("product.meta.categories")} items={product.categories.map((item) => ({ name: item.name, uri: item.uri }))} />
             ) : null}
             {product.brands.length ? (
-              <MetaLinks label="Brands" items={product.brands.map((item) => ({ name: item.name, uri: item.uri }))} />
+              <MetaLinks label={t("product.meta.brands")} items={product.brands.map((item) => ({ name: item.name, uri: item.uri }))} />
             ) : null}
-            {product.tags.length ? <MetaLinks label="Tags" items={product.tags.map((item) => ({ name: item.name, uri: item.uri }))} /> : null}
+            {product.tags.length ? <MetaLinks label={t("product.meta.tags")} items={product.tags.map((item) => ({ name: item.name, uri: item.uri }))} /> : null}
           </dl>
           {showStudioRelatedProductsUnderMeta ? (
             <ProductConnectionsList product={product} columns={relatedProductsColumns} />
@@ -398,15 +419,15 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
           </div>
         )}
         details={productPageLayout === "classic" ? (
-          hasLongDescription || displayAttributes.length ? (
+          hasSecondaryDescription || displayAttributes.length ? (
             <section className={`grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 ${
-              hasLongDescription && displayAttributes.length ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
+              hasSecondaryDescription && displayAttributes.length ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
             }`}>
-            {hasLongDescription ? (
+            {hasSecondaryDescription ? (
               <div>
-                <h2 className="font-display text-2xl font-bold">Product details</h2>
+                <h2 className="font-display text-2xl font-bold">{t("product.details_heading")}</h2>
                 <div className="prose prose-zinc max-w-none dark:prose-invert">
-                  {renderProductContent(product.descriptionHtml)}
+                  {renderProductContent(secondaryDescriptionHtml)}
                 </div>
               </div>
             ) : null}
@@ -416,7 +437,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
         ) : (
           displayAttributes.length ? (
             <section className="grid gap-5 border-t border-zinc-200 pt-10 dark:border-zinc-800">
-              <h2 className="m-0 font-display text-2xl font-bold">Product attributes</h2>
+              <h2 className="m-0 font-display text-2xl font-bold">{t("product.attributes_heading")}</h2>
               <ProductAttributes attributes={displayAttributes} />
             </section>
           ) : null
@@ -425,12 +446,12 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
           <CommentsSection
             anchorId="product-reviews"
             contentKey={`product:${product.databaseId}`}
-            heading="Customer reviews"
+            heading={t("review.section_heading")}
             initialReviews={product.reviews}
             averageRating={reviewSummary.averageRating}
             ratingHistogram={reviewSummary.averageRating ? reviewSummary.histogram : undefined}
             totalCountOverride={product.reviews.length}
-            formTitle="Review this product"
+            formTitle={t("review.form_title_product")}
             discussionLayout={discussionLayout}
             onSubmitReview={(review) => createReview({
               commentOn: product.databaseId,
@@ -468,11 +489,12 @@ function ProductConnectionsList({
   product: CmsProductDetail;
   columns: RelatedProductsColumns;
 }) {
+  const t = useT();
   return (
     <>
-      <ProductConnections title="Related products" products={product.related} columns={columns} />
-      <ProductConnections title="You may also like" products={product.upsells} columns={columns} />
-      <ProductConnections title="Frequently bought together" products={product.crossSells} columns={columns} />
+      <ProductConnections title={t("product.related")} products={product.related} columns={columns} />
+      <ProductConnections title={t("product.upsells")} products={product.upsells} columns={columns} />
+      <ProductConnections title={t("product.cross_sells")} products={product.crossSells} columns={columns} />
     </>
   );
 }
@@ -492,6 +514,7 @@ function ProductPageLayoutShell({
   reviews: ReactNode;
   connections: ReactNode;
 }) {
+  const t = useT();
   if (layout === "classic") {
     return (
       <>
@@ -515,7 +538,7 @@ function ProductPageLayoutShell({
         <div className="lg:sticky lg:top-28 lg:self-start">{gallery}</div>
         <div
           role="region"
-          aria-label="Product information"
+          aria-label={t("product.information_aria")}
           className="grid gap-12"
         >
           {summary}
@@ -532,6 +555,55 @@ function renderProductContent(html: string) {
   return renderCmsContent(
     sanitizeCmsHtml(html),
     { ...WORDPRESS_SHORTCODE_RENDERERS, ...APPLICATION_SHORTCODE_RENDERERS },
+  );
+}
+
+function ProductWishlistTextButton({
+  active,
+  label,
+  onClick,
+  className,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`${className || ""} rounded-full border border-zinc-200 px-5 py-3 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ProductWishlistIconButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: "heart" | "star" | "bookmark";
+  label: string;
+  onClick: () => void;
+}) {
+  const Icon = icon === "star" ? Star : icon === "bookmark" ? Bookmark : Heart;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      onClick={onClick}
+      className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-soft transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+    >
+      <Icon className={`h-5 w-5 ${active ? "fill-current text-brand-600" : ""}`} aria-hidden="true" />
+    </button>
   );
 }
 

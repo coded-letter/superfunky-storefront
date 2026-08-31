@@ -33,6 +33,9 @@ import {
   useLayoutPreferences,
   type ArchiveHeroLayout,
   type AuthLayout,
+  type BackToTopIcon,
+  type BackToTopPlacement,
+  type BackToTopStyle,
   type CartTriggerVariant,
   type CartLayout,
   type CartSummaryPosition,
@@ -48,6 +51,7 @@ import {
   type FooterLogoVariant,
   type FooterNewsletterLayout,
   type HeaderLogoVariant,
+  type HeaderArrangement,
   type HeaderSearchVariant,
   type HomeHeroLayout,
   type NewsletterPopupVariant,
@@ -55,6 +59,9 @@ import {
   type PostSharePosition,
   type PostTocLayout,
   type ProductPageLayout,
+  type ProductPageWishlistButtonLayout,
+  type ProductPageWishlistIcon,
+  type ProductDescriptionsOrder,
   type ProductCardVariant,
   type ProfileHeaderLayout,
   type ReadingListLayout,
@@ -74,6 +81,30 @@ const HEADER_LOGO_OPTIONS: { value: HeaderLogoVariant; label: string }[] = [
   { value: "text-image", label: "Icon + text" },
 ];
 
+const HEADER_ARRANGEMENT_OPTIONS: { value: HeaderArrangement; label: string }[] = [
+  { value: "classic", label: "Classic balanced" },
+  { value: "single-row", label: "Compact single row" },
+  { value: "centered", label: "Centered brand and icons" },
+];
+
+const BACK_TO_TOP_STYLE_OPTIONS: { value: BackToTopStyle; label: string }[] = [
+  { value: "filled", label: "Filled" },
+  { value: "outline", label: "Outline" },
+  { value: "ghost", label: "Translucent" },
+];
+
+const BACK_TO_TOP_ICON_OPTIONS: { value: BackToTopIcon; label: string }[] = [
+  { value: "arrow", label: "Arrow" },
+  { value: "chevron", label: "Chevron" },
+  { value: "text", label: "Text label" },
+];
+
+const BACK_TO_TOP_PLACEMENT_OPTIONS: { value: BackToTopPlacement; label: string }[] = [
+  { value: "bottom-right", label: "Bottom right" },
+  { value: "bottom-left", label: "Bottom left" },
+  { value: "bottom-center", label: "Bottom center" },
+];
+
 const NEWSLETTER_POPUP_VARIANT_OPTIONS: { value: NewsletterPopupVariant; label: string }[] = [
   { value: "split", label: "Split (image + form)" },
   { value: "modern-card", label: "Modern corner card" },
@@ -89,6 +120,23 @@ const RELATED_PRODUCTS_COLUMNS_OPTIONS: { value: RelatedProductsColumns; label: 
   { value: "2", label: "2 columns" },
   { value: "3", label: "3 columns" },
   { value: "4", label: "4 columns" },
+];
+
+const PRODUCT_WISHLIST_LAYOUT_OPTIONS: { value: ProductPageWishlistButtonLayout; label: string }[] = [
+  { value: "full", label: "Full text button" },
+  { value: "icon", label: "Minimal icon by product name" },
+  { value: "disabled", label: "Hidden" },
+];
+
+const PRODUCT_WISHLIST_ICON_OPTIONS: { value: ProductPageWishlistIcon; label: string }[] = [
+  { value: "heart", label: "Heart" },
+  { value: "star", label: "Star" },
+  { value: "bookmark", label: "Bookmark" },
+];
+
+const PRODUCT_DESCRIPTION_ORDER_OPTIONS: { value: ProductDescriptionsOrder; label: string }[] = [
+  { value: "short-first", label: "Short description first" },
+  { value: "long-first", label: "Long description first" },
 ];
 
 const HOME_HERO_LAYOUT_OPTIONS: { value: HomeHeroLayout; label: string }[] = [
@@ -232,8 +280,12 @@ function RangeControl({
 
 
 const FOOTER_COLUMNS_OPTIONS: { value: FooterColumnsLayout; label: string }[] = [
-  { value: "grid-4", label: "4-column grid" },
+  { value: "grid-1", label: "1 column" },
   { value: "grid-2-wide", label: "2 wide columns" },
+  { value: "grid-4", label: "4-column grid" },
+  { value: "grid-5", label: "5-column grid" },
+  { value: "grid-6", label: "6-column grid" },
+  { value: "grid-7", label: "7-column grid" },
   { value: "accordion-single", label: "Accordion (mobile-style)" },
 ];
 
@@ -346,6 +398,8 @@ export function LayoutStudioMockupPage() {
     setHeaderSearchVariant,
     headerLogoVariant,
     setHeaderLogoVariant,
+    headerArrangement,
+    setHeaderArrangement,
     showHeaderLogo,
     setShowHeaderLogo,
     showHeaderSearchIcon,
@@ -388,6 +442,14 @@ export function LayoutStudioMockupPage() {
     setFooterBottomBarLayout,
     footerExtraWrapperLayout,
     setFooterExtraWrapperLayout,
+    showBackToTop,
+    setShowBackToTop,
+    backToTopStyle,
+    setBackToTopStyle,
+    backToTopIcon,
+    setBackToTopIcon,
+    backToTopPlacement,
+    setBackToTopPlacement,
     showFooterLogo,
     setShowFooterLogo,
     showFooterExtraWrapper,
@@ -428,6 +490,12 @@ export function LayoutStudioMockupPage() {
     setRelatedProductsColumns,
     showStudioRelatedProductsUnderMeta,
     setShowStudioRelatedProductsUnderMeta,
+    productPageWishlistButtonLayout,
+    setProductPageWishlistButtonLayout,
+    productPageWishlistIcon,
+    setProductPageWishlistIcon,
+    productDescriptionsOrder,
+    setProductDescriptionsOrder,
     homeHeroLayout,
     setHomeHeroLayout,
     shopProductCardVariant,
@@ -506,6 +574,7 @@ export function LayoutStudioMockupPage() {
       headerSticky,
       headerSearchVariant,
       headerLogoVariant,
+      headerArrangement,
       showHeaderLogo,
       showHeaderSearchIcon,
       showHeaderLanguageSwitcher,
@@ -527,6 +596,10 @@ export function LayoutStudioMockupPage() {
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,
+      showBackToTop,
+      backToTopStyle,
+      backToTopIcon,
+      backToTopPlacement,
       showFooterLogo,
       showFooterExtraWrapper,
       showFooterSpotifyPlayer,
@@ -545,6 +618,9 @@ export function LayoutStudioMockupPage() {
       productPageLayout,
       relatedProductsColumns,
       showStudioRelatedProductsUnderMeta,
+      productPageWishlistButtonLayout,
+      productPageWishlistIcon,
+      productDescriptionsOrder,
       homeHeroLayout,
       shopProductCardVariant,
       authLayout,
@@ -648,6 +724,26 @@ export function LayoutStudioMockupPage() {
           label="Related products under categories and brands"
           value={showStudioRelatedProductsUnderMeta}
           onChange={setShowStudioRelatedProductsUnderMeta}
+        />
+        <ViewSwitch
+          label="Wishlist button"
+          value={productPageWishlistButtonLayout}
+          onChange={setProductPageWishlistButtonLayout}
+          options={PRODUCT_WISHLIST_LAYOUT_OPTIONS}
+        />
+        {productPageWishlistButtonLayout === "icon" ? (
+          <ViewSwitch
+            label="Wishlist icon"
+            value={productPageWishlistIcon}
+            onChange={setProductPageWishlistIcon}
+            options={PRODUCT_WISHLIST_ICON_OPTIONS}
+          />
+        ) : null}
+        <ViewSwitch
+          label="Description order"
+          value={productDescriptionsOrder}
+          onChange={setProductDescriptionsOrder}
+          options={PRODUCT_DESCRIPTION_ORDER_OPTIONS}
         />
         <Link
           to="/shop"
@@ -754,6 +850,7 @@ export function LayoutStudioMockupPage() {
         description="The header brand mark, top-left — wordmark only, icon mark only, or both together (current default). Same three options as the footer logo. Can also be switched off entirely."
       >
         <ViewSwitch label="Logo variant" value={headerLogoVariant} onChange={setHeaderLogoVariant} options={HEADER_LOGO_OPTIONS} />
+        <ViewSwitch label="Header arrangement" value={headerArrangement} onChange={setHeaderArrangement} options={HEADER_ARRANGEMENT_OPTIONS} />
         <BoolSwitch label="Logo image" value={showHeaderLogo} onChange={setShowHeaderLogo} />
         <LiveChromeNotice text="Scroll up to see the header logo change." />
       </LayoutStudioSection>
@@ -964,6 +1061,14 @@ export function LayoutStudioMockupPage() {
         description="The footer's link columns (Shop, Company, Support, Legal) — as an even 4-column grid, two wider columns, or a mobile-style single-column accordion."
       >
         <ViewSwitch label="Columns" value={footerColumnsLayout} onChange={setFooterColumnsLayout} options={FOOTER_COLUMNS_OPTIONS} />
+        <BoolSwitch label="Back-to-top button" value={showBackToTop} onChange={setShowBackToTop} />
+        {showBackToTop ? (
+          <>
+            <ViewSwitch label="Back-to-top style" value={backToTopStyle} onChange={setBackToTopStyle} options={BACK_TO_TOP_STYLE_OPTIONS} />
+            <ViewSwitch label="Back-to-top icon" value={backToTopIcon} onChange={setBackToTopIcon} options={BACK_TO_TOP_ICON_OPTIONS} />
+            <ViewSwitch label="Back-to-top placement" value={backToTopPlacement} onChange={setBackToTopPlacement} options={BACK_TO_TOP_PLACEMENT_OPTIONS} />
+          </>
+        ) : null}
         <LiveChromeNotice text="Scroll to the bottom of any page to see the footer's columns change." />
       </LayoutStudioSection>
 

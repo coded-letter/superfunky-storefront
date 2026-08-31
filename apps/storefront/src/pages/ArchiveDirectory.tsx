@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Seo } from "@funky/ui";
+import { Seo, useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function ArchiveDirectory({
@@ -20,17 +20,19 @@ export function ArchiveDirectory({
   count: number;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="grid gap-8">
       <Seo
         title={title}
         description={description}
         canonical={canonical}
+        robots="index, follow"
         schema={{ pageType: "CollectionPage" }}
       />
       <Breadcrumbs
         items={[
-          { label: "Home", href: "/" },
+          { label: t("nav.home"), href: "/" },
           ...(parent ? [parent] : []),
           { label: title },
         ]}
@@ -39,7 +41,7 @@ export function ArchiveDirectory({
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">{kicker}</span>
         <h1 className="m-0 font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
         <p className="m-0 max-w-2xl text-zinc-600 dark:text-zinc-300">{description}</p>
-        <span className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{count} public {count === 1 ? "entry" : "entries"}</span>
+        <span className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">{t("archive.entry_count", { count })}</span>
       </header>
       {children}
     </div>

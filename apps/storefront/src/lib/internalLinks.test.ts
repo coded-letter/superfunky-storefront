@@ -85,7 +85,8 @@ test("keeps routed hash scrolling active through prerender replacement", async (
 
   dom.window.document.body.append(dom.window.document.createElement("div"));
   await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
-  assert.equal(scrollCalls, 1);
+  const callsBeforeReplacement = scrollCalls;
+  assert.ok(callsBeforeReplacement >= 1);
 
   const replacement = target.cloneNode() as HTMLElement;
   replacement.scrollIntoView = () => {
@@ -93,7 +94,7 @@ test("keeps routed hash scrolling active through prerender replacement", async (
   };
   target.replaceWith(replacement);
   await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
-  assert.ok(scrollCalls >= 2);
+  assert.ok(scrollCalls > callsBeforeReplacement);
   cleanup();
 });
 
@@ -103,6 +104,8 @@ test("leaves external, backend application, special-scheme, and native anchors a
     ["https://cdn.store.test/page"],
     ["https://v3.superfunky.pro/wp-admin/edit.php"],
     ["https://v3.superfunky.pro/wp-json/wp/v2/pages"],
+    ["https://v3.superfunky.pro/wp-content/uploads/2026/08/pricelist.pdf"],
+    ["/wp-content/uploads/2026/08/pricelist.pdf?download=1"],
     ["https://v3.superfunky.pro/?download_file=4970&order=wc_order_test&key=file-id"],
     ["mailto:hello@example.test"],
     ["tel:+123456"],

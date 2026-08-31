@@ -9,6 +9,13 @@ import {
 
 const commerceSource = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
 const postArchiveSource = readFileSync(new URL("./postArchives.ts", import.meta.url), "utf8");
+const pageSource = readFileSync(new URL("../pages/PageMockupPage.tsx", import.meta.url), "utf8");
+const productArchivePageSource = readFileSync(new URL("../pages/ProductTaxonomyArchivePage.tsx", import.meta.url), "utf8");
+const postArchivePageSource = readFileSync(new URL("../pages/PostTaxonomyArchivePage.tsx", import.meta.url), "utf8");
+const directorySource = readFileSync(new URL("../pages/ArchiveDirectory.tsx", import.meta.url), "utf8");
+const authorSource = readFileSync(new URL("../pages/AuthorMockupPage.tsx", import.meta.url), "utf8");
+const communityTagSource = readFileSync(new URL("../pages/CommunityTagArchivePage.tsx", import.meta.url), "utf8");
+const prerenderSource = readFileSync(new URL("../../scripts/prerender.mjs", import.meta.url), "utf8");
 const socialGridSource = readFileSync(
   new URL("../../../../packages/ui/src/social/SocialFeedGrid.tsx", import.meta.url),
   "utf8",
@@ -76,6 +83,14 @@ test("taxonomy archives batch backend pagination and remain publicly indexable",
 
   assert.match(commerceSource, /robots: "index, follow"/);
   assert.match(postArchiveSource, /robots: "index, follow"/);
+  assert.match(pageSource, /robots=\{routeKey && PUBLIC_APPLICATION_ROUTES\.has\(routeKey\) \? "index, follow"/);
+  assert.match(productArchivePageSource, /robots="index, follow"/);
+  assert.match(postArchivePageSource, /robots="index, follow"/);
+  assert.match(directorySource, /robots="index, follow"/);
+  assert.match(authorSource, /robots="index, follow"/);
+  assert.match(communityTagSource, /robots="index, follow"/);
+  assert.match(prerenderSource, /robots: route\.robots,\s*indexable: route\.indexable/);
+  assert.doesNotMatch(prerenderSource, /preserveCmsRobots/);
 });
 
 test("multi-column community cards stretch across their grid cells", () => {

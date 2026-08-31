@@ -72,6 +72,7 @@ export type HeaderSearchVariant = "full-width" | "expandable";
 /** `"text"` shows the wordmark+tagline only. `"image"` shows only the gradient icon
  * mark. `"text-image"` (default, current) shows both — mirrors `FooterLogoVariant`. */
 export type HeaderLogoVariant = "text" | "image" | "text-image";
+export type HeaderArrangement = "classic" | "single-row" | "centered";
 /** `"drawer"` (default, current) opens `CartDrawer`'s full slide-in side panel.
  * `"dropdown"` opens a compact `CartDropdown` popover anchored under this header's
  * cart icon instead — the mounting page decides which one to render based on this
@@ -115,6 +116,7 @@ export type HeaderMockupProps = {
   search?: SearchAutocompleteProps["search"];
   /** Which parts of the header brand mark render — mirrors `FooterLogoVariant`. */
   logoVariant?: HeaderLogoVariant;
+  arrangement?: HeaderArrangement;
   showLanguageSwitcher?: boolean;
   showCurrencySwitcher?: boolean;
   showDarkModeToggle?: boolean;
@@ -241,6 +243,7 @@ export function HeaderMockup({
   searchVariant = "full-width",
   search,
   logoVariant = "text-image",
+  arrangement = "classic",
   showLanguageSwitcher = true,
   showCurrencySwitcher = true,
   showDarkModeToggle = true,
@@ -391,9 +394,20 @@ export function HeaderMockup({
         </div>
 
       <div className="mx-auto grid w-full gap-3 px-4 py-4 sm:px-6 lg:px-8" style={{ maxWidth: `${themeMaxWidthPx}px` }}>
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className={
+          arrangement === "centered"
+            ? "grid grid-cols-[1fr_auto_1fr] items-center gap-4"
+            : arrangement === "single-row"
+              ? "flex items-center justify-between gap-3 lg:flex-nowrap"
+              : "flex flex-wrap items-center justify-between gap-4"
+        }>
           {showLogo ? (
-            <Link to={homePath} className="group inline-flex items-center gap-2.5 text-inherit no-underline">
+            <Link
+              to={homePath}
+              className={`group inline-flex items-center gap-2.5 text-inherit no-underline ${
+                arrangement === "centered" ? "col-start-2 row-start-1 justify-center text-center" : ""
+              }`}
+            >
               {logoVariant !== "text" ? (
                 logoUrl ? (
                   <ResponsiveImage src={logoUrl} alt={projectName} priority sizes="12rem" className="h-10 w-auto max-w-48 object-contain" />
@@ -406,7 +420,7 @@ export function HeaderMockup({
               {logoVariant !== "image" ? (
                 <span className="grid gap-0.5">
                   <strong className="funky-brand-heading font-display text-xl font-bold tracking-tight sm:text-2xl">{projectName}</strong>
-                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{projectTagline}</span>
+                  <span className={`${arrangement === "single-row" ? "hidden" : ""} text-xs font-medium text-zinc-500 dark:text-zinc-400`}>{projectTagline}</span>
                 </span>
               ) : null}
             </Link>
@@ -415,10 +429,13 @@ export function HeaderMockup({
           )}
 
           {showSearch && searchVariant !== "expandable" ? (
-            <SearchAutocomplete search={search} className="hidden min-w-[220px] flex-1 basis-80 lg:block" />
+            <SearchAutocomplete
+              search={search}
+              className={`hidden min-w-[220px] flex-1 basis-80 lg:block ${arrangement === "centered" ? "col-start-1 row-start-1 w-full max-w-sm justify-self-start" : ""}`}
+            />
           ) : null}
 
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div className={`${arrangement === "centered" ? "col-start-3 row-start-1 ml-0 justify-self-end justify-end" : "ml-auto justify-end"} flex flex-wrap items-center gap-2`}>
             {showSearch && searchVariant === "expandable" ? (
               <div className="hidden items-center gap-1 lg:flex">
                 <div
@@ -568,7 +585,7 @@ export function HeaderMockup({
           </div>
         </div>
 
-        {!hideNavigation ? <div className="hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block">
+        {!hideNavigation ? <div className={`hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block ${arrangement === "centered" ? "text-center" : ""}`}>
           {/* `flex-wrap` (not `overflow-x-auto`) on purpose: per the CSS spec, setting only
               `overflow-x` to a non-visible value forces the browser to compute `overflow-y`
               as `auto` too — which was silently clipping/scroll-cutting the "Shop" dropdown
@@ -577,7 +594,7 @@ export function HeaderMockup({
               `navLinkClass`) so its label text sits flush with the row's left edge —
               i.e. the same column as the logo above and the theme's max-width edge —
               instead of appearing indented by the pill's hit-area padding. */}
-          <nav aria-label={t("header.navigation.main")} className="-ml-3.5 flex flex-wrap items-center gap-x-1 gap-y-1.5">
+          <nav aria-label={t("header.navigation.main")} className={`${arrangement === "centered" ? "justify-center" : "-ml-3.5"} flex flex-wrap items-center gap-x-1 gap-y-1.5`}>
             {primaryNavigation.map((item) =>
               item.children?.length ? (
                 <NavDropdownItem key={menuItemKey(item)} item={item} />

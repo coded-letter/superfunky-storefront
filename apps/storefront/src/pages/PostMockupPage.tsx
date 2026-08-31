@@ -87,7 +87,7 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
   if (isLoading) return <ContentLoadingState label={t("loading.post")} />;
   if (error) return <PostStatus title={t("error.post_unavailable")} message={error.message} />;
   if (!post) {
-    return fallback ?? <PostStatus title="Post not found" message={`The site has no published post at “${postUri}”.`} />;
+    return fallback ?? <PostStatus title={t("post.not_found")} message={t("post.not_found_message", { uri: postUri })} />;
   }
 
   return (
@@ -108,13 +108,14 @@ function PostMockupPageInner({
   contentRef: RefObject<HTMLDivElement>;
   languageCode: string;
 }) {
+  const t = useT();
   const blogPath = useStorefrontPath("blog", "/blog");
   const { postTocLayout: tocLayout, postSharePosition: sharePosition, postAuthorLayout: authorLayout, discussionLayout } =
     useLayoutPreferences();
 
   const preparedContent = useMemo(() => preparePostContent(post.content), [post.content]);
   const tocEntries = preparedContent.entries;
-  const breadcrumbs = getVisibleBreadcrumbs(post, blogPath);
+  const breadcrumbs = getVisibleBreadcrumbs(post, blogPath, t("nav.home"), t("nav.blog"));
   const description = post.seo.description || post.seo.opengraphDescription || post.excerpt;
   const reviewSummary = summarizeReviews(post.comments);
 
@@ -287,14 +288,14 @@ function PostMockupPageInner({
       <CommentsSection
         anchorId="opinions"
         contentKey={`post:${post.id}`}
-        heading="Comments"
+        heading={t("comment.section_heading")}
         key={post.id}
         initialReviews={post.comments}
         averageRating={reviewSummary.averageRating}
         ratingHistogram={reviewSummary.averageRating ? reviewSummary.histogram : undefined}
         totalCountOverride={post.comments.length}
-        formTitle="Join the discussion"
-        formNote="Comments are held for moderation and only appear publicly once approved."
+        formTitle={t("comment.form_title")}
+        formNote={t("comment.form_note")}
         showRatingField={false}
         discussionLayout={discussionLayout}
         onSubmitReview={(review) => createReview({
@@ -581,7 +582,7 @@ function AuthorBio({ author, layout = "fullwidth" }: { author: CmsPost["author"]
   );
 }
 
-function getVisibleBreadcrumbs(post: CmsPost, blogPath: string): BreadcrumbItem[] {
+function getVisibleBreadcrumbs(post: CmsPost, blogPath: string, homeLabel: string, blogLabel: string): BreadcrumbItem[] {
   if (post.seo.breadcrumbs.length > 0) {
     return post.seo.breadcrumbs.map((breadcrumb, index, all) => ({
       label: breadcrumb.name,
@@ -589,8 +590,8 @@ function getVisibleBreadcrumbs(post: CmsPost, blogPath: string): BreadcrumbItem[
     }));
   }
   return [
-    { label: "Home", href: "/" },
-    { label: "Blog", href: blogPath },
+    { label: homeLabel, href: "/" },
+    { label: blogLabel, href: blogPath },
     ...(post.categories[0] ? [{ label: post.categories[0].name, href: toInternalPath(post.categories[0].uri) }] : []),
     { label: post.title },
   ];

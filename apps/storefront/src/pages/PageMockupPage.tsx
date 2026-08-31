@@ -21,7 +21,7 @@ export function PageMockupPage({
     <CmsPageContent
       loadPage={loadPage}
       pageCacheKey={pageCacheKey}
-      fallbackRobots={routeKey && PUBLIC_APPLICATION_ROUTES.has(routeKey) ? "index, follow" : undefined}
+      robots={routeKey && PUBLIC_APPLICATION_ROUTES.has(routeKey) ? "index, follow" : undefined}
       emptyFallback={routeKey === "blog" ? <BlogIndexFallback /> : undefined}
       shortcodeRenderers={APPLICATION_SHORTCODE_RENDERERS}
       synchronizeLanguage={synchronizeLanguage}

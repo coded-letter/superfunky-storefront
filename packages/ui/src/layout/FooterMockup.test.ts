@@ -42,3 +42,17 @@ test("footer copyright preserves safe links and removes executable markup", () =
   assert.match(footerSource, /const safeCopyrightHtml = sanitizeStorefrontHtml\(copyrightText\)/);
   assert.equal((footerSource.match(/<SafeHtmlContent[\s\S]*?html=\{safeCopyrightHtml\}/g) || []).length, 2);
 });
+
+test("footer supports one through seven-column editorial layouts", () => {
+  for (const layout of ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"]) {
+    assert.match(footerSource, new RegExp(layout));
+  }
+  assert.match(footerSource, /xl:grid-cols-7/);
+});
+
+test("footer theme credit is independently sanitized and rendered", () => {
+  assert.match(footerSource, /const safeThemeCreditHtml = sanitizeStorefrontHtml\(themeCredit\)/);
+  assert.match(footerSource, /showStandaloneThemeCredit = showThemeCredit/);
+  assert.match(footerSource, /!showCopyright \|\| safeThemeCreditHtml !== safeCopyrightHtml/);
+  assert.match(footerSource, /html=\{safeThemeCreditHtml\}/);
+});

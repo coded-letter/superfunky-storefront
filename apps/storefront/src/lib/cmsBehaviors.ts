@@ -1,5 +1,6 @@
 import { submitFormSubmission, submitNewsletterSubmission } from "./submissions.ts";
 import { addDefaultCmsIconDimensions } from "./cmsIconSizing.mjs";
+import { BACKEND_ORIGIN } from "@funky/sdk";
 
 export type CmsBehaviorId = keyof typeof CMS_BEHAVIOR_REGISTRY;
 
@@ -332,6 +333,12 @@ export function sanitizeCmsHtml(html: string): string {
       image.removeAttribute("fetchpriority");
     }
   });
+  root.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((anchor) => {
+    const href = anchor.getAttribute("href");
+    if (!href) return;
+    const storefrontHref = storefrontMediaDocumentHref(href);
+    if (storefrontHref) anchor.setAttribute("href", storefrontHref);
+  });
 
   root.querySelectorAll("main").forEach((main) => {
     const replacement = parsed.createElement("div");
@@ -352,6 +359,7 @@ export function sanitizeCmsHtml(html: string): string {
         ) {
           element.classList.remove(className);
         }
+
       });
     }
     for (const attribute of Array.from(element.attributes)) {
@@ -392,6 +400,22 @@ export function sanitizeCmsHtml(html: string): string {
     );
   }
   return root.innerHTML;
+}
+
+function storefrontMediaDocumentHref(source: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const mediaUrl = new URL(source, window.location.href);
+    if (
+      mediaUrl.origin !== BACKEND_ORIGIN
+      || !/^\/wp-content\/uploads\/.+\.pdf$/i.test(mediaUrl.pathname)
+    ) {
+      return null;
+    }
+    return `${mediaUrl.pathname}${mediaUrl.search}${mediaUrl.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 function netlifyImageUrl(source: string, width: number): string | null {

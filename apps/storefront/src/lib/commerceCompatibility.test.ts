@@ -73,7 +73,10 @@ test("featured WooCommerce products are preserved for the empty-cart promotion",
   assert.doesNotMatch(CORE_FEATURED_PRODUCT_QUERY, /language: \$language/);
   assert.match(FEATURED_PRODUCT_QUERY, /variations\(first: 50\)/);
   assert.match(appSource, /getFeaturedProducts\(languageBackendCode, showAllCartPromotedProducts\)/);
-  assert.match(appSource, /featuredProducts=\{isBackendConfigured \? featuredProducts \?\? \[] : MOCK_PRODUCTS\.slice\(0, 4\)\}/);
+  assert.match(
+    appSource,
+    /featuredProducts=\{[\s\S]*?isBackendConfigured[\s\S]*?featuredProducts\?\.map\(\(product\) =>[\s\S]*?formatProductCardCurrency\(product, formatBaseAmount\)\) \?\? \[][\s\S]*?: MOCK_PRODUCTS\.slice\(0, 4\)/,
+  );
 });
 
 test("variable product cards preserve parent stock when the backend exposes no variations", () => {

@@ -112,6 +112,9 @@ export type StorefrontLayoutConfiguration = {
   productPageLayout: ProductPageLayout;
   relatedProductsColumns: RelatedProductsColumns;
   showStudioRelatedProductsUnderMeta: boolean;
+  productPageWishlistButtonLayout: "full" | "icon" | "disabled";
+  productPageWishlistIcon: "heart" | "star" | "bookmark";
+  productDescriptionsOrder: "short-first" | "long-first";
   checkoutStoreMode: "physical" | "digital";
   checkoutCouponPosition: "inline" | "top";
   checkoutPaymentPosition: "left" | "right";
@@ -126,6 +129,7 @@ export type StorefrontLayoutConfiguration = {
   headerSticky: boolean;
   headerSearchVariant: HeaderSearchVariant;
   headerLogoVariant: HeaderLogoVariant;
+  headerArrangement: "classic" | "single-row" | "centered";
   cartTriggerVariant: CartTriggerVariant;
   showCartDrawerPromotedProduct: boolean;
   showAllCartPromotedProducts: boolean;
@@ -137,6 +141,10 @@ export type StorefrontLayoutConfiguration = {
   footerLogoVariant: FooterLogoVariant;
   footerBottomBarLayout: FooterBottomBarLayout;
   footerExtraWrapperLayout: FooterExtraWrapperLayout;
+  showBackToTop: boolean;
+  backToTopStyle: "filled" | "outline" | "ghost";
+  backToTopIcon: "arrow" | "chevron" | "text";
+  backToTopPlacement: "bottom-right" | "bottom-left" | "bottom-center";
   showHeaderLogo: boolean;
   showHeaderSearchIcon: boolean;
   showHeaderLanguageSwitcher: boolean;
@@ -272,6 +280,8 @@ export type StorefrontConfiguration = {
     spotifyPlayerDescription: string;
     extraHtml: string;
     copyrightText: string;
+    themeCredit: string;
+    showThemeCredit: boolean;
   };
   recentOrders: {
     enabled: boolean;
@@ -353,6 +363,9 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   productPageLayout: "classic",
   relatedProductsColumns: "4",
   showStudioRelatedProductsUnderMeta: false,
+  productPageWishlistButtonLayout: "full",
+  productPageWishlistIcon: "heart",
+  productDescriptionsOrder: "short-first",
   checkoutStoreMode: "physical",
   checkoutCouponPosition: "inline",
   checkoutPaymentPosition: "left",
@@ -367,6 +380,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   headerSticky: true,
   headerSearchVariant: "full-width",
   headerLogoVariant: "text-image",
+  headerArrangement: "classic",
   cartTriggerVariant: "drawer",
   showCartDrawerPromotedProduct: true,
   showAllCartPromotedProducts: false,
@@ -378,6 +392,10 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   footerLogoVariant: "text-image",
   footerBottomBarLayout: "split",
   footerExtraWrapperLayout: "inline",
+  showBackToTop: true,
+  backToTopStyle: "filled",
+  backToTopIcon: "arrow",
+  backToTopPlacement: "bottom-right",
   showHeaderLogo: true,
   showHeaderSearchIcon: true,
   showHeaderLanguageSwitcher: true,
@@ -493,6 +511,8 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     spotifyPlayerDescription: "",
     extraHtml: "",
     copyrightText: "",
+    themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">superfuky WP theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
+    showThemeCredit: true,
   },
   recentOrders: {
     enabled: false,
@@ -589,6 +609,8 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         spotifyPlaylistEmbedUrl
         extraHtml
         copyrightText
+        themeCredit
+        showThemeCredit
         socialLinks {
           id
           platform
@@ -653,6 +675,9 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         productPageLayout
         relatedProductsColumns
         showStudioRelatedProductsUnderMeta
+        productPageWishlistButtonLayout
+        productPageWishlistIcon
+        productDescriptionsOrder
         checkoutStoreMode
         checkoutCouponPosition
         checkoutPaymentPosition
@@ -667,6 +692,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         headerSticky
         headerSearchVariant
         headerLogoVariant
+        headerArrangement
         cartTriggerVariant
         showCartDrawerPromotedProduct
         showAllCartPromotedProducts
@@ -678,6 +704,10 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         footerLogoVariant
         footerBottomBarLayout
         footerExtraWrapperLayout
+        showBackToTop
+        backToTopStyle
+        backToTopIcon
+        backToTopPlacement
         showHeaderLogo
         showHeaderSearchIcon
         showHeaderLanguageSwitcher
@@ -943,6 +973,8 @@ const NAVIGATION_COMPATIBILITY_FIELDS = [
  "aiAssistant",
  "extraHtml",
  "copyrightText",
+ "themeCredit",
+ "showThemeCredit",
  "quickView",
  "productPresentation",
  "codeHighlighting",
@@ -959,6 +991,8 @@ const NAVIGATION_ROLLING_LEAF_FIELDS = [
   "soundsEnabled",
   "accountMode",
   "distractionFree",
+  "themeCredit",
+  "showThemeCredit",
 ] as const;
 
 export function omitUnsupportedNavigationLeafFields(
@@ -1438,6 +1472,10 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
       socialLinks: normalizeFooterSocialProfiles(configuration.footer?.socialLinks),
       extraHtml: typeof configuration.footer?.extraHtml === "string" ? configuration.footer.extraHtml : "",
       copyrightText: typeof configuration.footer?.copyrightText === "string" ? configuration.footer.copyrightText : "",
+      themeCredit: typeof configuration.footer?.themeCredit === "string"
+        ? configuration.footer.themeCredit
+        : DEFAULT_STOREFRONT_CONFIGURATION.footer.themeCredit,
+      showThemeCredit: configuration.footer?.showThemeCredit !== false,
     },
     recentOrders: {
       enabled: configuration.recentOrders?.enabled === true,
@@ -1531,6 +1569,21 @@ export function normalizeStorefrontLayoutConfiguration(
       source.showStudioRelatedProductsUnderMeta,
       defaults.showStudioRelatedProductsUnderMeta,
     ),
+    productPageWishlistButtonLayout: pickEnum(
+      source.productPageWishlistButtonLayout,
+      ["full", "icon", "disabled"] as const,
+      defaults.productPageWishlistButtonLayout,
+    ),
+    productPageWishlistIcon: pickEnum(
+      source.productPageWishlistIcon,
+      ["heart", "star", "bookmark"] as const,
+      defaults.productPageWishlistIcon,
+    ),
+    productDescriptionsOrder: pickEnum(
+      source.productDescriptionsOrder,
+      ["short-first", "long-first"] as const,
+      defaults.productDescriptionsOrder,
+    ),
     checkoutStoreMode: pickEnum(source.checkoutStoreMode, ["physical", "digital"] as const, defaults.checkoutStoreMode),
     checkoutCouponPosition: pickEnum(source.checkoutCouponPosition, ["inline", "top"] as const, defaults.checkoutCouponPosition),
     checkoutPaymentPosition: pickEnum(source.checkoutPaymentPosition, ["left", "right"] as const, defaults.checkoutPaymentPosition),
@@ -1545,13 +1598,18 @@ export function normalizeStorefrontLayoutConfiguration(
     headerSticky: pickBoolean(source.headerSticky, defaults.headerSticky),
     headerSearchVariant: pickEnum(source.headerSearchVariant, ["full-width", "expandable"] as const, defaults.headerSearchVariant),
     headerLogoVariant: pickEnum(source.headerLogoVariant, ["text", "image", "text-image"] as const, defaults.headerLogoVariant),
+    headerArrangement: pickEnum(
+      source.headerArrangement,
+      ["classic", "single-row", "centered"] as const,
+      defaults.headerArrangement,
+    ),
     cartTriggerVariant: pickEnum(source.cartTriggerVariant, ["drawer", "dropdown"] as const, defaults.cartTriggerVariant),
     showCartDrawerPromotedProduct: pickBoolean(source.showCartDrawerPromotedProduct, defaults.showCartDrawerPromotedProduct),
     showAllCartPromotedProducts: pickBoolean(source.showAllCartPromotedProducts, defaults.showAllCartPromotedProducts),
     showFooter: pickBoolean(source.showFooter, defaults.showFooter),
     footerColumnsLayout: pickEnum(
       source.footerColumnsLayout,
-      ["grid-4", "grid-2-wide", "accordion-single"] as const,
+      ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"] as const,
       defaults.footerColumnsLayout,
     ),
     footerNewsletterLayout: pickEnum(
@@ -1571,6 +1629,14 @@ export function normalizeStorefrontLayoutConfiguration(
       source.footerExtraWrapperLayout,
       ["inline", "full-bleed"] as const,
       defaults.footerExtraWrapperLayout,
+    ),
+    showBackToTop: pickBoolean(source.showBackToTop, defaults.showBackToTop),
+    backToTopStyle: pickEnum(source.backToTopStyle, ["filled", "outline", "ghost"] as const, defaults.backToTopStyle),
+    backToTopIcon: pickEnum(source.backToTopIcon, ["arrow", "chevron", "text"] as const, defaults.backToTopIcon),
+    backToTopPlacement: pickEnum(
+      source.backToTopPlacement,
+      ["bottom-right", "bottom-left", "bottom-center"] as const,
+      defaults.backToTopPlacement,
     ),
     showHeaderLogo: pickBoolean(source.showHeaderLogo, defaults.showHeaderLogo),
     showHeaderSearchIcon: pickBoolean(source.showHeaderSearchIcon, defaults.showHeaderSearchIcon),

@@ -25,8 +25,10 @@ const initialJavaScriptBytes = await totalBytes(entryFiles);
 const initialJavaScriptGzipBytes = await totalGzipBytes(entryFiles);
 const initialScriptCount = entryFiles.size;
 const budgets = {
-  initialJavaScriptBytes: 1_000_000,
-  initialJavaScriptGzipBytes: 300_000,
+  // The synchronized EN/PL/JA archive, review, and inquiry catalogs add a small,
+  // intentional baseline cost while keeping the first render translated offline.
+  initialJavaScriptBytes: 1_050_000,
+  initialJavaScriptGzipBytes: 310_000,
   initialScriptCount: 8,
 };
 

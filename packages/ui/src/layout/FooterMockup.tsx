@@ -35,7 +35,14 @@ export type FooterColumn = {
   links: FooterLinkItem[];
 };
 
-export type FooterColumnsLayout = "grid-4" | "grid-2-wide" | "accordion-single";
+export type FooterColumnsLayout =
+  | "grid-1"
+  | "grid-2-wide"
+  | "grid-4"
+  | "grid-5"
+  | "grid-6"
+  | "grid-7"
+  | "accordion-single";
 export type FooterNewsletterLayout = "banner" | "centered" | "image-bg";
 export type FooterAssistantLayout = "side-by-side" | "tabbed" | "stacked";
 /** `"text"` shows the wordmark only. `"image"` shows only the gradient icon mark.
@@ -113,6 +120,8 @@ export type FooterMockupProps = {
   /** Which layout the extra footer wrapper uses — see `FooterExtraWrapperLayout`. */
   extraWrapperLayout?: FooterExtraWrapperLayout;
   copyrightText?: string;
+  themeCredit?: string;
+  showThemeCredit?: boolean;
   /** Toggle the copyright line itself on/off, independent of everything else in the
    * bottom bar. `true` (default). */
   showCopyright?: boolean;
@@ -258,6 +267,8 @@ export function FooterMockup({
   extraWrapperLayout = "inline",
   copyrightText = "",
   showCopyright = true,
+  themeCredit = "",
+  showThemeCredit = false,
   assistantSlot,
 }: FooterMockupProps) {
   const t = useT();
@@ -273,6 +284,10 @@ export function FooterMockup({
   const visibleSocialLinks = filterVisibleSocialLinks(socialLinks, hiddenSocialLinkKeys);
   const safeExtraWrapperHtml = sanitizeStorefrontHtml(extraWrapperHtml);
   const safeCopyrightHtml = sanitizeStorefrontHtml(copyrightText);
+  const safeThemeCreditHtml = sanitizeStorefrontHtml(themeCredit);
+  const showStandaloneThemeCredit = showThemeCredit
+    && Boolean(safeThemeCreditHtml)
+    && (!showCopyright || safeThemeCreditHtml !== safeCopyrightHtml);
   const logoNode = showLogo ? (
     <div className="mb-10 flex items-center justify-center gap-2.5">
       {logoVariant !== "text" ? (
@@ -423,7 +438,15 @@ export function FooterMockup({
               ? ""
               : columnsLayout === "grid-2-wide"
                 ? "sm:grid-cols-2"
-                : "sm:grid-cols-2 lg:grid-cols-4"
+                : columnsLayout === "grid-1"
+                  ? "grid-cols-1"
+                  : columnsLayout === "grid-5"
+                    ? "sm:grid-cols-2 lg:grid-cols-5"
+                    : columnsLayout === "grid-6"
+                      ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+                      : columnsLayout === "grid-7"
+                        ? "sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7"
+                        : "sm:grid-cols-2 lg:grid-cols-4"
           }`}
         >
           {columnsLayout === "accordion-single" ? (
@@ -537,6 +560,13 @@ export function FooterMockup({
             ) : null}
           </>
         )}
+
+        {showStandaloneThemeCredit ? (
+          <SafeHtmlContent
+            html={safeThemeCreditHtml}
+            className="mb-0 mt-4 text-center text-xs text-zinc-500 [&_a]:text-zinc-300 [&_a]:underline [&_p]:m-0"
+          />
+        ) : null}
 
         {showExtraWrapper && safeExtraWrapperHtml && extraWrapperLayout === "inline" ? (
           <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs text-zinc-500">

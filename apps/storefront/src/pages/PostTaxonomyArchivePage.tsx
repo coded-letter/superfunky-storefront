@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { PaginablePostGrid, Seo, useLanguage, useLayoutPreferences } from "@funky/ui";
+import { PaginablePostGrid, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { HeroMock } from "../components/HeroMock";
@@ -16,6 +16,7 @@ import {
 } from "../lib/postArchives";
 import { ArchiveDescriptionSection } from "./shared";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
+import { resolveConfiguredContentLanguage } from "../lib/contentLanguageFallback";
 
 export function PostTaxonomyArchivePage({ taxonomy }: { taxonomy: PostTaxonomy }) {
   const { pathname } = useLocation();
@@ -46,17 +47,23 @@ function PostTaxonomyArchiveLoader({
   idType: TaxonomyIdentifierType;
   pathname: string;
 }) {
+  const t = useT();
   const descriptionRef = useRef<HTMLDivElement>(null);
-  const { languageCode } = useLanguage();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
   const lastResolvedArchive = useRef<CmsPostArchive | null>(null);
   const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
     `post-${taxonomy}-archive:${idType}:${identifier}:${languageCode}`,
     () => getPostTaxonomyArchive(taxonomy, identifier, idType, languageCode),
   );
   if (archive) lastResolvedArchive.current = archive;
+  const contentLanguageCode = resolveConfiguredContentLanguage(
+    archive?.languageCode || lastResolvedArchive.current?.languageCode,
+    languageCode,
+    configuredLanguageCodes,
+  );
 
   useCanonicalContentLanguage(
-    archive?.languageCode || lastResolvedArchive.current?.languageCode,
+    contentLanguageCode,
     archive?.translations || lastResolvedArchive.current?.translations || [],
     pathname,
     !isLoading && !isRevalidating,
@@ -75,13 +82,13 @@ function PostTaxonomyArchiveLoader({
   }, [archive]);
 
   if (isLoading) {
-    return <ContentLoadingState label={`Loading ${taxonomy} archive`} />;
+    return <ContentLoadingState label={t("loading.post_archive", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} />;
   }
   if (error) {
-    return <ArchiveStatus title={`${capitalize(taxonomy)} unavailable`} message="This collection is temporarily unavailable." />;
+    return <ArchiveStatus title={t("archive.post_taxonomy_unavailable", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} message={t("archive.collection_unavailable")} />;
   }
   if (!archive) {
-    return <ArchiveStatus title={`${capitalize(taxonomy)} not found`} message="This collection is unavailable." />;
+    return <ArchiveStatus title={t("archive.post_taxonomy_not_found", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} message={t("archive.collection_not_found")} />;
   }
 
   return <PostTaxonomyArchive archive={archive} descriptionRef={descriptionRef} />;
@@ -94,6 +101,8 @@ function PostTaxonomyArchive({
   archive: CmsPostArchive;
   descriptionRef: RefObject<HTMLDivElement>;
 }) {
+  const t = useT();
+  const { languageCode } = useLanguage();
   const { postArchiveHeroLayout: heroVariant, showArchiveDescriptionInHero } = useLayoutPreferences();
   const isFullBleed = heroVariant === "fullbleed";
   const blogPath = useStorefrontPath("blog", "/blog");
@@ -102,9 +111,9 @@ function PostTaxonomyArchive({
   const descriptionText =
     htmlToText(archive.descriptionHtml) ||
     (isTag
-      ? `Browse every published post tagged #${archive.name.toLowerCase()}.`
-      : `Explore published stories filed under ${archive.name.toLowerCase()}.`);
-  const breadcrumbs = getVisibleBreadcrumbs(archive, blogPath);
+      ? t("archive.post_tag_description", { name: archive.name.toLowerCase() })
+      : t("archive.post_category_description", { name: archive.name.toLowerCase() }));
+  const breadcrumbs = getVisibleBreadcrumbs(archive, blogPath, t("nav.home"), t("nav.blog"));
   const heroImage = archive.posts.find(({ imageUrl }) => imageUrl)?.imageUrl;
 
   return (
@@ -113,11 +122,11 @@ function PostTaxonomyArchive({
         title={archive.seo.title || displayTitle}
         description={archive.seo.description || descriptionText}
         canonical={archive.seo.canonical || archive.seo.opengraphUrl || undefined}
-        languageCode={archive.languageCode}
+        languageCode={languageCode}
         keywords={archive.seo.keywords || undefined}
         siteName={archive.seo.siteName || undefined}
         appendSiteName={false}
-        robots={archive.seo.robots}
+        robots="index, follow"
         opengraphType="website"
         opengraphTitle={archive.seo.opengraphTitle || undefined}
         opengraphDescription={archive.seo.opengraphDescription || undefined}
@@ -139,17 +148,17 @@ function PostTaxonomyArchive({
         <HeroMock
           variant={heroVariant}
           headingLevel="h1"
-          kicker={capitalize(archive.taxonomy)}
+          kicker={t(`archive.taxonomy.${archive.taxonomy}`)}
           title={displayTitle}
           description={showArchiveDescriptionInHero ? descriptionText : undefined}
           image={heroImage}
           fullWidth={isFullBleed}
-          secondaryCta={{ label: "All posts", href: blogPath }}
+          secondaryCta={{ label: t("archive.all_posts"), href: blogPath }}
         />
       </div>
 
       {archive.terms.length > 1 ? (
-        <nav aria-label={`${capitalize(archive.taxonomy)} archives`} className="flex flex-wrap gap-2">
+        <nav aria-label={t("archive.post_taxonomy_aria", { taxonomy: t(`archive.taxonomy.${archive.taxonomy}`) })} className="flex flex-wrap gap-2">
           {archive.terms.map((term) => (
             <Link
               key={term.id}
@@ -171,7 +180,7 @@ function PostTaxonomyArchive({
       {archive.posts.length ? (
         <PaginablePostGrid
           key={archive.id}
-          title={isTag ? `Tagged #${archive.name}` : `${archive.name} posts`}
+          title={isTag ? t("archive.tagged_title", { name: archive.name }) : t("archive.posts_title", { name: archive.name })}
           posts={archive.posts}
           pageSize={6}
           cardVariant="default"
@@ -179,20 +188,20 @@ function PostTaxonomyArchive({
         />
       ) : (
         <p className="m-0 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-5 py-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          No published posts are connected to this {archive.taxonomy}.
+          {t("archive.no_posts", { taxonomy: t(`archive.taxonomy.${archive.taxonomy}`).toLowerCase() })}
         </p>
       )}
 
       {archive.hasMorePosts ? (
         <p className="m-0 text-center text-xs text-zinc-500 dark:text-zinc-400">
-          This archive contains more posts than this page currently shows.
+          {t("archive.has_more_posts")}
         </p>
       ) : null}
 
       {archive.descriptionHtml ? (
         <div ref={descriptionRef}>
           <ArchiveDescriptionSection
-            eyebrow={capitalize(archive.taxonomy)}
+            eyebrow={t(`archive.taxonomy.${archive.taxonomy}`)}
             title={displayTitle}
             image={heroImage}
             html={archive.descriptionHtml}
@@ -203,24 +212,30 @@ function PostTaxonomyArchive({
   );
 }
 
-function getVisibleBreadcrumbs(archive: CmsPostArchive, blogPath: string): BreadcrumbItem[] {
+function getVisibleBreadcrumbs(
+  archive: CmsPostArchive,
+  blogPath: string,
+  homeLabel: string,
+  blogLabel: string,
+): BreadcrumbItem[] {
   if (archive.seo.breadcrumbs.length > 0) {
     return archive.seo.breadcrumbs.map((breadcrumb, index, all) => ({
       label: breadcrumb.name,
       href: index === all.length - 1 ? undefined : toInternalPath(breadcrumb.url),
     }));
   }
-  return [{ label: "Home", href: "/" }, { label: "Blog", href: blogPath }, { label: archive.name }];
+  return [{ label: homeLabel, href: "/" }, { label: blogLabel, href: blogPath }, { label: archive.name }];
 }
 
 function ArchiveStatus({ title, message }: { title: string; message: string }) {
+  const t = useT();
   const blogPath = useStorefrontPath("blog", "/blog");
   return (
     <section className="mx-auto mt-16 grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
       <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
       <p className="m-0 text-zinc-500 dark:text-zinc-400">{message}</p>
       <Link to={blogPath} className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">
-        Back to blog
+        {t("archive.back_to_blog")}
       </Link>
     </section>
   );
@@ -241,8 +256,4 @@ function toInternalPath(url: string): string {
 
 function htmlToText(html: string): string {
   return new DOMParser().parseFromString(html, "text/html").body.textContent?.replace(/\s+/g, " ").trim() || "";
-}
-
-function capitalize(value: string): string {
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }

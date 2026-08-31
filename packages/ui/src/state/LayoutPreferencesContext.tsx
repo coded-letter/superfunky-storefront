@@ -7,7 +7,7 @@ import type {
   FooterLogoVariant,
   FooterNewsletterLayout,
 } from "../layout/FooterMockup";
-import type { CartTriggerVariant, HeaderLogoVariant, HeaderSearchVariant } from "../layout/HeaderMockup";
+import type { CartTriggerVariant, HeaderArrangement, HeaderLogoVariant, HeaderSearchVariant } from "../layout/HeaderMockup";
 import type { NewsletterPopupVariant } from "../layout/NewsletterSignupPopup";
 import type { ProfileHeaderLayout } from "../social/ProfileHeader";
 import type { ProductCardVariant } from "../catalog/ProductCard";
@@ -34,6 +34,12 @@ export type CommunityFeedFilters = "show" | "hide";
 export type CartLayout = "classic" | "editorial";
 export type CartSummaryPosition = "sticky" | "static";
 export type RelatedProductsColumns = "2" | "3" | "4";
+export type ProductPageWishlistButtonLayout = "full" | "icon" | "disabled";
+export type ProductPageWishlistIcon = "heart" | "star" | "bookmark";
+export type ProductDescriptionsOrder = "short-first" | "long-first";
+export type BackToTopStyle = "filled" | "outline" | "ghost";
+export type BackToTopIcon = "arrow" | "chevron" | "text";
+export type BackToTopPlacement = "bottom-right" | "bottom-left" | "bottom-center";
 
 /**
  * Site-wide chrome layout preferences (header search style, header icon visibility,
@@ -54,6 +60,7 @@ export type LayoutPreferencesState = {
   headerSticky: boolean;
   headerSearchVariant: HeaderSearchVariant;
   headerLogoVariant: HeaderLogoVariant;
+  headerArrangement: HeaderArrangement;
   showHeaderLogo: boolean;
   showHeaderSearchIcon: boolean;
   showHeaderLanguageSwitcher: boolean;
@@ -84,6 +91,10 @@ export type LayoutPreferencesState = {
   footerLogoVariant: FooterLogoVariant;
   footerBottomBarLayout: FooterBottomBarLayout;
   footerExtraWrapperLayout: FooterExtraWrapperLayout;
+  showBackToTop: boolean;
+  backToTopStyle: BackToTopStyle;
+  backToTopIcon: BackToTopIcon;
+  backToTopPlacement: BackToTopPlacement;
   showFooterLogo: boolean;
   showFooterExtraWrapper: boolean;
   showFooterSpotifyPlayer: boolean;
@@ -128,6 +139,9 @@ export type LayoutPreferencesState = {
   productPageLayout: ProductPageLayout;
   relatedProductsColumns: RelatedProductsColumns;
   showStudioRelatedProductsUnderMeta: boolean;
+  productPageWishlistButtonLayout: ProductPageWishlistButtonLayout;
+  productPageWishlistIcon: ProductPageWishlistIcon;
+  productDescriptionsOrder: ProductDescriptionsOrder;
   homeHeroLayout: HomeHeroLayout;
   shopProductCardVariant: ProductCardVariant;
   authLayout: AuthLayout;
@@ -179,6 +193,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   headerSticky: true,
   headerSearchVariant: "full-width",
   headerLogoVariant: "text-image",
+  headerArrangement: "classic",
   showHeaderLogo: true,
   showHeaderSearchIcon: true,
   showHeaderLanguageSwitcher: true,
@@ -200,6 +215,10 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   footerLogoVariant: "text-image",
   footerBottomBarLayout: "split",
   footerExtraWrapperLayout: "inline",
+  showBackToTop: true,
+  backToTopStyle: "filled",
+  backToTopIcon: "arrow",
+  backToTopPlacement: "bottom-right",
   showFooterLogo: true,
   showFooterExtraWrapper: true,
   showFooterSpotifyPlayer: true,
@@ -220,6 +239,9 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   productPageLayout: "classic",
   relatedProductsColumns: "4",
   showStudioRelatedProductsUnderMeta: false,
+  productPageWishlistButtonLayout: "full",
+  productPageWishlistIcon: "heart",
+  productDescriptionsOrder: "short-first",
   homeHeroLayout: "classic",
   shopProductCardVariant: "default",
   authLayout: "split",
@@ -259,6 +281,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setHeaderSticky: (value: boolean) => void;
   setHeaderSearchVariant: (value: HeaderSearchVariant) => void;
   setHeaderLogoVariant: (value: HeaderLogoVariant) => void;
+  setHeaderArrangement: (value: HeaderArrangement) => void;
   setShowHeaderLogo: (value: boolean) => void;
   setShowHeaderSearchIcon: (value: boolean) => void;
   setShowHeaderLanguageSwitcher: (value: boolean) => void;
@@ -280,6 +303,10 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setFooterLogoVariant: (value: FooterLogoVariant) => void;
   setFooterBottomBarLayout: (value: FooterBottomBarLayout) => void;
   setFooterExtraWrapperLayout: (value: FooterExtraWrapperLayout) => void;
+  setShowBackToTop: (value: boolean) => void;
+  setBackToTopStyle: (value: BackToTopStyle) => void;
+  setBackToTopIcon: (value: BackToTopIcon) => void;
+  setBackToTopPlacement: (value: BackToTopPlacement) => void;
   setShowFooterLogo: (value: boolean) => void;
   setShowFooterExtraWrapper: (value: boolean) => void;
   setShowFooterSpotifyPlayer: (value: boolean) => void;
@@ -308,6 +335,9 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   syncBrandPalette: (value: BrandPaletteId) => void;
   syncBrandGradientStyle: (value: BrandGradientStyle) => void;
   setProductPageLayout: (value: ProductPageLayout) => void;
+  setProductPageWishlistButtonLayout: (value: ProductPageWishlistButtonLayout) => void;
+  setProductPageWishlistIcon: (value: ProductPageWishlistIcon) => void;
+  setProductDescriptionsOrder: (value: ProductDescriptionsOrder) => void;
   setRelatedProductsColumns: (value: RelatedProductsColumns) => void;
   setShowStudioRelatedProductsUnderMeta: (value: boolean) => void;
   setHomeHeroLayout: (value: HomeHeroLayout) => void;
@@ -352,6 +382,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [headerSticky, setHeaderSticky] = useState(DEFAULT_LAYOUT_PREFERENCES.headerSticky);
   const [headerSearchVariant, setHeaderSearchVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.headerSearchVariant);
   const [headerLogoVariant, setHeaderLogoVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.headerLogoVariant);
+  const [headerArrangement, setHeaderArrangement] = useState(DEFAULT_LAYOUT_PREFERENCES.headerArrangement);
   const [showHeaderLogo, setShowHeaderLogo] = useState(DEFAULT_LAYOUT_PREFERENCES.showHeaderLogo);
   const [showHeaderSearchIcon, setShowHeaderSearchIcon] = useState(DEFAULT_LAYOUT_PREFERENCES.showHeaderSearchIcon);
   const [showHeaderLanguageSwitcher, setShowHeaderLanguageSwitcher] = useState(
@@ -389,6 +420,10 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [footerExtraWrapperLayout, setFooterExtraWrapperLayout] = useState(
     DEFAULT_LAYOUT_PREFERENCES.footerExtraWrapperLayout,
   );
+  const [showBackToTop, setShowBackToTop] = useState(DEFAULT_LAYOUT_PREFERENCES.showBackToTop);
+  const [backToTopStyle, setBackToTopStyle] = useState(DEFAULT_LAYOUT_PREFERENCES.backToTopStyle);
+  const [backToTopIcon, setBackToTopIcon] = useState(DEFAULT_LAYOUT_PREFERENCES.backToTopIcon);
+  const [backToTopPlacement, setBackToTopPlacement] = useState(DEFAULT_LAYOUT_PREFERENCES.backToTopPlacement);
   const [showFooterLogo, setShowFooterLogo] = useState(DEFAULT_LAYOUT_PREFERENCES.showFooterLogo);
   const [showFooterExtraWrapper, setShowFooterExtraWrapper] = useState(
     DEFAULT_LAYOUT_PREFERENCES.showFooterExtraWrapper,
@@ -423,6 +458,15 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [brandPalette, syncBrandPalette] = useState(DEFAULT_LAYOUT_PREFERENCES.brandPalette);
   const [brandGradientStyle, syncBrandGradientStyle] = useState(DEFAULT_LAYOUT_PREFERENCES.brandGradientStyle);
   const [productPageLayout, setProductPageLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.productPageLayout);
+  const [productPageWishlistButtonLayout, setProductPageWishlistButtonLayout] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.productPageWishlistButtonLayout,
+  );
+  const [productPageWishlistIcon, setProductPageWishlistIcon] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.productPageWishlistIcon,
+  );
+  const [productDescriptionsOrder, setProductDescriptionsOrder] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.productDescriptionsOrder,
+  );
   const [relatedProductsColumns, setRelatedProductsColumns] = useState(
     DEFAULT_LAYOUT_PREFERENCES.relatedProductsColumns,
   );
@@ -506,6 +550,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       headerSticky,
       headerSearchVariant,
       headerLogoVariant,
+      headerArrangement,
       showHeaderLogo,
       showHeaderSearchIcon,
       showHeaderLanguageSwitcher,
@@ -527,6 +572,10 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,
+      showBackToTop,
+      backToTopStyle,
+      backToTopIcon,
+      backToTopPlacement,
       showFooterLogo,
       showFooterExtraWrapper,
       showFooterSpotifyPlayer,
@@ -547,6 +596,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       productPageLayout,
       relatedProductsColumns,
       showStudioRelatedProductsUnderMeta,
+      productPageWishlistButtonLayout,
+      productPageWishlistIcon,
+      productDescriptionsOrder,
       homeHeroLayout,
       shopProductCardVariant,
       authLayout,
@@ -581,6 +633,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setHeaderSticky,
       setHeaderSearchVariant,
       setHeaderLogoVariant,
+      setHeaderArrangement,
       setShowHeaderLogo,
       setShowHeaderSearchIcon,
       setShowHeaderLanguageSwitcher,
@@ -602,6 +655,10 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setFooterLogoVariant,
       setFooterBottomBarLayout,
       setFooterExtraWrapperLayout,
+      setShowBackToTop,
+      setBackToTopStyle,
+      setBackToTopIcon,
+      setBackToTopPlacement,
       setShowFooterLogo,
       setShowFooterExtraWrapper,
       setShowFooterSpotifyPlayer,
@@ -626,6 +683,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setProductPageLayout,
       setRelatedProductsColumns,
       setShowStudioRelatedProductsUnderMeta,
+      setProductPageWishlistButtonLayout,
+      setProductPageWishlistIcon,
+      setProductDescriptionsOrder,
       setHomeHeroLayout,
       setShopProductCardVariant,
       setAuthLayout,
@@ -663,6 +723,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       headerSticky,
       headerSearchVariant,
       headerLogoVariant,
+      headerArrangement,
       showHeaderLogo,
       showHeaderSearchIcon,
       showHeaderLanguageSwitcher,
@@ -684,6 +745,10 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,
+      showBackToTop,
+      backToTopStyle,
+      backToTopIcon,
+      backToTopPlacement,
       showFooterLogo,
       showFooterExtraWrapper,
       showFooterSpotifyPlayer,
@@ -704,6 +769,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       productPageLayout,
       relatedProductsColumns,
       showStudioRelatedProductsUnderMeta,
+      productPageWishlistButtonLayout,
+      productPageWishlistIcon,
+      productDescriptionsOrder,
       homeHeroLayout,
       shopProductCardVariant,
       authLayout,

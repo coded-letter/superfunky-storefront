@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, Calendar } from "lucide-react";
-import { ResponsiveImage, avatarColorFor, useLayoutPreferences } from "@funky/ui";
+import { ResponsiveImage, avatarColorFor, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ShareButtonsRow } from "./ShareButtons";
 import { NotFoundMockupPage } from "./NotFoundMockupPage";
@@ -17,6 +17,7 @@ import { getCreatorArticleBySlug, getSocialUserByHandle } from "./socialShared";
  * rather than staff, so it reuses `CommentsSection` for discussion exactly the same way.
  */
 export function CommunityArticleMockupPage() {
+  const t = useT();
   const { handle = "", slug = "" } = useParams();
   const creatorContent = useCreatorContent();
   const { discussionLayout } = useLayoutPreferences();
@@ -129,10 +130,10 @@ export function CommunityArticleMockupPage() {
       <CommentsSection
         anchorId="discussion"
         contentKey={`community-article:${handle}:${slug}`}
-        heading="Discussion"
+        heading={t("comment.discussion_heading")}
         initialReviews={[]}
-        formTitle="Join the discussion"
-        formNote="Comments are held for moderation and only appear once approved."
+        formTitle={t("comment.form_title")}
+        formNote={t("comment.form_note")}
         showRatingField={false}
         discussionLayout={discussionLayout}
       />

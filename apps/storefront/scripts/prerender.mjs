@@ -270,6 +270,28 @@ const STATIC_HEADER_ASSISTANT_QUERY = `
   }
 `;
 
+const STATIC_FOOTER_CREDIT_QUERY = `
+  query StorefrontStaticFooterCredit($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      footer {
+        themeCredit
+        showThemeCredit
+      }
+    }
+  }
+`;
+
+const STATIC_LAYOUT_VARIANTS_QUERY = `
+  query StorefrontStaticLayoutVariants($language: String) {
+    storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
+      layout {
+        headerArrangement
+        footerColumnsLayout
+      }
+    }
+  }
+`;
+
 const STATIC_RECENT_ORDERS_QUERY = `
   query StorefrontStaticRecentOrders($language: String) {
     storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
@@ -390,12 +412,16 @@ const DEFAULT_STATIC_CHROME = {
   brandPalette: "violet",
   brandGradientStyle: "gradient",
   themeMaxWidthPx: 1280,
+  headerArrangement: "classic",
+  footerColumnsLayout: "grid-4",
   customCss: "",
   fontFaceStyles: "",
   globalStyles: "",
   stylesheets: [],
   colors: [],
   headerControls: DEFAULT_STATIC_HEADER_CONTROLS,
+  themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">superfuky WP theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
+  showThemeCredit: true,
   recentOrders: {
     enabled: false,
     itemCount: 5,
@@ -682,6 +708,8 @@ async function discoverStaticChrome() {
   let decoration = null;
   let headerControls = null;
   let headerAssistant = null;
+  let footerCredit = null;
+  let layoutVariants = null;
   let recentOrders = null;
   let paymentGateways = null;
   try {
@@ -730,6 +758,30 @@ async function discoverStaticChrome() {
     );
   }
   try {
+    footerCredit = await requestGraphql(
+      STATIC_FOOTER_CREDIT_QUERY,
+      { language: defaultLanguage },
+      "storefront static footer credit",
+      { attempts: 1 },
+    );
+  } catch (error) {
+    console.warn(
+      `Static footer credit unavailable; using the required free-theme attribution: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  try {
+    layoutVariants = await requestGraphql(
+      STATIC_LAYOUT_VARIANTS_QUERY,
+      { language: defaultLanguage },
+      "storefront static layout variants",
+      { attempts: 1 },
+    );
+  } catch (error) {
+    console.warn(
+      `Static layout variants unavailable; using stable header and footer layouts: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  try {
     recentOrders = await requestGraphql(
       STATIC_RECENT_ORDERS_QUERY,
       { language: defaultLanguage },
@@ -770,6 +822,8 @@ async function discoverStaticChrome() {
   const controls = headerControls?.data?.storefrontConfig;
   const assistantControls = headerAssistant?.data?.storefrontConfig;
   const assistantConfig = assistantControls?.aiAssistant;
+  const footerCreditConfig = footerCredit?.data?.storefrontConfig?.footer;
+  const layoutVariantConfig = layoutVariants?.data?.storefrontConfig?.layout;
   const recentOrdersConfig = recentOrders?.data?.storefrontConfig?.recentOrders;
   const gatewayNodes = paymentGateways?.data?.paymentGateways?.nodes;
   const cryptoAssets = paymentGateways?.data?.storefrontConfig?.cryptoAssets;
@@ -807,6 +861,12 @@ async function discoverStaticChrome() {
       && layout.themeMaxWidthPx <= 1920
       ? layout.themeMaxWidthPx
       : DEFAULT_STATIC_CHROME.themeMaxWidthPx,
+    headerArrangement: ["classic", "single-row", "centered"].includes(layoutVariantConfig?.headerArrangement)
+      ? layoutVariantConfig.headerArrangement
+      : DEFAULT_STATIC_CHROME.headerArrangement,
+    footerColumnsLayout: ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"].includes(layoutVariantConfig?.footerColumnsLayout)
+      ? layoutVariantConfig.footerColumnsLayout
+      : DEFAULT_STATIC_CHROME.footerColumnsLayout,
     recentOrders: {
       enabled: recentOrdersConfig?.enabled === true,
       itemCount: Math.max(1, Math.min(10, Number(recentOrdersConfig?.itemCount) || 5)),
@@ -848,6 +908,12 @@ async function discoverStaticChrome() {
         ...assistantControls?.headerIconMedia,
       },
     },
+    themeCredit: sanitizeCmsHtml(
+      typeof footerCreditConfig?.themeCredit === "string" && footerCreditConfig.themeCredit.trim()
+        ? footerCreditConfig.themeCredit
+        : DEFAULT_STATIC_CHROME.themeCredit,
+    ),
+    showThemeCredit: footerCreditConfig?.showThemeCredit !== false,
   };
 }
 
@@ -1220,7 +1286,7 @@ async function resolveSvgIntrinsicSize(source) {
 
 async function optimizeStaticCmsHtml(html, { placeholders = false } = {}) {
   const normalizedHtml = addDefaultCmsIconDimensions(
-    normalizeStaticShortcodes(html, { placeholders })
+    rewriteStaticMediaDocumentHrefs(normalizeStaticShortcodes(html, { placeholders }))
       .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
       .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
       .replace(/\s+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
@@ -1263,6 +1329,7 @@ async function optimizeStaticCmsHtml(html, { placeholders = false } = {}) {
         if (!isSmallImage) {
           optimized += ` srcset="${escapeAttribute(staticImageCdnSrcSet(source))}" sizes="${escapeAttribute(existingSizes || "100vw")}"`;
         }
+
         optimized += ` data-prerender-fallback-src="${escapeAttribute(source)}"`;
       }
       if (!/\salt=(["']).*?\1/i.test(optimized)) optimized += ' alt=""';
@@ -1290,6 +1357,25 @@ async function optimizeStaticCmsHtml(html, { placeholders = false } = {}) {
         : source
     ),
   );
+}
+
+function rewriteStaticMediaDocumentHrefs(html) {
+  if (!graphqlEndpoint) return html;
+  const backendOrigin = new URL(graphqlEndpoint).origin;
+  return html.replace(/\shref=(["'])(.*?)\1/gi, (attribute, quote, encodedHref) => {
+    try {
+      const mediaUrl = new URL(decodeAttributeEntities(encodedHref), backendOrigin);
+      if (
+        mediaUrl.origin !== backendOrigin
+        || !/^\/wp-content\/uploads\/.+\.pdf$/i.test(mediaUrl.pathname)
+      ) {
+        return attribute;
+      }
+      return ` href=${quote}${escapeAttribute(`${mediaUrl.pathname}${mediaUrl.search}${mediaUrl.hash}`)}${quote}`;
+    } catch {
+      return attribute;
+    }
+  });
 }
 
 function selectStaticPriorityImageIndex(html) {
@@ -1613,7 +1699,7 @@ function renderStaticChrome(route) {
   const mobileNavigation = hasInteractiveStaticChrome
     ? renderStaticMobileNavigation(navigationItems, navigationLabel, route.path)
     : "";
-  return `<header class="storefront-static-header" data-static-announcement-scroll="${staticChromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
+  return `<header class="storefront-static-header storefront-static-header--${staticChromeConfig.headerArrangement}" data-static-announcement-scroll="${staticChromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
     ${announcement}
     <div class="storefront-static-header-main">
       <div class="storefront-static-header-row">
@@ -1772,8 +1858,11 @@ function renderStaticFooter(route) {
     </div>`;
   }).join("");
   return `<footer class="storefront-static-footer" aria-label="Footer links">
-    <div class="storefront-static-footer-inner">${columns}</div>
+    <div class="storefront-static-footer-inner storefront-static-footer-inner--${staticChromeConfig.footerColumnsLayout}">${columns}</div>
     <div class="storefront-static-footer-meta">© ${new Date().getFullYear()} ${escapeAttribute(staticChromeConfig.storeName)}</div>
+    ${staticChromeConfig.showThemeCredit && staticChromeConfig.themeCredit
+      ? `<div class="storefront-static-footer-meta">${staticChromeConfig.themeCredit}</div>`
+      : ""}
   </footer>`;
 }
 
@@ -2557,6 +2646,9 @@ function renderRedirects(appleMerchantFileEnabled) {
   const appleMerchantFallback = appleMerchantFileEnabled
     ? []
     : ["/.well-known/apple-developer-merchantid-domain-association  /index.html  404"];
+  const mediaDocumentProxy = graphqlEndpoint
+    ? [`/wp-content/uploads/*  ${new URL(graphqlEndpoint).origin}/wp-content/uploads/:splat  200`]
+    : [];
   return [
     "/product.feed.xml  /product-feed.xml  301",
     ...redirectRules,
@@ -2566,6 +2658,7 @@ function renderRedirects(appleMerchantFileEnabled) {
     ...(artifactDelivery?.mode === "artifact"
       ? artifactProxyRedirects(artifactDelivery.manifest, artifactDelivery.origin)
       : []),
+    ...mediaDocumentProxy,
     ...rewriteRules,
     "/*  /index.html  200",
     "",
@@ -2729,12 +2822,11 @@ for (const stableRoute of stableRoutes) {
     };
     if (route.path === "/sitemap" && !staticGenerationConfig.sitemapEnabled) continue;
     const cmsRoute = routesByPath.get(route.path);
-    const preserveCmsRobots = cmsRoute?.robotsSource === "explicit";
     routesByPath.set(route.path, {
       ...route,
       ...cmsRoute,
-      robots: preserveCmsRobots ? cmsRoute.robots : route.robots,
-      indexable: preserveCmsRobots ? cmsRoute.indexable : route.indexable,
+      robots: route.robots,
+      indexable: route.indexable,
       path: route.path,
       lang: cmsRoute?.lang || route.lang,
       source: cmsRoute?.source || "stable",

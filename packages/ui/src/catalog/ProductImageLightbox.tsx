@@ -194,7 +194,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
           onTouchEnd={handleTouchEnd}
         >
           <div
-            className={`grid aspect-square w-full select-none place-items-center overflow-hidden bg-gradient-to-br shadow-soft-lg ${current.accentClass ?? DEFAULT_ACCENT}`}
+            className={`grid max-h-[75vh] max-w-full select-none place-items-center overflow-hidden bg-gradient-to-br shadow-soft-lg ${current.accentClass ?? DEFAULT_ACCENT}`}
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
               transition: isPanning ? "none" : "transform 140ms ease-out",
@@ -208,7 +208,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
                 priority
                 sizes="(min-width: 768px) 48rem, 100vw"
                 draggable={false}
-                className="block h-full w-full object-contain"
+                className="block h-auto max-h-[75vh] w-auto max-w-full object-contain"
               />
             ) : (
               <span className="px-4 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">{current.label}</span>

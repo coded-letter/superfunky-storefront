@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useT } from "@funky/ui";
 import { authStore } from "../lib/auth";
 import { prefillFromCustomer, submitProductInquiry, type ProductInquiryContext } from "../lib/productInquiry";
 
@@ -20,6 +21,7 @@ export function ProductInquiryForm({
   buttonLabel: string;
   copy: string;
 }) {
+  const t = useT();
   const customer = authStore.load()?.user;
   const prefill = prefillFromCustomer(customer);
   const [name, setName] = useState(prefill.name || "");
@@ -46,7 +48,7 @@ export function ProductInquiryForm({
       setShowSuccess(true);
       setMessage("");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "The inquiry could not be sent. Please try again.");
+      setFormError(error instanceof Error ? error.message : t("inquiry.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -61,7 +63,7 @@ export function ProductInquiryForm({
 
       {showSuccess ? (
         <div role="status" className="rounded-xl bg-emerald-100 px-4 py-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-          ✅ Your inquiry has been sent. We'll follow up by email shortly.
+          {t("inquiry.success")}
         </div>
       ) : null}
 
@@ -74,7 +76,7 @@ export function ProductInquiryForm({
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">Name</span>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("inquiry.field.name")}</span>
             <input
               type="text"
               value={name}
@@ -85,7 +87,7 @@ export function ProductInquiryForm({
             />
           </label>
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">Email</span>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("inquiry.field.email")}</span>
             <input
               type="email"
               value={email}
@@ -98,7 +100,7 @@ export function ProductInquiryForm({
         </div>
 
         <label className="grid gap-1.5 text-sm">
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">Message</span>
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("inquiry.field.message")}</span>
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
@@ -114,7 +116,7 @@ export function ProductInquiryForm({
           disabled={isSubmitting}
           className="justify-self-start rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? "Sending…" : buttonLabel}
+          {isSubmitting ? t("inquiry.sending") : buttonLabel}
         </button>
       </form>
     </div>

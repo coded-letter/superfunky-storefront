@@ -53,6 +53,12 @@ export {
   type CartLayout,
   type CartSummaryPosition,
   type RelatedProductsColumns,
+  type ProductPageWishlistButtonLayout,
+  type ProductPageWishlistIcon,
+  type ProductDescriptionsOrder,
+  type BackToTopStyle,
+  type BackToTopIcon,
+  type BackToTopPlacement,
 } from "./LayoutPreferencesContext";
 export { normalizeProductPageLayout, type ProductPageLayout } from "./productPageLayout";
 export {
