@@ -591,7 +591,7 @@ function ReviewsShortcode({ attributes }: ShortcodeProps) {
 
   if (isLoading) return <ContentLoadingState compact label={t("loading.product")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
-  if (!reviews.length) return <ShortcodeStatus message="No approved product reviews matched this shortcode." />;
+  if (!reviews.length) return <ShortcodeStatus message={t("review.no_approved")} />;
 
   if (attributes.variant === "full" || attributes.variant === "compact") {
     const averageRating = reviews.reduce((total, review) => total + (review.rating || 0), 0) / reviews.length;
@@ -599,11 +599,11 @@ function ReviewsShortcode({ attributes }: ShortcodeProps) {
       <CommentsSection
         anchorId="shortcode-reviews"
         contentKey={`shortcode-reviews:${attributes.product || "all"}`}
-        heading={attributes.title || "Product reviews"}
+        heading={attributes.title || t("review.section_heading")}
         initialReviews={reviews}
         averageRating={averageRating}
         totalCountOverride={reviews.length}
-        formTitle="Leave a review"
+        formTitle={t("review.form_title")}
         variant={attributes.variant}
         discussionLayout={discussionLayout}
       />
@@ -612,7 +612,7 @@ function ReviewsShortcode({ attributes }: ShortcodeProps) {
 
   const gridClass = layout === "masonry" ? "columns-1 gap-4 sm:columns-2 lg:columns-3" : layout === "grid-3" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : layout === "grid-5" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-5" : layout === "compact" ? "grid gap-2" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4";
   return (
-    <ShortcodeSection title={attributes.title || "Product reviews"}>
+    <ShortcodeSection title={attributes.title || t("review.section_heading")}>
       <div className={gridClass}>
         {reviews.map((review) => (
           <figure key={review.id} className={`m-0 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 ${layout === "masonry" ? "mb-4 inline-grid w-full break-inside-avoid" : ""}`}>
@@ -630,6 +630,7 @@ function ReviewsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function CommentsShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data, isLoading, error } = useBlogData();
   const { discussionLayout } = useLayoutPreferences();
   const comments = withCollectionOffset(
@@ -640,18 +641,18 @@ function CommentsShortcode({ attributes }: ShortcodeProps) {
   );
   const compact = attributes.layout === "compact";
 
-  if (isLoading) return <ContentLoadingState compact label="Loading comments" />;
+  if (isLoading) return <ContentLoadingState compact label={t("loading.comments")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
-  if (!comments.length) return <ShortcodeStatus message="No approved comments matched this shortcode." />;
+  if (!comments.length) return <ShortcodeStatus message={t("comment.no_approved")} />;
 
   if (attributes.variant === "full" || attributes.variant === "compact") {
     return (
       <CommentsSection
         anchorId="shortcode-comments"
         contentKey={`shortcode-comments:${attributes.post || "all"}`}
-        heading={attributes.title || "Recent comments"}
+        heading={attributes.title || t("comment.recent")}
         initialReviews={comments}
-        formTitle="Join the discussion"
+        formTitle={t("comment.form_title")}
         variant={attributes.variant}
         showRatingField={false}
         discussionLayout={discussionLayout}
@@ -660,14 +661,14 @@ function CommentsShortcode({ attributes }: ShortcodeProps) {
   }
 
   return (
-    <ShortcodeSection title={attributes.title || "Recent comments"}>
+    <ShortcodeSection title={attributes.title || t("comment.recent")}>
       <div className={compact ? "grid gap-2" : "grid gap-3 sm:grid-cols-2"}>
         {comments.map((comment) => (
           <Link key={comment.id} to={`${comment.postUri}#opinions`} className="grid gap-1.5 rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-4 no-underline dark:border-zinc-800 dark:bg-zinc-950/40">
             <div className="flex justify-between gap-2 text-xs"><strong className="text-zinc-700 dark:text-zinc-200">{comment.author}</strong><time dateTime={comment.date}>{new Date(comment.date).toLocaleDateString()}</time></div>
             {comment.rating ? <StarRating rating={comment.rating} /> : null}
             <p className="m-0 line-clamp-2 text-sm text-zinc-500 dark:text-zinc-400">{comment.content}</p>
-            <span className="truncate text-xs font-medium text-brand-600 dark:text-brand-400">on "{comment.postTitle}"</span>
+            <span className="truncate text-xs font-medium text-brand-600 dark:text-brand-400">{t("comment.on_post", { title: comment.postTitle })}</span>
           </Link>
         ))}
       </div>

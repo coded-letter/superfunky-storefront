@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ResponsiveImage, avatarColorFor, useLanguage } from "@funky/ui";
+import { ResponsiveImage, avatarColorFor, useLanguage, useT } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { getBlogAuthorDirectory } from "../lib/blog";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -7,6 +7,7 @@ import { useStorefrontPath } from "../lib/storefrontPaths";
 import { ArchiveDirectory, ArchiveDirectoryStatus } from "./ArchiveDirectory";
 
 export function AuthorDirectoryPage() {
+  const t = useT();
   const { languageCode, languageBackendCode } = useLanguage();
   const blogPath = useStorefrontPath("blog", "/blog");
   const { data: authors, isLoading, error } = useIncrementalData(
@@ -14,19 +15,19 @@ export function AuthorDirectoryPage() {
     () => getBlogAuthorDirectory(languageBackendCode),
   );
 
-  if (isLoading) return <ContentLoadingState label="Loading authors" />;
+  if (isLoading) return <ContentLoadingState label={t("loading.authors")} />;
   if (error) {
-    return <ArchiveDirectoryStatus title="Authors unavailable" message={error.message} href={blogPath} linkLabel="Back to blog" isError />;
+    return <ArchiveDirectoryStatus title={t("error.authors_unavailable")} message={error.message} href={blogPath} linkLabel={t("archive.back_to_blog")} isError />;
   }
 
   const entries = authors || [];
   return (
     <ArchiveDirectory
-      title="Authors"
-      kicker="Journal contributors"
-      description={`Meet every author with published ${languageCode.toUpperCase()} stories on Superfunky.`}
+      title={t("archive.authors_title")}
+      kicker={t("archive.authors_kicker")}
+      description={t("archive.authors_description", { language: languageCode.toUpperCase() })}
       canonical="/author"
-      parent={{ label: "Blog", href: blogPath }}
+      parent={{ label: t("nav.blog"), href: blogPath }}
       count={entries.length}
     >
       {entries.length ? (
@@ -43,7 +44,7 @@ export function AuthorDirectoryPage() {
                 )}
                 <span className="grid min-w-0 gap-1">
                   <strong className="truncate font-display text-lg text-zinc-900 dark:text-zinc-100">{author.name}</strong>
-                  <span className="text-sm text-zinc-500 dark:text-zinc-400">{author.postCount} {author.postCount === 1 ? "article" : "articles"}</span>
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">{t("archive.author_article_count", { count: author.postCount })}</span>
                   {author.bio ? <span className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">{author.bio}</span> : null}
                 </span>
               </Link>
@@ -51,7 +52,7 @@ export function AuthorDirectoryPage() {
           ))}
         </ul>
       ) : (
-        <ArchiveDirectoryStatus title="No authors yet" message={`No ${languageCode.toUpperCase()} authors have published stories yet.`} href={blogPath} linkLabel="Browse stories" />
+        <ArchiveDirectoryStatus title={t("archive.no_authors")} message={t("archive.no_authors_message", { language: languageCode.toUpperCase() })} href={blogPath} linkLabel={t("archive.browse_stories")} />
       )}
     </ArchiveDirectory>
   );

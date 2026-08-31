@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { normalizeLanguagePath, ResponsiveImage, useLanguage } from "@funky/ui";
+import { normalizeLanguagePath, ResponsiveImage, useLanguage, useT } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { getProductBrandDirectory } from "../lib/commerce";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -7,6 +7,7 @@ import { useStorefrontPath } from "../lib/storefrontPaths";
 import { ArchiveDirectory, ArchiveDirectoryStatus } from "./ArchiveDirectory";
 
 export function ProductBrandDirectoryPage() {
+  const t = useT();
   const shopPath = useStorefrontPath("shop", "/shop");
   const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
   const directoryPath = normalizeLanguagePath("/product-brand", languageCode, configuredLanguageCodes);
@@ -15,19 +16,19 @@ export function ProductBrandDirectoryPage() {
     () => getProductBrandDirectory(languageCode, languageBackendCode),
   );
 
-  if (isLoading) return <ContentLoadingState label="Loading product brands" />;
+  if (isLoading) return <ContentLoadingState label={t("loading.product_brands")} />;
   if (error) {
-    return <ArchiveDirectoryStatus title="Product brands unavailable" message={error.message} href={shopPath} linkLabel="Back to shop" isError />;
+    return <ArchiveDirectoryStatus title={t("error.product_brands_unavailable")} message={error.message} href={shopPath} linkLabel={t("archive.back_to_shop")} isError />;
   }
 
   const entries = brands || [];
   return (
     <ArchiveDirectory
-      title="Product brands"
-      kicker="Shop by maker"
-      description="Browse every brand with products available in the Superfunky catalog."
+      title={t("archive.product_brands_title")}
+      kicker={t("archive.product_brands_kicker")}
+      description={t("archive.product_brands_description")}
       canonical={directoryPath}
-      parent={{ label: "Shop", href: shopPath }}
+      parent={{ label: t("nav.shop"), href: shopPath }}
       count={entries.length}
     >
       {entries.length ? (
@@ -44,14 +45,14 @@ export function ProductBrandDirectoryPage() {
                 )}
                 <span className="grid gap-1">
                   <strong className="font-display text-xl text-zinc-900 group-hover:text-brand-600 dark:text-zinc-100 dark:group-hover:text-brand-400">{brand.name}</strong>
-                  <span className="text-sm text-zinc-500 dark:text-zinc-400">{brand.count} {brand.count === 1 ? "product" : "products"}</span>
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">{t("archive.brand_product_count", { count: brand.count })}</span>
                 </span>
               </Link>
             </li>
           ))}
         </ul>
       ) : (
-        <ArchiveDirectoryStatus title="No product brands yet" message="No non-empty product brands are currently published." href={shopPath} linkLabel="Browse products" />
+        <ArchiveDirectoryStatus title={t("archive.no_brands")} message={t("archive.no_brands_message")} href={shopPath} linkLabel={t("archive.browse_products")} />
       )}
     </ArchiveDirectory>
   );

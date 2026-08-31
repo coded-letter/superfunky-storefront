@@ -327,10 +327,10 @@ export function CommunityPostMockupPage() {
         <CommentsSection
           anchorId="discussion"
           contentKey={`community-post:${postId || pathname}`}
-          heading="Discussion"
+          heading={t("comment.discussion_heading")}
           initialReviews={comments}
-          formTitle="Join the discussion"
-          formNote="Comments are held for moderation and only appear once approved."
+          formTitle={t("comment.form_title")}
+          formNote={t("comment.form_note")}
           showRatingField={false}
           discussionLayout={discussionLayout}
           onSubmitReview={wordpressPost ? (review) => createReview({

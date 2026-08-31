@@ -39,7 +39,7 @@ export function AuthorMockupPage() {
     if (explicitLanguage) syncLanguageCode(explicitLanguage);
   }, [explicitLanguage, syncLanguageCode]);
 
-  if (isLoading) return <ContentLoadingState label="Loading author" />;
+  if (isLoading) return <ContentLoadingState label={t("loading.author")} />;
   if (error) return <AuthorStatus title={t("error.author_unavailable")} message={error.message} />;
   if (!author) return <NotFoundMockupPage />;
 
@@ -74,14 +74,15 @@ export function AuthorMockupPage() {
     <div className="grid gap-8">
       <Seo
         title={`${author.name} — Author`}
-        description={author.bio || `Published ${author.languageCode.toUpperCase()} articles by ${author.name}.`}
+        description={author.bio || t("archive.author_description", { language: author.languageCode.toUpperCase(), name: author.name })}
         canonical={author.uri || undefined}
         languageCode={author.languageCode}
+        robots="index, follow"
         image={author.avatarUrl ? { url: author.avatarUrl, alt: author.name } : undefined}
         opengraphAuthor={author.name}
         schema={{ pageType: "ProfilePage", personName: author.name }}
       />
-      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Blog", href: blogPath }, { label: "Authors", href: "/author" }, { label: author.name }]} />
+      <Breadcrumbs items={[{ label: t("nav.home"), href: "/" }, { label: t("nav.blog"), href: blogPath }, { label: t("archive.authors_title"), href: "/author" }, { label: author.name }]} />
 
       {/* Shared with `CommunityProfileMockupPage` — the six variants below are the same
           markup, only rendered through the backend-selected `authorProfileHeaderLayout`. */}

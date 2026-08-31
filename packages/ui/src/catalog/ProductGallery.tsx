@@ -58,7 +58,7 @@ export function ProductGallery({ images, selectedImageId }: ProductGalleryProps)
             alt={selected.alt || selected.label}
             priority
             sizes="(min-width: 1024px) 50vw, 100vw"
-            className="block h-full w-full object-cover"
+            className="block h-full w-full object-contain"
           />
         ) : (
           <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{selected.label}</span>

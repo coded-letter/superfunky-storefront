@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { useT } from "@funky/ui";
 import {
   applyViewerRating,
   fetchEngagementRating,
@@ -18,6 +19,7 @@ export function GuestStarRating({
   targetId: number;
   initialSummary: PublicEngagementRatingSummary;
 }) {
+  const t = useT();
   const groupName = useId();
   const safeInitialSummary = normalizeInitialSummary(initialSummary);
   const [summary, setSummary] = useState<EngagementRatingSummary>({ ...safeInitialSummary, viewerRating: null });
@@ -37,16 +39,16 @@ export function GuestStarRating({
           if (active) setSummary(nextSummary);
         })
         .catch((reason) => {
-          if (active) setError(reason instanceof Error ? reason.message : "The rating could not be loaded.");
+          if (active) setError(reason instanceof Error ? reason.message : t("rating.load_error"));
         });
     } catch (reason) {
       setBrowserToken(null);
-      setError(reason instanceof Error ? reason.message : "Secure rating storage is unavailable.");
+      setError(reason instanceof Error ? reason.message : t("rating.storage_error"));
     }
     return () => {
       active = false;
     };
-  }, [initialSummary, targetId, targetType]);
+  }, [initialSummary, t, targetId, targetType]);
 
   const chooseRating = async (rating: number) => {
     if (!browserToken || isSaving) return;
@@ -58,7 +60,7 @@ export function GuestStarRating({
       setSummary(await submitEngagementRating(targetType, targetId, rating, browserToken));
     } catch (reason) {
       setSummary(previous);
-      setError(reason instanceof Error ? reason.message : "The rating could not be saved.");
+      setError(reason instanceof Error ? reason.message : t("rating.save_error"));
     } finally {
       setIsSaving(false);
     }
@@ -66,19 +68,19 @@ export function GuestStarRating({
 
   return (
     <section
-      aria-label="Standalone rating"
+      aria-label={t("rating.aria")}
       className="sf-rating grid w-fit gap-2 rounded-2xl border border-zinc-200/80 bg-white px-4 py-3 shadow-soft dark:border-zinc-800 dark:bg-zinc-900"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <strong className="text-sm text-zinc-900 dark:text-zinc-100">
-          {summary.average === null ? "Not rated yet" : `${summary.average.toFixed(1)} out of 5`}
+          {summary.average === null ? t("rating.not_rated") : t("rating.average", { average: summary.average.toFixed(1) })}
         </strong>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          {summary.count} {summary.count === 1 ? "rating" : "ratings"}
+          {t("rating.count", { count: summary.count })}
         </span>
       </div>
       <fieldset className="m-0 border-0 p-0" disabled={isSaving || !browserToken}>
-        <legend className="sr-only">Rate this content from one to five stars</legend>
+        <legend className="sr-only">{t("rating.legend")}</legend>
         <div className="flex items-center gap-1">
           {([1, 2, 3, 4, 5] as const).map((star) => (
             <span key={star}>
@@ -93,7 +95,7 @@ export function GuestStarRating({
               />
               <label
                 htmlFor={`${groupName}-${star}`}
-                aria-label={`${star} ${star === 1 ? "star" : "stars"}`}
+                aria-label={t("rating.star_aria", { count: star })}
                 className={`cursor-pointer text-2xl leading-none transition hover:scale-110 focus-within:outline-none peer-focus-visible:rounded peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-500 ${
                   summary.viewerRating !== null && star <= summary.viewerRating
                     ? "text-amber-400"
@@ -105,7 +107,7 @@ export function GuestStarRating({
             </span>
           ))}
           <span className="ml-2 text-xs font-medium text-zinc-500 dark:text-zinc-400" aria-live="polite">
-            {isSaving ? "Saving…" : summary.viewerRating ? "Your rating is saved. Choose another star to update it." : "Choose a star"}
+            {isSaving ? t("rating.saving") : summary.viewerRating ? t("rating.saved_hint") : t("rating.choose")}
           </span>
         </div>
       </fieldset>

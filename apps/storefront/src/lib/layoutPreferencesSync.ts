@@ -18,6 +18,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setHeaderSticky(layout.headerSticky);
   prefs.setHeaderSearchVariant(layout.headerSearchVariant);
   prefs.setHeaderLogoVariant(layout.headerLogoVariant);
+  prefs.setHeaderArrangement(layout.headerArrangement);
   prefs.setShowHeaderLogo(layout.showHeaderLogo);
   prefs.setShowHeaderSearchIcon(layout.showHeaderSearchIcon);
   prefs.setShowHeaderLanguageSwitcher(layout.showHeaderLanguageSwitcher);
@@ -39,6 +40,10 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setFooterLogoVariant(layout.footerLogoVariant);
   prefs.setFooterBottomBarLayout(layout.footerBottomBarLayout);
   prefs.setFooterExtraWrapperLayout(layout.footerExtraWrapperLayout);
+  prefs.setShowBackToTop(layout.showBackToTop);
+  prefs.setBackToTopStyle(layout.backToTopStyle);
+  prefs.setBackToTopIcon(layout.backToTopIcon);
+  prefs.setBackToTopPlacement(layout.backToTopPlacement);
   prefs.setShowFooterLogo(layout.showFooterLogo);
   prefs.setShowFooterExtraWrapper(layout.showFooterExtraWrapper);
   prefs.setShowFooterSpotifyPlayer(layout.showFooterSpotifyPlayer);
@@ -57,6 +62,9 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setProductPageLayout(layout.productPageLayout);
   prefs.setRelatedProductsColumns(layout.relatedProductsColumns);
   prefs.setShowStudioRelatedProductsUnderMeta(layout.showStudioRelatedProductsUnderMeta);
+  prefs.setProductPageWishlistButtonLayout(layout.productPageWishlistButtonLayout);
+  prefs.setProductPageWishlistIcon(layout.productPageWishlistIcon);
+  prefs.setProductDescriptionsOrder(layout.productDescriptionsOrder);
   prefs.setHomeHeroLayout(layout.homeHeroLayout);
   prefs.setShopProductCardVariant(layout.shopProductCardVariant);
   prefs.setAuthLayout(layout.authLayout);

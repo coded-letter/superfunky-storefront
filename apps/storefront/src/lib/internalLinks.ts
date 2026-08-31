@@ -24,7 +24,9 @@ const NON_CONTENT_BACKEND_PATHS = [
   /^\/wp-json(?:\/|$)/i,
   /^\/graphql(?:\/|$)/i,
   /^\/xmlrpc\.php$/i,
+  /^\/wp-content\/uploads(?:\/|$)/i,
 ];
+const STOREFRONT_MEDIA_DOCUMENT_PATH = /^\/wp-content\/uploads\/.+\.pdf$/i;
 
 export function normalizeContentHref(
   href: string,
@@ -77,6 +79,9 @@ export function classifyAnchor(
 
   if (NATIVE_PROTOCOLS.has(url.protocol) || !["http:", "https:"].includes(url.protocol)) {
     return { kind: "native", reason: "protocol" };
+  }
+  if (STOREFRONT_MEDIA_DOCUMENT_PATH.test(url.pathname)) {
+    return { kind: "native", reason: "media-document" };
   }
 
   const mappedFromBackend = Boolean(

@@ -13,8 +13,6 @@ import {
 } from "../lib/commerce";
 import {
   resolveTaxonomyArchiveIdentifier,
-  taxonomyEmptyMessage,
-  taxonomyNotFoundMessage,
 } from "../lib/taxonomyRoutes";
 import { ArchiveDescriptionSection } from "./shared";
 import { useCanonicalContentLanguage } from "../lib/useCanonicalContentLanguage";
@@ -47,13 +45,13 @@ export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTax
     archive?.uri || lastResolvedArchive.current?.uri,
   );
 
-  if (isLoading) return <ContentLoadingState label="Loading product archive" />;
-  if (error) return <ArchiveStatus title={t("error.archive_unavailable")} message="This collection is temporarily unavailable." />;
+  if (isLoading) return <ContentLoadingState label={t("loading.product_archive")} />;
+  if (error) return <ArchiveStatus title={t("error.archive_unavailable")} message={t("archive.collection_unavailable")} />;
   if (!archive) {
     return (
       <ArchiveStatus
-        title={`Product ${taxonomy} not found`}
-        message={taxonomyNotFoundMessage(taxonomy)}
+        title={t("archive.product_not_found", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })}
+        message={t(`archive.no_products_${taxonomy}`)}
       />
     );
   }
@@ -61,13 +59,8 @@ export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTax
   return <ProductTaxonomyArchive archive={archive} />;
 }
 
-const TAXONOMY_LABELS: Record<CommerceTaxonomy, string> = {
-  category: "Category",
-  tag: "Tag",
-  brand: "Brand",
-};
-
 function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
+  const t = useT();
   const { configuredLanguageCodes, languageCode } = useLanguage();
   const {
     productArchiveHeroLayout: heroVariant,
@@ -76,18 +69,18 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
   } = useLayoutPreferences();
   const isFullBleed = heroVariant === "fullbleed";
   const shopPath = useStorefrontPath("shop", "/shop");
-  const taxonomyLabel = TAXONOMY_LABELS[archive.taxonomy];
+  const taxonomyLabel = t(`archive.taxonomy.${archive.taxonomy}`);
   const brandDirectoryPath = normalizeLanguagePath("/product-brand", languageCode, configuredLanguageCodes);
   const localizedArchiveUri = normalizeLanguagePath(archive.uri, languageCode, configuredLanguageCodes);
   const title = archive.taxonomy === "tag" ? `#${archive.name}` : archive.name;
   const description = stripHtml(archive.descriptionHtml) ||
-    `Browse products in the ${archive.name} ${archive.taxonomy}.`;
+    t("archive.product_description", { name: archive.name, taxonomy: taxonomyLabel.toLowerCase() });
   const breadcrumbs = seoBreadcrumbsToItems(
     archive.seo.breadcrumbs,
     [
-      { label: "Home", href: "/" },
-      { label: "Shop", href: shopPath },
-      ...(archive.taxonomy === "brand" ? [{ label: "Product brands", href: brandDirectoryPath }] : []),
+      { label: t("nav.home"), href: "/" },
+      { label: t("nav.shop"), href: shopPath },
+      ...(archive.taxonomy === "brand" ? [{ label: t("archive.product_brands_title"), href: brandDirectoryPath }] : []),
       { label: title },
     ],
   );
@@ -102,7 +95,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         keywords={archive.seo.keywords || undefined}
         siteName={archive.seo.siteName || undefined}
         appendSiteName={false}
-        robots={archive.seo.robots}
+        robots="index, follow"
         opengraphType="website"
         opengraphTitle={archive.seo.opengraphTitle || title}
         opengraphDescription={archive.seo.opengraphDescription || description}
@@ -130,13 +123,13 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
           image={archive.imageUrl || undefined}
           fullWidth={isFullBleed}
           secondaryCta={archive.taxonomy === "brand"
-            ? { label: "All brands", href: brandDirectoryPath }
-            : { label: "All products", href: shopPath }}
+            ? { label: t("archive.all_brands"), href: brandDirectoryPath }
+            : { label: t("archive.all_products"), href: shopPath }}
         />
       </div>
 
       {archive.siblings.length ? (
-        <nav aria-label={`Product ${archive.taxonomy} archives`} className="flex flex-wrap gap-2">
+        <nav aria-label={t("archive.product_taxonomy_aria", { taxonomy: taxonomyLabel })} className="flex flex-wrap gap-2">
           {archive.siblings.map((term) => (
             <Link
               key={term.id}
@@ -155,7 +148,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
 
       {archive.products.length ? (
         <PaginableProductGrid
-          title={`${title} products`}
+          title={t("archive.products_title", { title })}
           products={archive.products}
           pageSize={6}
           cardVariant={shopProductCardVariant}
@@ -163,9 +156,9 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         />
       ) : (
         <section className="grid gap-3 rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
-          <h2 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">No products yet</h2>
+          <h2 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t("archive.no_products")}</h2>
           <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">
-            {taxonomyEmptyMessage(archive.taxonomy)}
+            {t(`archive.no_products_${archive.taxonomy}`)}
           </p>
         </section>
       )}
@@ -183,12 +176,13 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
 }
 
 function ArchiveStatus({ title, message }: { title: string; message: string }) {
+  const t = useT();
   const shopPath = useStorefrontPath("shop", "/shop");
   return (
     <section className="mx-auto grid max-w-2xl gap-4 py-20 text-center">
       <h1 className="m-0 font-display text-3xl font-bold text-zinc-950 dark:text-zinc-50">{title}</h1>
       <p className="m-0 text-zinc-600 dark:text-zinc-400">{message}</p>
-      <Link to={shopPath} className="mx-auto rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white no-underline">Browse the shop</Link>
+      <Link to={shopPath} className="mx-auto rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white no-underline">{t("archive.browse_shop")}</Link>
     </section>
   );
 }

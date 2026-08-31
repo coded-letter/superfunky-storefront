@@ -1,30 +1,31 @@
 import { Link } from "react-router-dom";
-import { ResponsiveImage, avatarColorFor, useLanguage } from "@funky/ui";
+import { ResponsiveImage, avatarColorFor, useLanguage, useT } from "@funky/ui";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { getCommunityArchiveData } from "../lib/community";
 import { useIncrementalData } from "@funky/sdk/react";
 import { ArchiveDirectory, ArchiveDirectoryStatus } from "./ArchiveDirectory";
 
 export function CommunityAuthorDirectoryPage() {
+  const t = useT();
   const { languageCode, languageBackendCode } = useLanguage();
   const { data, isLoading, error } = useIncrementalData(
     `community-archive-data:v1:${languageCode}`,
     () => getCommunityArchiveData(languageBackendCode),
   );
 
-  if (isLoading) return <ContentLoadingState label="Loading community authors" />;
+  if (isLoading) return <ContentLoadingState label={t("loading.community_authors")} />;
   if (error) {
-    return <ArchiveDirectoryStatus title="Community authors unavailable" message={error.message} href="/community" linkLabel="Back to community" isError />;
+    return <ArchiveDirectoryStatus title={t("error.community_authors_unavailable")} message={error.message} href="/community" linkLabel={t("archive.back_to_community")} isError />;
   }
 
   const authors = data?.authors || [];
   return (
     <ArchiveDirectory
-      title="Community authors"
-      kicker="Creators and collaborators"
-      description="Discover public Superfunky creators and collaborators who publish community content."
+      title={t("archive.community_authors_title")}
+      kicker={t("archive.community_authors_kicker")}
+      description={t("archive.community_authors_description")}
       canonical="/community-author"
-      parent={{ label: "Community", href: "/community" }}
+      parent={{ label: t("archive.community"), href: "/community" }}
       count={authors.length}
     >
       {authors.length ? (
@@ -50,7 +51,7 @@ export function CommunityAuthorDirectoryPage() {
           ))}
         </ul>
       ) : (
-        <ArchiveDirectoryStatus title="No community authors yet" message="No public creators or collaborators are currently available." href="/community" linkLabel="Browse community posts" />
+        <ArchiveDirectoryStatus title={t("archive.no_community_authors")} message={t("archive.no_community_authors_message")} href="/community" linkLabel={t("archive.browse_community_posts")} />
       )}
     </ArchiveDirectory>
   );

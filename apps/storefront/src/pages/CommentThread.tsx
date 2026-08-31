@@ -89,12 +89,13 @@ export function ReviewSummary({
   totalReviewCount: number;
   histogram: Record<1 | 2 | 3 | 4 | 5, number>;
 }) {
+  const t = useT();
   return (
     <div className="grid gap-5 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8 md:grid-cols-[auto_1fr] md:items-center md:gap-10">
       <div className="grid justify-items-center gap-1.5 text-center md:justify-items-start md:text-left">
         <strong className="font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">{averageRating.toFixed(1)}</strong>
         <StarRating rating={averageRating} />
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">{totalReviewCount} reviews</span>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">{t("review.summary_count", { count: totalReviewCount })}</span>
       </div>
 
       <div className="grid gap-2">
@@ -122,6 +123,7 @@ export function ReviewSummary({
  * everywhere WordPress comments or WooCommerce reviews are rendered. Short content
  * that never actually overflows 5 lines renders as-is, with no toggle button. */
 function ClampedText({ text, className = "" }: { text: string; className?: string }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   // A hidden, always-clamped probe mirrors the visible text so overflow can be
@@ -164,7 +166,7 @@ function ClampedText({ text, className = "" }: { text: string; className?: strin
           aria-controls={contentId}
           className="justify-self-start text-xs font-semibold text-brand-600 underline-offset-2 hover:underline dark:text-brand-400"
         >
-          {expanded ? "Hide" : "Read more"}
+          {expanded ? t("review.hide") : t("review.read_more")}
         </button>
       ) : null}
     </div>
@@ -180,6 +182,7 @@ function ReviewCard({
   isPending: boolean;
   showRating: boolean;
 }) {
+  const t = useT();
   const initials = review.author
     .split(" ")
     .map((part) => part[0])
@@ -206,7 +209,7 @@ function ReviewCard({
         <div className="flex items-center gap-2">
           {isPending ? (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-              Awaiting moderation
+              {t("review.awaiting_moderation")}
             </span>
           ) : null}
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
@@ -272,7 +275,7 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
           value={author}
           onChange={(event) => setAuthor(event.target.value)}
           disabled={isSubmitting}
-          placeholder="Name"
+          placeholder={t("review.field.name")}
           required
           className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
         />
@@ -281,7 +284,7 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           disabled={isSubmitting}
-          placeholder="Email"
+          placeholder={t("review.field.email")}
           required
           className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
         />
@@ -290,7 +293,7 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
         value={content}
         onChange={(event) => setContent(event.target.value)}
         disabled={isSubmitting}
-        placeholder="Write a reply…"
+        placeholder={t("review.field.reply_placeholder")}
         rows={3}
         required
         className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
@@ -302,7 +305,7 @@ function ReplyForm({ onSubmit }: { onSubmit: (reply: { author: string; email: st
           className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-          Post reply
+          {t("review.post_reply")}
         </button>
       </div>
     </form>
@@ -322,6 +325,7 @@ function ReviewThread({
   onReply: (parent: ProductReview, reply: { author: string; email: string; content: string }) => Promise<void>;
   showRatings: boolean;
 }) {
+  const t = useT();
   const [isReplying, setIsReplying] = useState(false);
   const visualDepth = Math.min(depth, MAX_REPLY_VISUAL_DEPTH);
   const canReply = !isPendingReview(review);
@@ -339,7 +343,7 @@ function ReviewThread({
           onClick={() => setIsReplying((previous) => !previous)}
           className="mt-2 text-xs font-semibold text-brand-600 transition hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
         >
-          {isReplying ? "Cancel" : "Reply"}
+          {isReplying ? t("review.cancel") : t("review.reply")}
         </button>
       ) : null}
 
@@ -373,8 +377,8 @@ function ReviewThread({
 
 export function ReviewForm({
   onSubmit,
-  formTitle = "Leave a review",
-  formNote = "Submissions are held for moderation and only appear once approved.",
+  formTitle,
+  formNote,
   showRatingField = true,
 }: {
   onSubmit: (review: { author: string; email: string; content: string; rating?: number }) => Promise<void>;
@@ -383,6 +387,8 @@ export function ReviewForm({
   showRatingField?: boolean;
 }) {
   const t = useT();
+  const resolvedFormTitle = formTitle || t("review.form_title");
+  const resolvedFormNote = formNote || t("review.form_note");
   const [identity] = useState(commentIdentity);
   const [author, setAuthor] = useState(identity.author);
   const [email, setEmail] = useState(identity.email);
@@ -397,11 +403,11 @@ export function ReviewForm({
     event.preventDefault();
 
     if (!author.trim() || !email.trim() || !content.trim()) {
-      setFormError("All fields are required.");
+      setFormError(t("review.error.required"));
       return;
     }
     if (!/\S+@\S+\.\S+/.test(email)) {
-      setFormError("Please enter a valid email address.");
+      setFormError(t("review.error.invalid_email"));
       return;
     }
 
@@ -428,20 +434,20 @@ export function ReviewForm({
   return (
     <div className="grid gap-4 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
       <div className="grid gap-1">
-        <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{formTitle}</h3>
-        <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{formNote}</p>
+        <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{resolvedFormTitle}</h3>
+        <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{resolvedFormNote}</p>
       </div>
 
       {showSuccess ? (
         <div className="rounded-xl bg-emerald-100 px-4 py-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-          ✅ Your submission has been recorded and awaits approval.
+          {t("review.success")}
         </div>
       ) : null}
 
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">Name</span>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("review.field.name")}</span>
             <input
               type="text"
               value={author}
@@ -452,7 +458,7 @@ export function ReviewForm({
             />
           </label>
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-zinc-700 dark:text-zinc-300">Email</span>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("review.field.email")}</span>
             <input
               type="email"
               value={email}
@@ -465,12 +471,12 @@ export function ReviewForm({
         </div>
 
         {showRatingField ? <div className="grid gap-1.5 text-sm">
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">Rating</span>
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("review.field.rating")}</span>
           <div
             className="flex w-fit gap-1"
             onMouseLeave={() => setHoveredRating(null)}
             role="radiogroup"
-            aria-label="Rating out of 5"
+            aria-label={t("review.field.rating_aria")}
           >
             {[1, 2, 3, 4, 5].map((value) => {
               const filled = value <= (hoveredRating ?? rating);
@@ -480,7 +486,7 @@ export function ReviewForm({
                   type="button"
                   role="radio"
                   aria-checked={rating === value}
-                  aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                  aria-label={t("review.field.star_aria", { count: value })}
                   onMouseEnter={() => setHoveredRating(value)}
                   onClick={() => setRating(value)}
                   disabled={isSubmitting}
@@ -494,7 +500,7 @@ export function ReviewForm({
         </div> : null}
 
         <label className="grid gap-1.5 text-sm">
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">Comment</span>
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">{t("review.field.comment")}</span>
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
@@ -509,7 +515,7 @@ export function ReviewForm({
 
         <button type="submit" disabled={isSubmitting} className={`${primaryActionButtonClass} justify-self-start disabled:cursor-not-allowed disabled:opacity-60`}>
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          {isSubmitting ? "Submitting…" : "Submit"}
+          {isSubmitting ? t("review.submitting") : t("review.submit")}
         </button>
       </form>
     </div>
@@ -583,6 +589,7 @@ export function CommentsSection({
     reply: { author: string; email: string; content: string },
   ) => Promise<ProductReview>;
 }) {
+  const t = useT();
   const [localState, setLocalState] = useState<{ contentKey: string; reviews: ProductReview[] }>({
     contentKey,
     reviews: [],
@@ -669,7 +676,7 @@ export function CommentsSection({
         <>
           {showLayoutSwitch && discussionLayoutOverride === undefined ? (
             <ViewSwitch
-              label="Discussion layout"
+              label={t("review.discussion_layout")}
               value={discussionLayout}
               onChange={setInternalDiscussionLayout}
               options={DISCUSSION_LAYOUT_OPTIONS}

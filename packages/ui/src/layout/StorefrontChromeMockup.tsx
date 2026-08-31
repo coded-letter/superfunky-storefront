@@ -1,7 +1,8 @@
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { ArrowUp, ChevronUp } from "lucide-react";
 import type { ProductCardData } from "../catalog/ProductCard";
-import { isSupportedSocialPlatform, socialIconSrc, type SocialLink } from "../locale";
+import { isSupportedSocialPlatform, socialIconSrc, useT, type SocialLink } from "../locale";
 import { useLayoutPreferences, useSoundUX } from "../state";
 import { CartDrawer } from "./CartDrawer";
 import { CookieConsentBanner } from "./CookieConsentBanner";
@@ -70,6 +71,8 @@ export type StorefrontChromeMockupProps = {
       newsletterPrivacyLabel?: string;
       extraHtml?: string;
       copyrightText?: string;
+      themeCredit?: string;
+      showThemeCredit?: boolean;
       spotifyPlaylistUrl?: string;
       spotifyPlaylistEmbedUrl?: string;
       spotifyPlayerTitle?: string;
@@ -99,7 +102,7 @@ export function StorefrontChromeMockup(props: StorefrontChromeMockupProps) {
   return <StorefrontChromeShell {...props} />;
 }
 
-function ScrollToTop() {
+function RouteScrollReset() {
   const { pathname } = useLocation();
   const { playAction } = useSoundUX();
 
@@ -109,6 +112,61 @@ function ScrollToTop() {
   }, [pathname, playAction]);
 
   return null;
+}
+
+function BackToTopButton() {
+  const t = useT();
+  const {
+    showBackToTop,
+    backToTopStyle,
+    backToTopIcon,
+    backToTopPlacement,
+  } = useLayoutPreferences();
+  const [visible, setVisible] = useState(() => typeof window !== "undefined" && window.scrollY >= 480);
+
+  useEffect(() => {
+    if (!showBackToTop) return undefined;
+    const updateVisibility = () => setVisible(window.scrollY >= 480);
+    updateVisibility();
+    window.addEventListener("scroll", updateVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateVisibility);
+  }, [showBackToTop]);
+
+  if (!showBackToTop || !visible) return null;
+
+  const placementClass = backToTopPlacement === "bottom-left"
+    ? "left-5"
+    : backToTopPlacement === "bottom-center"
+      ? "left-1/2 -translate-x-1/2"
+      : "right-5";
+  const styleClass = backToTopStyle === "outline"
+    ? "border border-brand-500 bg-white text-brand-700 dark:bg-zinc-950 dark:text-brand-300"
+    : backToTopStyle === "ghost"
+      ? "bg-zinc-950/70 text-white backdrop-blur"
+      : "bg-brand-600 text-white shadow-glow hover:bg-brand-700";
+  const label = t("navigation.back_to_top");
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={() => window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      })}
+      className={`fixed bottom-5 z-40 inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition hover:-translate-y-0.5 ${placementClass} ${styleClass}`}
+    >
+      {backToTopIcon === "text" ? (
+        <span>{label}</span>
+      ) : backToTopIcon === "chevron" ? (
+        <ChevronUp className="h-5 w-5" aria-hidden="true" />
+      ) : (
+        <ArrowUp className="h-5 w-5" aria-hidden="true" />
+      )}
+    </button>
+  );
 }
 
 function StorefrontChromeShell({
@@ -136,6 +194,7 @@ function StorefrontChromeShell({
     headerSticky,
     headerSearchVariant,
     headerLogoVariant,
+    headerArrangement,
     showHeaderLogo,
     showHeaderSearchIcon,
     showHeaderLanguageSwitcher,
@@ -210,7 +269,7 @@ function StorefrontChromeShell({
   // rendered outside this tree, e.g. portals) and the native scrollbar in sync.
   return (
     <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top,_rgb(var(--brand-500)/0.06),_transparent_45%)] bg-[rgb(var(--theme-background))] text-[rgb(var(--theme-foreground))] dark:bg-[radial-gradient(circle_at_top,_rgb(var(--brand-500)/0.12),_transparent_45%)] dark:bg-[rgb(var(--theme-foreground))] dark:text-[rgb(var(--theme-background))]">
-      <ScrollToTop />
+      <RouteScrollReset />
       <HeaderMockup
         primaryNavigation={primaryNavigation}
         mobileNavigation={mobileNavigation}
@@ -228,6 +287,7 @@ function StorefrontChromeShell({
         sticky={headerSticky}
         searchVariant={headerSearchVariant}
         logoVariant={headerLogoVariant}
+        arrangement={headerArrangement}
         showLogo={showHeaderLogo}
         showSearch={showHeaderSearchIcon && storefrontConfig?.features.search !== false}
         showLanguageSwitcher={showHeaderLanguageSwitcher && storefrontConfig?.features.languages !== false}
@@ -292,6 +352,8 @@ function StorefrontChromeShell({
           logoUrl={storefrontConfig?.branding.logoUrl || undefined}
           iconUrl={storefrontConfig?.branding.iconUrl || undefined}
           copyrightText={storefrontConfig?.footer?.copyrightText ?? ""}
+          themeCredit={storefrontConfig?.footer?.themeCredit ?? ""}
+          showThemeCredit={storefrontConfig?.footer?.showThemeCredit === true}
           onNewsletterSubscribe={onNewsletterSubscribe}
           assistantSlot={footerAssistantSlot}
         />
@@ -312,6 +374,7 @@ function StorefrontChromeShell({
       ) : null}
       {assistantOverlaySlot}
       <ToastContainer />
+      <BackToTopButton />
       {floatingAssistantSlot}
     </div>
   );

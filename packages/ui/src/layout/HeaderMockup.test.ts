@@ -34,3 +34,10 @@ test("same-page fragment navigation closes mobile overlays before anchor scrolli
     /useEffect\(\(\) => setIsMenuOpen\(false\), \[location\.hash, location\.pathname, location\.search\]\)/,
   );
 });
+
+test("header supports classic, compact single-row, and centered arrangements", () => {
+  assert.match(headerSource, /export type HeaderArrangement = "classic" \| "single-row" \| "centered"/);
+  assert.match(headerSource, /arrangement === "centered"/);
+  assert.match(headerSource, /arrangement === "single-row"/);
+  assert.match(headerSource, /grid-cols-\[1fr_auto_1fr\]/);
+});
