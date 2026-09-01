@@ -4,11 +4,12 @@ import test from "node:test";
 
 const prerenderSource = readFileSync(new URL("prerender.mjs", import.meta.url), "utf8");
 
-test("prerender keeps media-library PDFs on the storefront production domain", () => {
+test("prerender keeps media-library PDF and GLB assets on the storefront production domain", () => {
   assert.match(
     prerenderSource,
-    /rewriteStaticMediaDocumentHrefs\(normalizeStaticShortcodes\(html, \{ placeholders \}\)\)/,
+    /rewriteStaticProxiedMediaUrls\(normalizeStaticShortcodes\(html, \{ placeholders \}\)\)/,
   );
+  assert.match(prerenderSource, /\\s\(href\|src\)=/);
   assert.match(
     prerenderSource,
     /\/wp-content\/uploads\/\*  \$\{new URL\(graphqlEndpoint\)\.origin\}\/wp-content\/uploads\/:splat  200/,
