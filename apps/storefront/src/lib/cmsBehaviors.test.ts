@@ -46,9 +46,10 @@ beforeEach(() => {
 
 afterEach(() => dom.window.close());
 
-test("media-library PDFs stay on the storefront domain without rewriting external documents", () => {
+test("media-library PDF and GLB assets stay on the storefront domain", () => {
   const html = sanitizeCmsHtml(`
     <a id="backend-pdf" href="https://dev.superfunky.pro/wp-content/uploads/2026/08/guide.pdf?download=1#page=2">Guide</a>
+    <a-asset-item id="backend-model" src="https://dev.superfunky.pro/wp-content/uploads/2026/08/vending_machine.glb"></a-asset-item>
     <a id="external-pdf" href="https://cdn.example.test/guide.pdf">External</a>
   `);
   const root = document.createElement("div");
@@ -57,6 +58,10 @@ test("media-library PDFs stay on the storefront domain without rewriting externa
   assert.equal(
     root.querySelector<HTMLAnchorElement>("#backend-pdf")?.getAttribute("href"),
     "/wp-content/uploads/2026/08/guide.pdf?download=1#page=2",
+  );
+  assert.equal(
+    root.querySelector("#backend-model")?.getAttribute("src"),
+    "/wp-content/uploads/2026/08/vending_machine.glb",
   );
   assert.equal(
     root.querySelector<HTMLAnchorElement>("#external-pdf")?.getAttribute("href"),

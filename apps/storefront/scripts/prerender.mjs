@@ -17,6 +17,7 @@ import { localizeStaticFontAssets } from "./static-font-assets.mjs";
 import { stripBootstrapOverlay } from "./static-html.mjs";
 import { classifyPageRouteKeys } from "../src/lib/storefrontRouteClassification.ts";
 import { sanitizeCmsHtml, sanitizeCmsStyleAttribute } from "../src/lib/cmsBehaviors.ts";
+import { storefrontProxiedMediaUrl } from "../src/lib/storefrontMediaAssets.ts";
 import { mapMenuItems } from "../src/lib/menuMapping.ts";
 import { getMegaMenuConfiguration } from "../../../packages/ui/src/layout/menuClasses.ts";
 import {
@@ -1286,7 +1287,7 @@ async function resolveSvgIntrinsicSize(source) {
 
 async function optimizeStaticCmsHtml(html, { placeholders = false } = {}) {
   const normalizedHtml = addDefaultCmsIconDimensions(
-    rewriteStaticMediaDocumentHrefs(normalizeStaticShortcodes(html, { placeholders }))
+    rewriteStaticProxiedMediaUrls(normalizeStaticShortcodes(html, { placeholders }))
       .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
       .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
       .replace(/\s+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
@@ -1359,22 +1360,17 @@ async function optimizeStaticCmsHtml(html, { placeholders = false } = {}) {
   );
 }
 
-function rewriteStaticMediaDocumentHrefs(html) {
+function rewriteStaticProxiedMediaUrls(html) {
   if (!graphqlEndpoint) return html;
   const backendOrigin = new URL(graphqlEndpoint).origin;
-  return html.replace(/\shref=(["'])(.*?)\1/gi, (attribute, quote, encodedHref) => {
-    try {
-      const mediaUrl = new URL(decodeAttributeEntities(encodedHref), backendOrigin);
-      if (
-        mediaUrl.origin !== backendOrigin
-        || !/^\/wp-content\/uploads\/.+\.pdf$/i.test(mediaUrl.pathname)
-      ) {
-        return attribute;
-      }
-      return ` href=${quote}${escapeAttribute(`${mediaUrl.pathname}${mediaUrl.search}${mediaUrl.hash}`)}${quote}`;
-    } catch {
-      return attribute;
-    }
+  return html.replace(/\s(href|src)=(["'])(.*?)\2/gi, (attribute, name, quote, encodedUrl) => {
+    const storefrontUrl = storefrontProxiedMediaUrl(decodeAttributeEntities(encodedUrl), {
+      backendOrigin,
+      baseUrl: backendOrigin,
+    });
+    return storefrontUrl
+      ? ` ${name}=${quote}${escapeAttribute(storefrontUrl)}${quote}`
+      : attribute;
   });
 }
 
