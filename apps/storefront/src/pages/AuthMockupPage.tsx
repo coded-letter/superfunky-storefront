@@ -5,6 +5,7 @@ import { useApplicationShortcode, useConfiguredState, useEmbeddedApplicationShor
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { saveCheckoutEmail, saveNewsletterEmail } from "../lib/abandonedCart";
 import { useResolvedStorefrontPath, useStorefrontPath } from "../lib/storefrontPaths";
+import { useNavigationData } from "../state/navigationData";
 import { isValidEmail, validateForgotPasswordForm, validateLoginForm, validateNewPassword, validateRegisterForm, type FieldErrors } from "../lib/validation";
 import { InputMock, primaryActionButtonClass } from "./shared";
 import {
@@ -59,6 +60,7 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
   const [searchParams] = useSearchParams();
   const config = useApplicationShortcode(["funkycommerce_auth"], { mode });
+  const brandName = useNavigationData().data?.storefrontConfig.branding.storeName || "FunkyCommerce";
   const { authLayout: layout } = useLayoutPreferences();
   const combined = mode === "combined";
   const configuredDefaultMode = AUTH_MODE_OPTIONS.some((option) => option.value === config["default-mode"])
@@ -76,12 +78,13 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
     <div className="grid content-start gap-6">
       <div className="grid gap-1">
         <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t(TITLE_KEYS[activeMode])}</h1>
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t(DESCRIPTION_KEYS[activeMode])}</p>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{t(DESCRIPTION_KEYS[activeMode], { brand: brandName })}</p>
       </div>
 
       {combined ? (
         <ViewSwitch
-          label="Authentication view"
+          label={t("auth.mode_selector")}
+          hideLabel
           options={AUTH_MODE_OPTIONS.map((option) => ({ ...option, label: t(option.labelKey) }))}
           value={activeMode}
           onChange={setActiveMode}
@@ -131,10 +134,10 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
     );
   }
 
-  return <AuthSplitLayout>{formColumn}</AuthSplitLayout>;
+  return <AuthSplitLayout brandName={brandName}>{formColumn}</AuthSplitLayout>;
 }
 
-function AuthSplitLayout({ children }: { children: ReactNode }) {
+function AuthSplitLayout({ children, brandName }: { children: ReactNode; brandName: string }) {
   const t = useT();
   return (
     <div className="relative -mt-8 -mb-16 overflow-hidden rounded-3xl">
@@ -159,12 +162,12 @@ function AuthSplitLayout({ children }: { children: ReactNode }) {
         <div className="relative hidden flex-col items-end justify-between text-right text-white lg:flex">
           <div className="relative grid justify-items-end gap-3">
             <span className="inline-grid h-11 w-11 place-items-center rounded-2xl bg-brand-gradient shadow-glow">✦</span>
-            <h2 className="m-0 font-display text-2xl font-bold">Superfunky</h2>
+            <h2 className="m-0 font-display text-2xl font-bold">{brandName}</h2>
             <p className="m-0 max-w-xs text-sm text-white/70">
               {t("auth.brand_tagline")}
             </p>
           </div>
-          <p className="relative m-0 text-xs text-white/50">© 2026 Superfunky</p>
+          <p className="relative m-0 text-xs text-white/50">© {new Date().getFullYear()} {brandName}</p>
         </div>
       </div>
     </div>

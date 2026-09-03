@@ -166,7 +166,7 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
   for (const entry of result.value.entries) {
     const compatible = entry.cacheKey.startsWith("artifact-route:v1:")
       || entry.cacheKey.startsWith("artifact-navigation:v1:")
-      || entry.cacheKey.startsWith("navigation-data:v15:")
+      || entry.cacheKey.startsWith("navigation-data:v16:")
       || entry.cacheKey.startsWith("navigation-assistant:v2:")
       || entry.cacheKey.startsWith("storefront-route-registry:v6:")
       || entry.cacheKey.startsWith("commerce-data:v4:")

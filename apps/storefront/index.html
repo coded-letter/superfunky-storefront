@@ -70,6 +70,34 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="FunkyCommerce" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script type="speculationrules">
+      {
+        "prefetch": [{
+          "source": "document",
+          "where": {
+            "and": [
+              { "href_matches": "/*" },
+              { "not": { "selector_matches": "[rel~='nofollow'], [target='_blank'], [download]" } }
+            ]
+          },
+          "eagerness": "moderate"
+        }],
+        "prerender": [{
+          "source": "document",
+          "where": {
+            "and": [
+              { "href_matches": "/*" },
+              { "not": { "href_matches": "/cart*" } },
+              { "not": { "href_matches": "/checkout*" } },
+              { "not": { "href_matches": "/account*" } },
+              { "not": { "href_matches": "/auth*" } },
+              { "not": { "selector_matches": "[rel~='nofollow'], [target='_blank'], [download]" } }
+            ]
+          },
+          "eagerness": "conservative"
+        }]
+      }
+    </script>
 
     <style>
       :root {
@@ -233,6 +261,19 @@
         position: fixed;
         width: 100%;
         z-index: 20;
+      }
+      .storefront-static-header--island {
+        transition: border-radius 300ms ease, box-shadow 300ms ease, inset 300ms ease, width 300ms ease;
+      }
+      .storefront-static-header--island.is-scrolled {
+        border: 1px solid rgb(var(--theme-foreground, 24 24 27) / .1);
+        border-radius: calc(var(--theme-radius, 1rem) * 3);
+        box-shadow: 0 18px 45px rgb(24 24 27 / .16);
+        inset: 10px 10px auto;
+        margin-inline: auto;
+        max-width: var(--storefront-static-max-width, 1280px);
+        overflow: visible;
+        width: auto;
       }
       .storefront-static-header[data-static-react-parity] {
         -webkit-backdrop-filter: blur(16px) saturate(1.5);
@@ -880,13 +921,43 @@
         max-width: var(--storefront-static-max-width, 1280px);
       }
       .storefront-static-footer-inner--grid-1 { grid-template-columns: minmax(0, 1fr); }
-      .storefront-static-header--single-row .storefront-static-brand small { display: none; }
+      :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-brand small { display: none; }
       @media (min-width: 640px) {
         .storefront-static-footer-inner--grid-2-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (min-width: 1024px) {
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-header-main {
+          align-items: center;
+          display: flex;
+          gap: .75rem;
+        }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-header-row {
+          display: contents;
+        }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-header-nav-row {
+          border-top: 0;
+          display: block;
+          flex: 1 1 auto;
+          min-width: 0;
+          order: 1;
+          padding-top: 0;
+        }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-brand { order: 0; }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-search {
+          flex: 0 1 14rem;
+          min-width: 10rem;
+          order: 2;
+        }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) .storefront-static-controls {
+          flex-wrap: nowrap;
+          order: 3;
+        }
+        :is(.storefront-static-header--single-row, .storefront-static-header--island) nav {
+          flex-wrap: nowrap;
+        }
         .storefront-static-footer-inner--grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
         .storefront-static-footer-inner--grid-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        .storefront-static-footer-inner--grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .storefront-static-header--centered .storefront-static-header-row {
           grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         }

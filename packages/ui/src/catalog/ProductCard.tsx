@@ -61,6 +61,8 @@ export type ProductCardData = {
   href?: string;
   name: string;
   subtitle?: string;
+  /** Plain-text long product description used when long descriptions are configured first. */
+  longDescription?: string;
   imageUrl?: string;
   /** Extra photos for the `gallery`/`variation` variants — thumbnails swap the main
    * preview image on click, mirroring a real PDP gallery. */
@@ -250,7 +252,13 @@ export function ProductCard({
 
   const handleAddToCart = () => {
     if (!hasPrice || product.productType === "external" || product.productType === "grouped") return;
-    playAction("add-to-cart");
+    if (product.inStock === false) {
+      showToast({
+        title: t("product.out_of_stock"),
+        description: product.name,
+      });
+      return;
+    }
     if (product.productType === "variable" && !product.variations?.length) {
       if (quickViewEnabled) {
         setIsQuickViewOpen(true);
@@ -267,6 +275,7 @@ export function ProductCard({
       });
       return;
     }
+    playAction("add-to-cart");
     addItem({
       id: selectedVariation?.id || product.id,
       backendProductId: product.databaseId,
@@ -577,7 +586,7 @@ export function ProductCard({
             <Link
               to={product.href || "/shop"}
               onClick={() => playAction("navigation")}
-              className="flex flex-1 items-center justify-center rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+              className="flex flex-1 items-center justify-center rounded-control bg-zinc-900 px-4 py-2.5 font-display text-xs font-semibold text-white no-underline shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
             >
               {ctaLabel}
             </Link>

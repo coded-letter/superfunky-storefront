@@ -32,6 +32,44 @@ test("catalog product cards request gallery images for the gallery variant", () 
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages[\s\S]*\bsourceUrl\b/);
 });
 
+test("catalog product cards preserve both descriptions for quick-view ordering", () => {
+  assert.match(PRODUCT_LIST_CARD_FIELDS, /\bshortDescription\(format: RENDERED\)/);
+  assert.match(PRODUCT_LIST_CARD_FIELDS, /\bdescription\(format: RENDERED\)/);
+
+  const product: RawProductCard = {
+    __typename: "SimpleProduct",
+    id: "described-product",
+    databaseId: 4972,
+    slug: "described-product",
+    uri: "/product/described-product/",
+    name: "Described product",
+    shortDescription: "<p>Short description</p>",
+    description: "<p>Long <strong>description</strong></p>",
+    engagementRating: {
+      average: null,
+      count: 0,
+      guestCount: 0,
+      authoredCount: 0,
+      histogram: [0, 0, 0, 0, 0],
+    },
+    featured: false,
+    onSale: false,
+    image: null,
+    galleryImages: null,
+    productCategories: null,
+    productTags: null,
+    productBrands: null,
+    price: "€10.00",
+    regularPrice: "€10.00",
+    salePrice: null,
+    stockStatus: "IN_STOCK",
+    stockQuantity: 1,
+  };
+
+  assert.equal(mapProductCard(product).subtitle, "Short description");
+  assert.equal(mapProductCard(product).longDescription, "Long description");
+});
+
 test("featured WooCommerce products are preserved for the empty-cart promotion", () => {
   const product: RawProductCard = {
     __typename: "SimpleProduct",

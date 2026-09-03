@@ -219,9 +219,9 @@ export function VideoHero({
         {kicker ? <span className="inline-flex rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide backdrop-blur">{kicker}</span> : null}
         <Heading className={`m-0 max-w-3xl font-display font-extrabold leading-tight ${headingClass}`}>{title}</Heading>
         {description ? <p className={`m-0 max-w-2xl text-base sm:text-lg ${isSplit || isMinimal ? "text-zinc-600 dark:text-zinc-300" : "text-white/85"}`}>{description}</p> : null}
-        <div className="flex flex-wrap gap-3">
-          {primaryCta ? <Link to={primaryCta.href} className="rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline">{primaryCta.label}</Link> : null}
-          {secondaryCta ? <Link to={secondaryCta.href} className="rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white no-underline backdrop-blur">{secondaryCta.label}</Link> : null}
+        <div className="relative z-30 flex flex-wrap gap-3">
+          {primaryCta ? <Link to={primaryCta.href} className="rounded-control bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline">{primaryCta.label}</Link> : null}
+          {secondaryCta ? <Link to={secondaryCta.href} className="rounded-control border border-white/40 px-6 py-3 text-sm font-semibold text-white no-underline backdrop-blur">{secondaryCta.label}</Link> : null}
         </div>
       </div>
       {resolved ? (

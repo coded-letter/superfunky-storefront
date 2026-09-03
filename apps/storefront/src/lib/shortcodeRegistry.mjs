@@ -11,6 +11,7 @@ export const CONTENT_SHORTCODE_NAMES = Object.freeze([
   "sticky_posts",
   "tags",
   "product-tags",
+  "product_tags",
   "authors",
   "reviews",
   "comments",

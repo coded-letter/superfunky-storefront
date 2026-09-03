@@ -44,10 +44,18 @@ test("footer copyright preserves safe links and removes executable markup", () =
 });
 
 test("footer supports one through seven-column editorial layouts", () => {
-  for (const layout of ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"]) {
+  for (const layout of ["grid-1", "grid-2-wide", "grid-3", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"]) {
     assert.match(footerSource, new RegExp(layout));
   }
   assert.match(footerSource, /xl:grid-cols-7/);
+});
+
+test("footer supports explicit newsletter, assistant, and Spotify feature combinations", () => {
+  for (const layout of ["separate", "newsletter-spotify", "newsletter-assistant", "assistant-spotify", "none"]) {
+    assert.match(footerSource, new RegExp(layout));
+  }
+  assert.match(footerSource, /const pairNewsletterFeature = showNewsletterFeature/);
+  assert.match(footerSource, /pairNewsletterFeature \? "mb-12 grid items-start gap-5 lg:grid-cols-2"/);
 });
 
 test("footer theme credit is independently sanitized and rendered", () => {

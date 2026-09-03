@@ -122,7 +122,8 @@ test("auth shortcode supports a combined view switch and redirects active sessio
 
   assert.match(renderers, /\["login", "register", "forgot-password", "combined"\]/);
   assert.match(authPage, /mode === "combined"/);
-  assert.match(authPage, /label="Authentication view"/);
+  assert.match(authPage, /label=\{t\("auth\.mode_selector"\)\}[\s\S]*hideLabel/);
+  assert.doesNotMatch(authPage, /Authentication view|>Superfunky</);
   assert.match(authPage, /config\["default-mode"\]/);
   assert.match(authPage, /return <Navigate to=\{accountPath\} replace \/>/);
   assert.match(themeFunctions, /'mode'\s*=>\s*array\(\s*'default'\s*=>\s*'login',\s*'enum'\s*=>\s*array\(\s*'login',\s*'register',\s*'forgot-password',\s*'combined'\s*\)\s*\)/);
@@ -185,6 +186,8 @@ test("hero supports compact editor aliases and strip background images", async (
   assert.match(shortcodes, /title=\{attributes\.h1 \|\| attributes\.h2 \|\| attributes\.title/);
   assert.match(shortcodes, /attributes\.h2 && !attributes\.h1 \? "h2" : "h1"/);
   assert.match(shortcodes, /"product-tags": \(attributes\) => <ProductTagsShortcode/);
+  assert.match(shortcodes, /product_tags: \(attributes\) => <ProductTagsShortcode/);
+  assert.match(shortcodes, /oneOf\(attributes\.type, \["post", "product"\], "post"\)/);
   assert.match(shortcodes, /oneOf<SocialFeedLayout>\(attributes\.layout/);
   assert.match(shortcodes, /toInteger\(attributes\["page-size"\]/);
   assert.match(shortcodes, /description=\{attributes\.p \|\| attributes\.description/);
@@ -202,6 +205,18 @@ test("hero background media always fills and centers its mobile frame", async ()
   assert.match(hero, /pointer-events-none absolute inset-0 block !h-full !w-full max-w-none scale-105 object-cover object-center/);
   assert.match(hero, /block !h-full !w-full max-w-none object-cover object-center/);
   assert.match(styles, /\.shortcode-prerender-hero__image \{[\s\S]*object-fit: cover !important;[\s\S]*object-position: center !important;/);
+});
+
+test("hero calls to action follow brand radius and stay above mobile video controls", async () => {
+  const [hero, videoHero, productCard] = await Promise.all([
+    readFile(new URL("src/components/HeroMock.tsx", appRoot), "utf8"),
+    readFile(new URL("src/components/VideoHero.tsx", appRoot), "utf8"),
+    readFile(new URL("../../packages/ui/src/catalog/ProductCard.tsx", appRoot), "utf8"),
+  ]);
+  assert.doesNotMatch(hero, /HeroCtaLink[\s\S]{0,180}rounded-full/);
+  assert.match(videoHero, /relative z-30 flex flex-wrap gap-3/);
+  assert.match(videoHero, /primaryCta[\s\S]{0,180}rounded-control/);
+  assert.match(productCard, /product\.cta\.learn_more[\s\S]*?font-display text-xs font-semibold/);
 });
 
 test("slider product cards keep equal heights and crop media independently of source aspect", async () => {

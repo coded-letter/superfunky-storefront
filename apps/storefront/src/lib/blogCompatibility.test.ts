@@ -175,6 +175,50 @@ test("blog fallback retries malformed language and publish-status resolvers", as
   assert.match(requestedQueries[1], /\bcomments\s*\(/);
 });
 
+test("blog fallback retries opaque Polylang term-language resolver failures", async () => {
+  const requestedQueries: string[] = [];
+  const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
+    requestedQueries.push(query);
+    if (query.includes("language {")) {
+      return {
+        data: null,
+        errors: [{
+          message: "Internal server error",
+          path: ["posts", "nodes", 0, "tags", "nodes", 0, "language", "code"],
+        }],
+      };
+    }
+    return { data: { posts: { nodes: [] }, categories: { nodes: [] }, tags: { nodes: [] } } as T };
+  };
+
+  const response = await requestGraphqlWithCompatibility(
+    request,
+    `
+      query StorefrontBlogData($language: LanguageCodeFilterEnum!) {
+        posts(first: 100, where: { language: $language }) {
+          nodes {
+            id
+            tags {
+              nodes {
+                id
+                language {
+                  code
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { language: "PL" },
+    BLOG_DATA_COMPATIBILITY_RULES,
+  );
+
+  assert.equal(response.errors, undefined);
+  assert.equal(requestedQueries.length, 2);
+  assert.doesNotMatch(requestedQueries[1], /\blanguage\s*\{/);
+});
+
 test("archive fallback keeps post cards and terms while dropping expensive optional fields", () => {
   const compatible = createCompatiblePostArchiveQuery(`
     query Archive {

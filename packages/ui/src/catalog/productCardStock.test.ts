@@ -36,6 +36,26 @@ test("an in-stock variable product keeps the options CTA", () => {
   assert.equal(shouldShowProductLearnMore(product, true), false);
 });
 
+test("an out-of-stock simple product uses Learn more instead of add to cart", () => {
+  assert.equal(
+    shouldShowProductLearnMore(
+      { productType: "simple", inStock: false },
+      true,
+    ),
+    true,
+  );
+});
+
+test("backorderable products remain purchasable when WooCommerce reports them in stock", () => {
+  assert.equal(
+    shouldShowProductLearnMore(
+      { productType: "simple", inStock: true },
+      true,
+    ),
+    false,
+  );
+});
+
 test("external and grouped products retain their dedicated CTAs", () => {
   assert.equal(shouldShowProductLearnMore({ productType: "external" }, false), false);
   assert.equal(shouldShowProductLearnMore({ productType: "grouped" }, false), false);

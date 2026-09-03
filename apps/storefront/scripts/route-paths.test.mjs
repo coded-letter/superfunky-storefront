@@ -331,6 +331,27 @@ test("explicit public robots override backend-global Yoast noindex metadata", ()
   assert.equal(lowValueRoute?.indexable, false);
 });
 
+test("public product brand and tag archives ignore inherited backend noindex metadata", () => {
+  for (const [type, uri] of [
+    ["ProductBrand", "/brand/coded-letter/"],
+    ["ProductTag", "/product-tag/sale/"],
+  ]) {
+    const route = cmsRouteFromNode(
+      {
+        __typename: type,
+        name: "Public archive",
+        uri,
+        seo: { metaRobotsNoindex: "noindex", metaRobotsNofollow: "follow" },
+        funkycommercePublicRobots: { noindex: true, nofollow: false },
+      },
+      "terms",
+    );
+    assert.equal(route?.robots, "index, follow");
+    assert.equal(route?.robotsSource, "public-commerce-archive");
+    assert.equal(route?.indexable, true);
+  }
+});
+
 test("prerender keeps the public homepage indexable when WordPress is hidden", () => {
   const route = cmsRouteFromNode(
     {

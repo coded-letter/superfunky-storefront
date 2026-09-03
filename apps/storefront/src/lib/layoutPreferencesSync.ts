@@ -37,6 +37,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setFooterNewsletterLayout(layout.footerNewsletterLayout);
   prefs.setShowFooterNewsletter(layout.showFooterNewsletter);
   prefs.setFooterAssistantLayout(layout.footerAssistantLayout);
+  prefs.setFooterFeatureLayout(layout.footerFeatureLayout);
   prefs.setFooterLogoVariant(layout.footerLogoVariant);
   prefs.setFooterBottomBarLayout(layout.footerBottomBarLayout);
   prefs.setFooterExtraWrapperLayout(layout.footerExtraWrapperLayout);

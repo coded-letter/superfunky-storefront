@@ -38,6 +38,7 @@ export type FooterColumn = {
 export type FooterColumnsLayout =
   | "grid-1"
   | "grid-2-wide"
+  | "grid-3"
   | "grid-4"
   | "grid-5"
   | "grid-6"
@@ -45,6 +46,7 @@ export type FooterColumnsLayout =
   | "accordion-single";
 export type FooterNewsletterLayout = "banner" | "centered" | "image-bg";
 export type FooterAssistantLayout = "side-by-side" | "tabbed" | "stacked";
+export type FooterFeatureLayout = "separate" | "newsletter-spotify" | "newsletter-assistant" | "assistant-spotify" | "none";
 /** `"text"` shows the wordmark only. `"image"` shows only the gradient icon mark.
  * `"text-image"` (default) shows both, mirroring the header's logo treatment. */
 export type FooterLogoVariant = "text" | "image" | "text-image";
@@ -106,6 +108,9 @@ export type FooterMockupProps = {
    * (100%) rows, one after another — denser when both features compete for the
    * same footer real estate but neither should be hidden behind a tab. */
   assistantSpotifyLayout?: FooterAssistantLayout;
+  /** Chooses which optional footer features share a two-column row. `"separate"`
+   * preserves the independent newsletter and assistant/player sections. */
+  featureLayout?: FooterFeatureLayout;
   projectName?: string;
   logoUrl?: string;
   iconUrl?: string;
@@ -256,6 +261,7 @@ export function FooterMockup({
   spotifyPlayerDescription,
   spotifyPlayerProps,
   assistantSpotifyLayout = "side-by-side",
+  featureLayout = "separate",
   projectName = "Superfunky",
   logoUrl,
   iconUrl,
@@ -280,6 +286,18 @@ export function FooterMockup({
   const resolvedSpotifyPlayerTitle = spotifyPlayerTitle || t("footer.radio.title");
   const resolvedSpotifyPlayerDescription = spotifyPlayerDescription || t("footer.radio.description");
   const [activeAssistantTab, setActiveAssistantTab] = useState<"assistant" | "spotify">("assistant");
+  const showNewsletterFeature = showNewsletter
+    && (featureLayout === "separate" || featureLayout.startsWith("newsletter-"));
+  const showAssistantFeature = showAssistantFrame
+    && (featureLayout === "separate" || featureLayout.includes("assistant"));
+  const showSpotifyFeature = showSpotifyPlayer
+    && (featureLayout === "separate" || featureLayout.includes("spotify"));
+  const pairNewsletterFeature = showNewsletterFeature && (
+    (featureLayout === "newsletter-spotify" && showSpotifyFeature)
+    || (featureLayout === "newsletter-assistant" && showAssistantFeature)
+  );
+  const newsletterSpacing = pairNewsletterFeature ? "mb-0" : "mb-14";
+  const secondaryFeatureSpacing = pairNewsletterFeature ? "mb-0" : "mb-12";
   const visiblePaymentMethods = paymentMethods.filter((method) => !hiddenPaymentMethodKeys.includes(method.key));
   const visibleSocialLinks = filterVisibleSocialLinks(socialLinks, hiddenSocialLinkKeys);
   const safeExtraWrapperHtml = sanitizeStorefrontHtml(extraWrapperHtml);
@@ -309,9 +327,11 @@ export function FooterMockup({
       <div className="mx-auto w-full px-4 pb-8 pt-14 sm:px-6 lg:px-8" style={{ maxWidth: `${themeMaxWidthPx}px` }}>
         {logoNode}
 
-        {showNewsletter ? (
+        {showNewsletterFeature || showAssistantFeature || showSpotifyFeature ? (
+          <div className={pairNewsletterFeature ? "mb-12 grid items-start gap-5 lg:grid-cols-2" : ""}>
+        {showNewsletterFeature ? (
           newsletterLayout === "centered" ? (
-          <section className="relative mb-14 mx-auto grid max-w-xl gap-4 overflow-hidden rounded-3xl bg-brand-gradient p-8 text-center shadow-glow sm:p-10">
+          <section className={`relative mx-auto grid max-w-xl gap-4 overflow-hidden rounded-3xl bg-brand-gradient p-8 text-center shadow-glow sm:p-10 ${newsletterSpacing}`}>
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
             <div className="relative grid justify-items-center gap-2">
               <h2 className="m-0 font-display text-2xl font-bold text-white sm:text-3xl">{resolvedNewsletterTitle}</h2>
@@ -323,7 +343,7 @@ export function FooterMockup({
           </section>
         ) : newsletterLayout === "image-bg" ? (
           <section
-            className="relative mb-14 overflow-hidden rounded-3xl bg-cover bg-center p-8 shadow-glow sm:p-14"
+            className={`relative overflow-hidden rounded-3xl bg-cover bg-center p-8 shadow-glow sm:p-14 ${newsletterSpacing}`}
             style={{ backgroundImage: `linear-gradient(180deg, rgba(9,9,11,0.55), rgba(9,9,11,0.85)), url(${newsletterBackgroundImage})` }}
           >
             <div className="relative mx-auto grid max-w-lg justify-items-center gap-4 text-center">
@@ -335,7 +355,7 @@ export function FooterMockup({
             </div>
           </section>
         ) : (
-          <section className="relative mb-14 overflow-hidden rounded-3xl bg-brand-gradient p-8 shadow-glow sm:p-10">
+          <section className={`relative overflow-hidden rounded-3xl bg-brand-gradient p-8 shadow-glow sm:p-10 ${newsletterSpacing}`}>
             <div
               className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl"
               aria-hidden="true"
@@ -361,9 +381,9 @@ export function FooterMockup({
           )
         ) : null}
 
-        {showAssistantFrame || showSpotifyPlayer ? (
-          assistantSpotifyLayout === "tabbed" && showAssistantFrame && showSpotifyPlayer ? (
-            <section className="mb-12 grid gap-4">
+        {showAssistantFeature || showSpotifyFeature ? (
+          assistantSpotifyLayout === "tabbed" && showAssistantFeature && showSpotifyFeature ? (
+            <section className={`${secondaryFeatureSpacing} grid gap-4`}>
               <div
                 role="tablist"
                 aria-label={t("footer.assistant_spotify.aria")}
@@ -404,9 +424,9 @@ export function FooterMockup({
               )}
             </section>
           ) : assistantSpotifyLayout === "stacked" ? (
-            <section className="mb-12 grid gap-5">
-              {showAssistantFrame ? assistantSlot ?? <AssistantFrame title={resolvedAssistantFrameTitle} fullWidth /> : null}
-              {showSpotifyPlayer ? (
+            <section className={`${secondaryFeatureSpacing} grid gap-5`}>
+              {showAssistantFeature ? assistantSlot ?? <AssistantFrame title={resolvedAssistantFrameTitle} fullWidth /> : null}
+              {showSpotifyFeature ? (
                 <SpotifyFrame
                   title={resolvedSpotifyPlayerTitle}
                   description={resolvedSpotifyPlayerDescription}
@@ -416,20 +436,22 @@ export function FooterMockup({
               ) : null}
             </section>
           ) : (
-            <section className="mb-12 grid gap-5 lg:grid-cols-2">
-              {showAssistantFrame ? (
-                assistantSlot ?? <AssistantFrame title={resolvedAssistantFrameTitle} fullWidth={!showSpotifyPlayer} />
+            <section className={`${secondaryFeatureSpacing} grid gap-5 ${showAssistantFeature && showSpotifyFeature ? "lg:grid-cols-2" : ""}`}>
+              {showAssistantFeature ? (
+                assistantSlot ?? <AssistantFrame title={resolvedAssistantFrameTitle} fullWidth={!showSpotifyFeature} />
               ) : null}
-              {showSpotifyPlayer ? (
+              {showSpotifyFeature ? (
                 <SpotifyFrame
                   title={resolvedSpotifyPlayerTitle}
                   description={resolvedSpotifyPlayerDescription}
                   playerProps={spotifyPlayerProps}
-                  fullWidth={!showAssistantFrame}
+                  fullWidth={!showAssistantFeature}
                 />
               ) : null}
             </section>
           )
+        ) : null}
+          </div>
         ) : null}
 
         <section
@@ -438,7 +460,9 @@ export function FooterMockup({
               ? ""
               : columnsLayout === "grid-2-wide"
                 ? "sm:grid-cols-2"
-                : columnsLayout === "grid-1"
+              : columnsLayout === "grid-3"
+                ? "sm:grid-cols-2 lg:grid-cols-3"
+              : columnsLayout === "grid-1"
                   ? "grid-cols-1"
                   : columnsLayout === "grid-5"
                     ? "sm:grid-cols-2 lg:grid-cols-5"

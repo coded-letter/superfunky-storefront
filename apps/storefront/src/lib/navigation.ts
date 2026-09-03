@@ -129,7 +129,7 @@ export type StorefrontLayoutConfiguration = {
   headerSticky: boolean;
   headerSearchVariant: HeaderSearchVariant;
   headerLogoVariant: HeaderLogoVariant;
-  headerArrangement: "classic" | "single-row" | "centered";
+  headerArrangement: "classic" | "single-row" | "centered" | "island";
   cartTriggerVariant: CartTriggerVariant;
   showCartDrawerPromotedProduct: boolean;
   showAllCartPromotedProducts: boolean;
@@ -138,6 +138,7 @@ export type StorefrontLayoutConfiguration = {
   footerNewsletterLayout: FooterNewsletterLayout;
   showFooterNewsletter: boolean;
   footerAssistantLayout: FooterAssistantLayout;
+  footerFeatureLayout: "separate" | "newsletter-spotify" | "newsletter-assistant" | "assistant-spotify" | "none";
   footerLogoVariant: FooterLogoVariant;
   footerBottomBarLayout: FooterBottomBarLayout;
   footerExtraWrapperLayout: FooterExtraWrapperLayout;
@@ -389,6 +390,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   footerNewsletterLayout: "banner",
   showFooterNewsletter: true,
   footerAssistantLayout: "side-by-side",
+  footerFeatureLayout: "separate",
   footerLogoVariant: "text-image",
   footerBottomBarLayout: "split",
   footerExtraWrapperLayout: "inline",
@@ -701,6 +703,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         footerNewsletterLayout
         showFooterNewsletter
         footerAssistantLayout
+        footerFeatureLayout
         footerLogoVariant
         footerBottomBarLayout
         footerExtraWrapperLayout
@@ -1537,6 +1540,37 @@ const BRAND_PALETTE_IDS = [
   "slate", "mint", "plum", "citrus", "sky", "ember", "lagoon", "blush", "olive", "midnight",
 ] as const;
 
+const HEADER_VISIBILITY_FIELDS = [
+  "showHeaderLogo",
+  "showHeaderSearchIcon",
+  "showHeaderLanguageSwitcher",
+  "showHeaderCurrencySwitcher",
+  "showHeaderDarkModeToggle",
+  "showHeaderAccountLink",
+  "showHeaderReadingListLink",
+  "showHeaderWishlistLink",
+  "showHeaderCartIcon",
+  "showHeaderPublishButton",
+] as const;
+
+function recoverCorruptedHeaderVisibility(
+  layout: Partial<StorefrontLayoutConfiguration>,
+): Partial<StorefrontLayoutConfiguration> {
+  const hasSectionDefaultCorruption = layout.themeMaxWidthPx === 960
+    && layout.themeRadiusPx === 0
+    && layout.newsletterPopupCooldownDays === 1
+    && HEADER_VISIBILITY_FIELDS.every((field) => layout[field] === false);
+  if (!hasSectionDefaultCorruption) return layout;
+
+  return {
+    ...layout,
+    ...Object.fromEntries(HEADER_VISIBILITY_FIELDS.map((field) => [
+      field,
+      DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION[field],
+    ])),
+  };
+}
+
 /**
  * Strictly normalizes the backend's `layout` object: every enum is checked against
  * its exact backend-defined allowlist, every number is clamped to its documented
@@ -1548,7 +1582,7 @@ export function normalizeStorefrontLayoutConfiguration(
   layout: Partial<StorefrontLayoutConfiguration> | null | undefined,
 ): StorefrontLayoutConfiguration {
   const defaults = DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION;
-  const source = layout || {};
+  const source = recoverCorruptedHeaderVisibility(layout || {});
   return {
     schemaVersion: pickBoundedInt(source.schemaVersion, 1, Number.MAX_SAFE_INTEGER, defaults.schemaVersion),
     themeMaxWidthPx: pickBoundedInt(source.themeMaxWidthPx, 960, 1920, defaults.themeMaxWidthPx),
@@ -1600,7 +1634,7 @@ export function normalizeStorefrontLayoutConfiguration(
     headerLogoVariant: pickEnum(source.headerLogoVariant, ["text", "image", "text-image"] as const, defaults.headerLogoVariant),
     headerArrangement: pickEnum(
       source.headerArrangement,
-      ["classic", "single-row", "centered"] as const,
+      ["classic", "single-row", "centered", "island"] as const,
       defaults.headerArrangement,
     ),
     cartTriggerVariant: pickEnum(source.cartTriggerVariant, ["drawer", "dropdown"] as const, defaults.cartTriggerVariant),
@@ -1609,7 +1643,7 @@ export function normalizeStorefrontLayoutConfiguration(
     showFooter: pickBoolean(source.showFooter, defaults.showFooter),
     footerColumnsLayout: pickEnum(
       source.footerColumnsLayout,
-      ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"] as const,
+      ["grid-1", "grid-2-wide", "grid-3", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"] as const,
       defaults.footerColumnsLayout,
     ),
     footerNewsletterLayout: pickEnum(
@@ -1622,6 +1656,11 @@ export function normalizeStorefrontLayoutConfiguration(
       source.footerAssistantLayout,
       ["side-by-side", "tabbed", "stacked"] as const,
       defaults.footerAssistantLayout,
+    ),
+    footerFeatureLayout: pickEnum(
+      source.footerFeatureLayout,
+      ["separate", "newsletter-spotify", "newsletter-assistant", "assistant-spotify", "none"] as const,
+      defaults.footerFeatureLayout,
     ),
     footerLogoVariant: pickEnum(source.footerLogoVariant, ["text", "image", "text-image"] as const, defaults.footerLogoVariant),
     footerBottomBarLayout: pickEnum(source.footerBottomBarLayout, ["split", "centered"] as const, defaults.footerBottomBarLayout),

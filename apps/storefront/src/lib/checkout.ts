@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CartLineItem } from "@funky/ui";
 import { syncCartToBackend } from "./backendCart";
+import { checkoutCartMatchesShippingAddress } from "./checkoutInitialization";
 import { isBackendConfigured } from "@funky/sdk";
 import {
   applyCoupon,
@@ -103,9 +104,29 @@ export function useCheckoutCart(
         });
         return;
       }
+      if (syncResult.cart) {
+        setState({
+          cart: syncResult.cart,
+          loading: true,
+          error: null,
+          syncedCartRevision: null,
+        });
+      }
       const latestAddresses = latestAddressesRef.current;
       if (!latestAddresses.billingAddress || !latestAddresses.shippingAddress) {
-        setState({ cart: null, loading: false, error: null, syncedCartRevision: null });
+        setState((previous) => ({ ...previous, loading: false }));
+        return;
+      }
+      if (
+        syncResult.cart
+        && checkoutCartMatchesShippingAddress(syncResult.cart, latestAddresses.shippingAddress)
+      ) {
+        setState({
+          cart: syncResult.cart,
+          loading: false,
+          error: null,
+          syncedCartRevision: cartRevision,
+        });
         return;
       }
       const result = await updateCartCustomer(
@@ -114,12 +135,12 @@ export function useCheckoutCart(
       );
       if (cancelled) return;
       if (!result.ok) {
-        setState({
-          cart: null,
+        setState((previous) => ({
+          ...previous,
           loading: false,
           error: result.error,
           syncedCartRevision: null,
-        });
+        }));
         return;
       }
       setState({

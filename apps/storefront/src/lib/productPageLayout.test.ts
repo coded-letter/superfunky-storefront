@@ -4,6 +4,8 @@ import test from "node:test";
 import { normalizeProductPageLayout } from "../../../../packages/ui/src/state/productPageLayout.ts";
 
 const productPage = readFileSync(new URL("../pages/ProductMockupPage.tsx", import.meta.url), "utf8");
+const productGallery = readFileSync(new URL("../../../../packages/ui/src/catalog/ProductGallery.tsx", import.meta.url), "utf8");
+const quickView = readFileSync(new URL("../../../../packages/ui/src/catalog/ProductQuickViewModal.tsx", import.meta.url), "utf8");
 const preferenceSync = readFileSync(new URL("layoutPreferencesSync.ts", import.meta.url), "utf8");
 
 test("normalizes the persisted product template preference safely", () => {
@@ -19,6 +21,12 @@ test("studio layout keeps product details, reviews, and connections below its pr
   assert.match(productPage, /aria-label=\{t\("product\.information_aria"\)\}[\s\S]*?\{summary\}[\s\S]*?<\/section>[\s\S]*?\{details\}[\s\S]*?\{reviews\}[\s\S]*?\{connections\}/);
   assert.doesNotMatch(productPage, /lg:max-h-\[calc\(100dvh-8rem\)\]|lg:overflow-y-auto/);
   assert.match(productPage, /layout === "classic"/);
+});
+
+test("product media stays top-aligned with thumbnails immediately after the main image", () => {
+  assert.match(productPage, /layout === "classic"[\s\S]*?lg:items-start/);
+  assert.match(productGallery, /grid content-start gap-4 self-start/);
+  assert.match(productGallery, /<\/button>[\s\S]*?images\.length > 1[\s\S]*?scrollbar-thin flex gap-3/);
 });
 
 test("studio layout places only the configured secondary description below its actions", () => {
@@ -58,6 +66,7 @@ test("product descriptions swap primary and secondary positions without being dr
   );
   assert.match(productPage, /renderProductContent\(primaryDescriptionHtml\)/);
   assert.match(productPage, /renderProductContent\(secondaryDescriptionHtml\)/);
+  assert.match(quickView, /resolveProductQuickViewDescription\(product, productDescriptionsOrder\)/);
 });
 
 test("related product columns are configurable across all product recommendation grids", () => {

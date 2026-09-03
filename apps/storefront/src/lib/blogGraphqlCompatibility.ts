@@ -24,7 +24,10 @@ export function createCompatibleBlogDataQuery(query: string): string {
 const polylangRule: GraphqlCompatibilityRule = {
   matches: (message, error) =>
     (
-      message.includes("Cannot access offset of type string on string")
+      (
+        message === "Internal server error"
+        || message.includes("Cannot access offset of type string on string")
+      )
       && error.path?.some((segment) => segment === "language" || segment === "translations") === true
     )
     || hasOnlyMissingGraphqlFields([{ message }], ["language", "translations"]),

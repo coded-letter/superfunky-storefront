@@ -10,6 +10,7 @@ import {
   type AbandonedCartPublicConfig,
   type AbandonedCartPublicConfigSource,
   isAbandonedCartBackendConfigured,
+  isAbandonedCartFeatureAvailable,
   normalizeAbandonedCartPublicConfig,
   stripAbandonedCartRecoveryParams,
   type AbandonedCartSource,
@@ -603,14 +604,16 @@ export function useAbandonedCartTracking(
   }, [items.length]);
 
   useEffect(() => {
-    if (!isAbandonedCartBackendConfigured) return undefined;
+    if (!isAbandonedCartBackendConfigured || !isAbandonedCartFeatureAvailable(publicConfig)) {
+      return undefined;
+    }
     const stopIdle = setupIdleTracker(() => stateRef.current, idleMs, debounceMs);
     const stopPageExit = setupPageExitTracker(() => stateRef.current, debounceMs);
     return () => {
       stopIdle();
       stopPageExit();
     };
-  }, [debounceMs, idleMs, languageBackendCode, languageCode]);
+  }, [debounceMs, idleMs, languageBackendCode, languageCode, publicConfig]);
 
   return {
     completeCapture: () => {

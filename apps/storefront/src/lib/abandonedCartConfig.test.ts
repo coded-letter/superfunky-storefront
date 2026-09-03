@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isAbandonedCartFeatureAvailable,
   normalizeAbandonedCartPublicConfig,
   stripAbandonedCartRecoveryParams,
 } from "./abandonedCartConfig.ts";
@@ -43,6 +44,32 @@ test("normalizes abandoned-cart public config against safe language fallbacks", 
   assert.equal(normalized.checkout.idleMs, 30000);
   assert.equal(normalized.store.cartUrl, "/cart");
   assert.equal(normalized.store.recoveryWindow, 30);
+});
+
+test("requires the abandoned-cart plugin endpoint and enabled checkout capability", () => {
+  const normalized = normalizeAbandonedCartPublicConfig(
+    {
+      endpoints: { headless: "/wp-json/funkycommerce/v1/abandoned-carts" },
+      checkout: { enabled: true },
+    },
+    { languageCode: "en", locale: "en_US" },
+  );
+
+  assert.equal(isAbandonedCartFeatureAvailable(normalized), true);
+  assert.equal(
+    isAbandonedCartFeatureAvailable({
+      ...normalized,
+      endpoints: { ...normalized.endpoints, headless: "" },
+    }),
+    false,
+  );
+  assert.equal(
+    isAbandonedCartFeatureAvailable({
+      ...normalized,
+      checkout: { ...normalized.checkout, enabled: false },
+    }),
+    false,
+  );
 });
 
 test("strips abandoned-cart recovery params without touching other params", () => {

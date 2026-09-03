@@ -160,10 +160,10 @@ export function HeroMock({
           {primaryCta || secondaryCta ? (
             <div className="mx-auto flex flex-wrap justify-center gap-3 pt-2">
               {primaryCta ? (
-                <HeroCtaLink cta={primaryCta} className="rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5" />
+                <HeroCtaLink cta={primaryCta} className="rounded-control bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5" />
               ) : null}
               {secondaryCta ? (
-                <HeroCtaLink cta={secondaryCta} className="rounded-full border border-white/25 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:bg-white/10" />
+                <HeroCtaLink cta={secondaryCta} className="rounded-control border border-white/25 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:bg-white/10" />
               ) : null}
             </div>
           ) : null}
@@ -208,10 +208,10 @@ export function HeroMock({
             {primaryCta || secondaryCta ? (
               <div className="flex flex-wrap gap-3 pt-2">
                 {primaryCta ? (
-                  <HeroCtaLink cta={primaryCta} className="rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5" />
+                  <HeroCtaLink cta={primaryCta} className="rounded-control bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5" />
                 ) : null}
                 {secondaryCta ? (
-                  <HeroCtaLink cta={secondaryCta} className="rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:bg-white/10" />
+                  <HeroCtaLink cta={secondaryCta} className="rounded-control border border-white/40 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:bg-white/10" />
                 ) : null}
               </div>
             ) : null}
@@ -240,12 +240,12 @@ export function HeroMock({
           {primaryCta || secondaryCta ? (
             <div className="flex flex-wrap gap-3 pt-2">
               {primaryCta ? (
-                <HeroCtaLink cta={primaryCta} className="rounded-full bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5" />
+                <HeroCtaLink cta={primaryCta} className="rounded-control bg-brand-gradient px-6 py-3 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5" />
               ) : null}
               {secondaryCta ? (
                 <HeroCtaLink
                   cta={secondaryCta}
-                  className="rounded-full border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-900 no-underline transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  className="rounded-control border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-900 no-underline transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 />
               ) : null}
             </div>
@@ -292,12 +292,12 @@ export function HeroMock({
           {primaryCta || secondaryCta ? (
             <div className="mx-auto flex flex-wrap justify-center gap-3 pt-2">
               {primaryCta ? (
-                <HeroCtaLink cta={primaryCta} className="rounded-full bg-zinc-900 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5 hover:shadow-soft dark:bg-zinc-100 dark:text-zinc-900" />
+                <HeroCtaLink cta={primaryCta} className="rounded-control bg-zinc-900 px-6 py-3 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5 hover:shadow-soft dark:bg-zinc-100 dark:text-zinc-900" />
               ) : null}
               {secondaryCta ? (
                 <HeroCtaLink
                   cta={secondaryCta}
-                  className="inline-flex items-center gap-1.5 rounded-full px-6 py-3 text-sm font-semibold text-zinc-600 no-underline transition hover:text-brand-600 dark:text-zinc-300 dark:hover:text-brand-400"
+                  className="inline-flex items-center gap-1.5 rounded-control px-6 py-3 text-sm font-semibold text-zinc-600 no-underline transition hover:text-brand-600 dark:text-zinc-300 dark:hover:text-brand-400"
                   suffix={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
                 />
               ) : null}
@@ -338,14 +338,14 @@ export function HeroMock({
           {primaryCta ? (
             <HeroCtaLink
               cta={primaryCta}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 no-underline transition hover:-translate-y-0.5 hover:shadow-soft"
+              className="inline-flex items-center gap-1.5 rounded-control bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 no-underline transition hover:-translate-y-0.5 hover:shadow-soft"
               suffix={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
             />
           ) : null}
           {secondaryCta ? (
             <HeroCtaLink
               cta={secondaryCta}
-              className="inline-flex items-center rounded-full border border-white/60 px-5 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+              className="inline-flex items-center rounded-control border border-white/60 px-5 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
             />
           ) : null}
         </div>

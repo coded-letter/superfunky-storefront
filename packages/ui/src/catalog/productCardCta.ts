@@ -16,5 +16,5 @@ export function isOutOfStockVariableProduct(product: ProductCtaData): boolean {
 export function shouldShowProductLearnMore(product: ProductCtaData, hasPrice: boolean): boolean {
   if (product.productType === "external" || product.productType === "grouped") return false;
 
-  return !hasPrice || isOutOfStockVariableProduct(product);
+  return !hasPrice || product.inStock === false || isOutOfStockVariableProduct(product);
 }

@@ -36,7 +36,7 @@ export function ArchiveDescriptionSection({
   html: string;
 }) {
   return (
-    <section className="grid gap-6 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8 lg:grid-cols-[240px,minmax(0,1fr)] lg:gap-10 lg:p-10">
+    <section className={`grid gap-6 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8 lg:gap-10 lg:p-10 ${image ? "lg:grid-cols-[240px,minmax(0,1fr)]" : ""}`}>
       {image ? (
         <ResponsiveImage
           src={image}
@@ -48,7 +48,7 @@ export function ArchiveDescriptionSection({
       ) : null}
       <div className="grid gap-3">
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">{eyebrow}</span>
-        <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">About {title}</h2>
+        <h2 className="m-0 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
         {/* Ready for real CMS/GraphQL HTML (headings, lists, links, inline images) — the
          * mock data above already ships as HTML strings so this renders identically to how
          * a WP/Woo taxonomy description field would once the backend is wired up. */}

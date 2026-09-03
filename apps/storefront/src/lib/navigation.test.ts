@@ -6,6 +6,7 @@ import {
   hasOnlyMenuSchemaCompatibilityErrors,
   mapBestAvailableMenu,
   normalizeStorefrontConfiguration,
+  normalizeStorefrontLayoutConfiguration,
   omitUnsupportedNavigationLeafFields,
   omitUnsupportedLayoutFields,
   parseUiStrings,
@@ -52,10 +53,10 @@ test("interaction sounds remain disabled unless the backend explicitly enables t
 });
 
 test("prerender and runtime share the current navigation hydration cache key", () => {
-  assert.equal(navigationDataCacheKey("en"), "navigation-data:v15:en");
+  assert.equal(navigationDataCacheKey("en"), "navigation-data:v16:en");
   assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
   assert.match(prerenderSource, /cacheKey: navigationDataCacheKey\(languageCode\)/);
-  assert.doesNotMatch(prerenderSource, /navigation-data:v14/);
+  assert.doesNotMatch(prerenderSource, /navigation-data:v15/);
 });
 
 test("layout GraphQL compatibility retries can omit unsupported child fields without dropping the layout object", () => {
@@ -567,10 +568,60 @@ test("sanitizes configured chrome HTML and normalizes safe links", () => {
 test("normalizeStorefrontLayoutConfiguration falls back to defaults for every field and defines a bounded schemaVersion", () => {
   assert.match(
     navigationSource,
-    /const source = layout \|\| \{\};/,
+    /recoverCorruptedHeaderVisibility\(layout \|\| \{\}\)/,
     "the normalizer must treat a missing/null backend layout as an empty object so every field falls back to its default",
   );
   assert.match(navigationSource, /schemaVersion: pickBoundedInt\(source\.schemaVersion, 1, Number\.MAX_SAFE_INTEGER, defaults\.schemaVersion\)/);
+});
+
+test("normalizeStorefrontLayoutConfiguration repairs the section-save header corruption fingerprint", () => {
+  const defaults = normalizeStorefrontLayoutConfiguration(null);
+  const corrupted = {
+    ...defaults,
+    themeMaxWidthPx: 960,
+    themeRadiusPx: 0,
+    newsletterPopupCooldownDays: 1,
+    brandPalette: "amber" as const,
+    showFooter: false,
+    showHeaderLogo: false,
+    showHeaderSearchIcon: false,
+    showHeaderLanguageSwitcher: false,
+    showHeaderCurrencySwitcher: false,
+    showHeaderDarkModeToggle: false,
+    showHeaderAccountLink: false,
+    showHeaderReadingListLink: false,
+    showHeaderWishlistLink: false,
+    showHeaderCartIcon: false,
+    showHeaderPublishButton: false,
+  };
+
+  const recovered = normalizeStorefrontLayoutConfiguration(corrupted);
+  assert.equal(recovered.showHeaderLogo, true);
+  assert.equal(recovered.showHeaderSearchIcon, true);
+  assert.equal(recovered.showHeaderCartIcon, true);
+  assert.equal(recovered.brandPalette, "amber");
+  assert.equal(recovered.showFooter, false);
+});
+
+test("normalizeStorefrontLayoutConfiguration preserves an intentional all-hidden header without the corruption fingerprint", () => {
+  const defaults = normalizeStorefrontLayoutConfiguration(null);
+  const hidden = normalizeStorefrontLayoutConfiguration({
+    ...defaults,
+    showHeaderLogo: false,
+    showHeaderSearchIcon: false,
+    showHeaderLanguageSwitcher: false,
+    showHeaderCurrencySwitcher: false,
+    showHeaderDarkModeToggle: false,
+    showHeaderAccountLink: false,
+    showHeaderReadingListLink: false,
+    showHeaderWishlistLink: false,
+    showHeaderCartIcon: false,
+    showHeaderPublishButton: false,
+  });
+
+  assert.equal(hidden.showHeaderLogo, false);
+  assert.equal(hidden.showHeaderSearchIcon, false);
+  assert.equal(hidden.showHeaderCartIcon, false);
 });
 
 test("normalizeStorefrontLayoutConfiguration strictly allowlists enum fields instead of passing raw backend strings through", () => {

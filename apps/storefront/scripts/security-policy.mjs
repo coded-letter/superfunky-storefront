@@ -1,6 +1,6 @@
 const INLINE_STYLE_SOURCE = "'unsafe-inline'";
 const BASE_STYLE_SOURCES = ["'self'", INLINE_STYLE_SOURCE];
-const BASE_SCRIPT_SOURCES = ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https:", "blob:"];
+const BASE_SCRIPT_SOURCES = ["'self'", "'unsafe-inline'", "'unsafe-eval'", "'inline-speculation-rules'", "https:", "blob:"];
 
 export function withStorefrontEditorPolicy(policy, cmsEndpoint) {
   const directives = parsePolicy(policy);
@@ -52,6 +52,7 @@ export function policyAllowsEditorCode(policy) {
       const sources = directives.get(name);
       return sources?.includes("'unsafe-inline'")
         && sources.includes("'unsafe-eval'")
+        && sources.includes("'inline-speculation-rules'")
         && sources.includes("https:");
     })
     && directives.get("script-src-attr")?.length === 1

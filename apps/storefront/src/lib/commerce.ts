@@ -190,6 +190,7 @@ export type RawProductCard = {
   uri: string | null;
   name: string | null;
   shortDescription: string | null;
+  description?: string | null;
   engagementRating: PublicEngagementRatingSummary;
   featured: boolean | null;
   onSale: boolean | null;
@@ -366,6 +367,7 @@ export const PRODUCT_CARD_FIELDS = /* GraphQL */ `
   uri
   name
   shortDescription(format: RENDERED)
+  description(format: RENDERED)
   engagementRating {
     average
     count
@@ -456,6 +458,7 @@ export const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
   uri
   name
   shortDescription(format: RENDERED)
+  description(format: RENDERED)
   engagementRating {
     average
     count
@@ -1472,6 +1475,7 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
     brandSlugs: product.productBrands?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
     name: product.name?.trim() || "Untitled product",
     subtitle: htmlToText(product.shortDescription || "") || undefined,
+    longDescription: htmlToText(product.description || "") || undefined,
     imageUrl: product.image?.sourceUrl || undefined,
     gallery: imageUrls.length ? imageUrls : undefined,
     brand: brand?.name || undefined,

@@ -5,8 +5,10 @@ import { AlertTriangle, Banknote, Check, ChevronDown, Copy, CreditCard, PackageC
 import { CurrencyMark, normalizeLanguagePath, useCart, useCurrency, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { StandaloneApplicationNotice, useApplicationShortcode, useEmbeddedApplicationShortcode } from "../components/applicationShortcodes";
 import { saveCheckoutEmail, saveNewsletterEmail, useAbandonedCartPublicConfig, useAbandonedCartTracking } from "../lib/abandonedCart";
+import { isAbandonedCartFeatureAvailable } from "../lib/abandonedCartConfig";
 import { syncCartToBackend } from "../lib/backendCart";
 import { checkoutApplyCoupon, checkoutRemoveCoupon, DEFAULT_FREE_SHIPPING_METHOD, isDigitalOnlyCart, mapShippingOptionsToDisplayMethods, resolveFreeShippingThreshold, type DisplayShippingMethod, useCheckoutCart } from "../lib/checkout";
+import { isCheckoutPaymentMethodAvailable } from "../lib/checkoutPaymentAvailability";
 import { isBackendConfigured } from "@funky/sdk";
 import { useStorefrontPath } from "../lib/storefrontPaths";
 import { getStripe, getStripePublishableKey, isStripeConfigured } from "../lib/stripe";
@@ -254,8 +256,9 @@ export function CheckoutMockupPage() {
   const abandonedCartConsentLabel =
     abandonedCartConfig.config?.checkout.consentLabel ||
     (abandonedCartConfig.config?.checkout.mode === "legitimate_interest"
-      ? "We will use your checkout email under legitimate interests to recover your cart."
-      : "I consent to abandoned-cart recovery emails.");
+      ? t("checkout.recovery.legitimate_interest")
+      : t("checkout.recovery.consent"));
+  const abandonedCartEnabled = isAbandonedCartFeatureAvailable(abandonedCartConfig.config);
   const abandonedCartTrackingConsent = abandonedCartConfig.loaded
     ? (abandonedCartConsentRequired ? abandonedCartConsentAccepted : true)
     : false;
@@ -277,21 +280,21 @@ export function CheckoutMockupPage() {
     void getStorefrontAccount().then((account) => {
       if (!cancelled && account) {
         // Autofill email and phone
-        setBillingEmail(account.email);
-        setBillingPhone(account.billingAddress?.phone || "");
+        setBillingEmail((previous) => previous || account.email);
+        setBillingPhone((previous) => previous || account.billingAddress?.phone || "");
         
         // Autofill billing address
         setBillingAddress((prev) => ({
           ...prev,
-          firstName: account.billingAddress?.firstName || account.firstName || prev.firstName,
-          lastName: account.billingAddress?.lastName || account.lastName || prev.lastName,
-          company: account.billingAddress?.company || prev.company,
-          address1: account.billingAddress?.address1 || prev.address1,
-          address2: account.billingAddress?.address2 || prev.address2,
-          city: account.billingAddress?.city || prev.city,
-          state: account.billingAddress?.state || prev.state,
-          postcode: account.billingAddress?.postcode || prev.postcode,
-          countryCode: account.billingAddress?.country?.toUpperCase() || prev.countryCode,
+          firstName: prev.firstName || account.billingAddress?.firstName || account.firstName || "",
+          lastName: prev.lastName || account.billingAddress?.lastName || account.lastName || "",
+          company: prev.company || account.billingAddress?.company || "",
+          address1: prev.address1 || account.billingAddress?.address1 || "",
+          address2: prev.address2 || account.billingAddress?.address2 || "",
+          city: prev.city || account.billingAddress?.city || "",
+          state: prev.state || account.billingAddress?.state || "",
+          postcode: prev.postcode || account.billingAddress?.postcode || "",
+          countryCode: prev.countryCode || account.billingAddress?.country?.toUpperCase() || defaultCountryCode,
         }));
       }
     });
@@ -299,7 +302,7 @@ export function CheckoutMockupPage() {
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn]);
+  }, [defaultCountryCode, isLoggedIn]);
 
   const [shippingMethod, setShippingMethod] = useState<ShippingMethodId>("standard");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
@@ -310,7 +313,7 @@ export function CheckoutMockupPage() {
     cryptoGatewayTitle,
     cryptoGatewayDescription,
     cryptoAssets,
-    isCodAvailable,
+    isCodAvailable: isConfiguredCodAvailable,
     isBacsAvailable,
     isCheckAvailable,
   } = usePaymentGateways(currencyCode);
@@ -348,27 +351,6 @@ export function CheckoutMockupPage() {
     if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "cheque" && !isCheckAvailable) setPaymentMethod("stripe");
   }, [paymentMethod, isCheckAvailable, isCryptoOnlyCurrency]);
-  // Every other gateway falls back to "stripe" when it becomes unavailable, so the
-  // "Pay online" option must fall back to the next real gateway when the backend
-  // reports its Stripe gateway isn't configured/enabled — otherwise the checkout is
-  // stuck on a hidden, unselectable payment method.
-  useEffect(() => {
-    if (isCryptoOnlyCurrency || !isBackendConfigured || isStripeGatewayEnabled) return;
-    if (paymentMethod !== "stripe" && paymentMethod !== "blik") return;
-    if (isBacsAvailable) setPaymentMethod("bacs");
-    else if (isCheckAvailable) setPaymentMethod("cheque");
-    else if (isCodAvailable) setPaymentMethod("cod");
-    else if (isCryptoAvailable) setPaymentMethod("crypto");
-  }, [
-    paymentMethod,
-    isBackendConfigured,
-    isStripeGatewayEnabled,
-    isBacsAvailable,
-    isCheckAvailable,
-    isCodAvailable,
-    isCryptoAvailable,
-    isCryptoOnlyCurrency,
-  ]);
   useEffect(() => {
     setCreateAccount(requireAccountCreation);
   }, [isLoggedIn, requireAccountCreation]);
@@ -430,7 +412,31 @@ export function CheckoutMockupPage() {
     adoptCart: adoptCheckoutCart,
     selectMethod: selectCheckoutShippingMethod,
   } = useCheckoutCart(billingStoreAddress, deliveryStoreAddress, cartRevision, items);
+  const isCodAvailable = isCheckoutPaymentMethodAvailable(
+    checkoutCart,
+    "cod",
+    isConfiguredCodAvailable,
+  );
   const shouldHideShipping = checkoutStoreMode === "digital" || isDigitalOnlyCart(checkoutCart, items);
+  // The Store API returns shipping-dependent gateways after calculating the cart.
+  // Use that response for COD instead of the earlier global WPGraphQL snapshot.
+  useEffect(() => {
+    if (isCryptoOnlyCurrency || !isBackendConfigured || isStripeGatewayEnabled) return;
+    if (paymentMethod !== "stripe" && paymentMethod !== "blik") return;
+    if (isBacsAvailable) setPaymentMethod("bacs");
+    else if (isCheckAvailable) setPaymentMethod("cheque");
+    else if (isCodAvailable) setPaymentMethod("cod");
+    else if (isCryptoAvailable) setPaymentMethod("crypto");
+  }, [
+    paymentMethod,
+    isBackendConfigured,
+    isStripeGatewayEnabled,
+    isBacsAvailable,
+    isCheckAvailable,
+    isCodAvailable,
+    isCryptoAvailable,
+    isCryptoOnlyCurrency,
+  ]);
   useEffect(() => {
     if (isCryptoOnlyCurrency) return;
     if (paymentMethod === "cod" && (shouldHideShipping || !isCodAvailable)) {
@@ -1418,24 +1424,26 @@ export function CheckoutMockupPage() {
             </CheckoutSection>
           )}
 
-          <CheckoutSection title="Cart recovery">
-            {abandonedCartConsentRequired ? (
-              <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={abandonedCartConsentAccepted}
-                  onChange={(event) => setAbandonedCartConsentAccepted(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
-                />
-                <span>{abandonedCartConsentLabel}</span>
-              </label>
-            ) : (
-              <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">{abandonedCartConsentLabel}</p>
-            )}
-            <p className="m-0 text-xs text-zinc-400 dark:text-zinc-500">
-              Your checkout details are used only to recover this cart and complete your order.
-            </p>
-          </CheckoutSection>
+          {abandonedCartConfig.loaded && abandonedCartEnabled ? (
+            <CheckoutSection title={t("checkout.recovery.title")}>
+              {abandonedCartConsentRequired ? (
+                <label className="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={abandonedCartConsentAccepted}
+                    onChange={(event) => setAbandonedCartConsentAccepted(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-400 dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                  <span>{abandonedCartConsentLabel}</span>
+                </label>
+              ) : (
+                <p className="m-0 text-sm text-zinc-600 dark:text-zinc-400">{abandonedCartConsentLabel}</p>
+              )}
+              <p className="m-0 text-xs text-zinc-400 dark:text-zinc-500">
+                {t("checkout.recovery.details")}
+              </p>
+            </CheckoutSection>
+          ) : null}
 
           {!shouldHideShipping ? (
             <CheckoutSection title={t("checkout.delivery.title")}>
