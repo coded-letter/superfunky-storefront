@@ -150,6 +150,7 @@ function SpotifyRadioShortcode({ attributes }: ShortcodeProps) {
 }
 
 function CategoriesShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data: commerce, isLoading: commerceLoading, error: commerceError } = useCommerceData();
   const { data: blog, isLoading: blogLoading, error: blogError } = useBlogData();
   const type = oneOf(attributes.type, ["post", "product", "brand"], "product");
@@ -197,7 +198,11 @@ function CategoriesShortcode({ attributes }: ShortcodeProps) {
               <ResponsiveImage src={term.imageUrl} alt="" sizes="(min-width: 768px) 25vw, 50vw" className="mb-2 aspect-[4/3] w-full rounded-xl object-cover" />
             ) : null}
             <strong className="text-zinc-900 dark:text-zinc-100">{term.name}</strong>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{term.count} {type === "post" ? "posts" : "products"}</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {t(type === "post"
+                ? term.count === 1 ? "shortcode.count.post" : "shortcode.count.posts"
+                : term.count === 1 ? "shortcode.count.product" : "shortcode.count.products", { count: term.count })}
+            </span>
           </Link>
         ))}
       </div>
@@ -492,7 +497,14 @@ function StickyPostsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function TagsShortcode({ attributes }: ShortcodeProps) {
-  const { data, isLoading, error } = useBlogData();
+  const t = useT();
+  const { data: blog, isLoading: blogLoading, error: blogError } = useBlogData();
+  const { data: commerce, isLoading: commerceLoading, error: commerceError } = useCommerceData();
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const type = oneOf(attributes.type, ["post", "product"], "post");
+  const data = type === "product" ? commerce : blog;
+  const isLoading = type === "product" ? commerceLoading : blogLoading;
+  const error = type === "product" ? commerceError : blogError;
   const include = csv(attributes.include);
   const tags = withCollectionOffset(
     sortItems(
@@ -503,13 +515,13 @@ function TagsShortcode({ attributes }: ShortcodeProps) {
     attributes.offset,
     toInteger(attributes.limit, 24, 1, 100),
   );
-  if (isLoading) return <ContentLoadingState compact label="Loading journal tags" />;
+  if (isLoading) return <ContentLoadingState compact label={type === "product" ? t("loading.product") : t("loading.post")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
-  if (!tags.length) return <ShortcodeStatus message="No tags matched this shortcode." />;
+  if (!tags.length) return <ShortcodeStatus message={t(type === "product" ? "shortcode.product_tags.empty" : "shortcode.tags.empty")} />;
   return (
-    <ShortcodeSection title={attributes.title || "Tags"}>
+    <ShortcodeSection title={attributes.title || t(type === "product" ? "shortcode.product_tags.title" : "shortcode.tags.title")}>
       <div className={attributes.layout === "cards" ? "grid gap-3 sm:grid-cols-3" : "flex flex-wrap gap-2"}>
-        {tags.map((tag) => <Link key={tag.id} to={tag.uri} className="rounded-full border border-dashed border-zinc-300 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 no-underline dark:border-zinc-700 dark:text-zinc-400">#{tag.name} ({tag.count})</Link>)}
+        {tags.map((tag) => <Link key={tag.id} to={type === "product" ? normalizeLanguagePath(tag.uri, languageCode, configuredLanguageCodes) : tag.uri} className="rounded-full border border-dashed border-zinc-300 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 no-underline dark:border-zinc-700 dark:text-zinc-400">#{tag.name} ({tag.count})</Link>)}
       </div>
     </ShortcodeSection>
   );
@@ -531,9 +543,9 @@ function ProductTagsShortcode({ attributes }: ShortcodeProps) {
   );
   if (isLoading) return <ContentLoadingState compact label={t("loading.product")} />;
   if (error) return <ShortcodeStatus message={error.message} isError />;
-  if (!tags.length) return <ShortcodeStatus message="No product tags matched this shortcode." />;
+  if (!tags.length) return <ShortcodeStatus message={t("shortcode.product_tags.empty")} />;
   return (
-    <ShortcodeSection title={attributes.title || "Product tags"}>
+    <ShortcodeSection title={attributes.title || t("shortcode.product_tags.title")}>
       <div className={attributes.layout === "cards" ? "grid gap-3 sm:grid-cols-3" : "flex flex-wrap gap-2"}>
         {tags.map((tag) => <Link key={tag.id} to={normalizeLanguagePath(tag.uri, languageCode, configuredLanguageCodes)} className="rounded-full border border-dashed border-zinc-300 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500 no-underline dark:border-zinc-700 dark:text-zinc-400">#{tag.name} ({tag.count})</Link>)}
       </div>
@@ -542,6 +554,7 @@ function ProductTagsShortcode({ attributes }: ShortcodeProps) {
 }
 
 function AuthorsShortcode({ attributes }: ShortcodeProps) {
+  const t = useT();
   const { data, isLoading, error } = useBlogData();
   const include = csv(attributes.include);
   const authors = withCollectionOffset(
@@ -566,10 +579,10 @@ function AuthorsShortcode({ attributes }: ShortcodeProps) {
           <article key={author.id} className="grid gap-3 rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-5 dark:border-zinc-800 dark:bg-zinc-950/40">
             <div className="flex items-center gap-3">
               {author.avatarUrl ? <ResponsiveImage src={author.avatarUrl} alt="" sizes="2.75rem" className="h-11 w-11 rounded-full object-cover" /> : <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-gradient text-sm font-bold text-white">{initials(author.name)}</span>}
-              <div><h3 className="m-0 font-display font-bold">{author.name}</h3><span className="text-xs text-zinc-500">{author.postCount} posts</span></div>
+              <div><h3 className="m-0 font-display font-bold">{author.name}</h3><span className="text-xs text-zinc-500">{t(author.postCount === 1 ? "shortcode.count.post" : "shortcode.count.posts", { count: author.postCount })}</span></div>
             </div>
             {attributes["show-bio"] !== "false" && author.bio ? <p className="m-0 line-clamp-3 text-sm text-zinc-500">{author.bio}</p> : null}
-            <Link to={author.uri || `/author/${author.slug}`} className="text-sm font-semibold text-brand-600 no-underline">Read all →</Link>
+            <Link to={author.uri || `/author/${author.slug}`} className="text-sm font-semibold text-brand-600 no-underline">{t("shortcode.author.all_posts")} →</Link>
           </article>
         ))}
       </div>
@@ -1557,6 +1570,7 @@ export const WORDPRESS_SHORTCODE_RENDERERS: Record<string, WordPressShortcodeRen
   sticky_posts: (attributes) => <StickyPostsShortcode attributes={attributes} />,
   tags: (attributes) => <TagsShortcode attributes={attributes} />,
   "product-tags": (attributes) => <ProductTagsShortcode attributes={attributes} />,
+  product_tags: (attributes) => <ProductTagsShortcode attributes={attributes} />,
   authors: (attributes) => <AuthorsShortcode attributes={attributes} />,
   reviews: (attributes) => <ReviewsShortcode attributes={attributes} />,
   comments: (attributes) => <CommentsShortcode attributes={attributes} />,

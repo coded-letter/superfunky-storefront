@@ -169,6 +169,8 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(prerenderSource, /storefront-static-header-nav-row/);
   assert.match(prerenderSource, /promoHtml: sanitizeCmsHtml/);
   assert.match(prerenderSource, /storefront-static-announcement.*staticChromeConfig\.promoHtml/);
+  assert.match(prerenderSource, /staticChromeConfig\.iconUrl[\s\S]*?<link rel="icon"/);
+  assert.match(prerenderSource, /decorationBranding\?\.iconUrl/);
   assert.match(prerenderSource, /storefront-static-announcement-content/);
   assert.match(prerenderSource, /renderStaticBreadcrumbs/);
   assert.match(prerenderSource, /route\.breadcrumbs/);
@@ -223,7 +225,7 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(indexSource, /\[data-static-react-parity\] \.storefront-static-header-nav-row/);
   assert.match(indexSource, /\.storefront-static-search \{[\s\S]*display: none/);
   assert.match(indexSource, /@media \(min-width: 1024px\) \{[\s\S]*\.storefront-static-search \{ display: flex; \}/);
-  assert.match(headerSource, /arrangement === "centered"[\s\S]*?flex flex-wrap items-center gap-2/);
+  assert.match(headerSource, /arrangement === "centered"[\s\S]*?hasInlineDesktopNavigation[\s\S]*?items-center gap-2/);
   assert.match(headerSource, /\[&_ol\]:m-0 \[&_p\]:m-0 \[&_ul\]:m-0/);
   assert.match(assistantSource, /reserveHeaderAction = themeConfig\.enabled && themeConfig\.showHeader/);
   assert.match(assistantSource, /const \[pendingOpen, setPendingOpen\] = useState\(false\)/);
@@ -232,12 +234,22 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(cookieConsentSource, /data-storefront-control="cookie-settings-banner"/);
   assert.match(cookieConsentSource, /data-storefront-control="cookie-accept-all"/);
   assert.match(cookieConsentSource, /data-storefront-control="cookie-settings"/);
-  assert.match(headerSource, /style=\{\{ height: headerHeight \}\} className="shrink-0"/);
+  assert.match(headerSource, /height: headerHeight \+ \(arrangement === "island" && isScrolled \? 10 : 0\)/);
   assert.doesNotMatch(headerSource, /transition-\[height\]/);
   assert.match(indexSource, /\.storefront-static-mobile-backdrop\.is-open/);
   assert.match(indexSource, /max-height: var\(--storefront-static-submenu-max-height/);
   assert.doesNotMatch(indexSource, /transform: translateY\(-1rem\)/);
   assert.doesNotMatch(prerenderSource, /storefront-static-menu-columns:\$\{megaMenu\.columns\};width:/);
+});
+
+test("the document globally enables safe same-origin speculation rules", () => {
+  assert.match(indexSource, /<script type="speculationrules">/);
+  assert.match(indexSource, /"prefetch"[\s\S]*"eagerness": "moderate"/);
+  assert.match(indexSource, /"prerender"[\s\S]*"eagerness": "conservative"/);
+  for (const privatePath of ["cart", "checkout", "account", "auth"]) {
+    assert.ok(indexSource.includes(`"href_matches": "/${privatePath}*"`));
+  }
+  assert.match(indexSource, /selector_matches[\s\S]*nofollow[\s\S]*target='_blank'/);
 });
 
 test("remembered user and commerce state restore outside the critical render path", () => {

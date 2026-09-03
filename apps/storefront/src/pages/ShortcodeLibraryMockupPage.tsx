@@ -20,7 +20,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { PaginablePostGrid, PostCard, ProductCard, ResponsiveImage, SocialPostCard, SpotifyPlayerMock, ViewSwitch, avatarColorFor, useLayoutPreferences, useSoundUX, type PostCardData, type ProductCardData, type ProductCardVariant, type SocialFeedLayout, type SocialFeedLoadMode } from "@funky/ui";
+import { PaginablePostGrid, PostCard, ProductCard, ResponsiveImage, SocialPostCard, SpotifyPlayerMock, ViewSwitch, avatarColorFor, useLayoutPreferences, useSoundUX, useT, type PostCardData, type ProductCardData, type ProductCardVariant, type SocialFeedLayout, type SocialFeedLoadMode } from "@funky/ui";
 import { HeroMock } from "../components/HeroMock";
 import { VideoHero } from "../components/VideoHero";
 import { ContentLoadingState } from "../components/ContentLoadingState";
@@ -31,6 +31,7 @@ import { CommentsSection } from "./CommentThread";
 import { useBlogData } from "../state/blogData";
 import { useCommerceData } from "../state/commerceData";
 import { useCommunityData } from "../state/communityData";
+import { useNavigationData } from "../state/navigationData";
 import type { CmsBlogTerm } from "../lib/blog";
 import { buildShortcode } from "../lib/shortcodeSyntax";
 
@@ -269,6 +270,7 @@ const COLUMN_COUNT_CLASS: Record<ColumnCount, string> = {
  * configuration shown above each live example. Not linked from the storefront's real
  * shopping flow; purely a design-system/CMS-editor reference. */
 export function ShortcodeLibraryMockupPage() {
+  const t = useT();
   const { playAction } = useSoundUX();
   const { themeMaxWidthPx } = useLayoutPreferences();
   const [gridColumns, setGridColumns] = useState<ColumnCount>(4);
@@ -327,7 +329,7 @@ export function ShortcodeLibraryMockupPage() {
   const categoryTiles: CategoryTileItem[] = liveCategories.slice(0, 8).map((category) => ({
     id: category.id,
     title: category.name,
-    count: `${category.count} products`,
+    count: t(category.count === 1 ? "shortcode.count.product" : "shortcode.count.products", { count: category.count }),
     image: category.imageUrl || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=900&q=80",
     slug: category.slug,
   }));
@@ -1970,6 +1972,8 @@ function AccountShortcodePreview({ tab }: { tab: AccountTab }) {
 }
 
 function AuthShortcodePreview({ mode, layout }: { mode: AuthShortcodeMode; layout: AuthLayout }) {
+  const t = useT();
+  const brandName = useNavigationData().data?.storefrontConfig.branding.storeName || "FunkyCommerce";
   const [combinedMode, setCombinedMode] = useState<AuthMode>("login");
   const activeMode = mode === "combined" ? combinedMode : mode;
   const title = activeMode === "login" ? "Welcome back" : activeMode === "register" ? "Create your account" : "Forgotten password";
@@ -1977,7 +1981,8 @@ function AuthShortcodePreview({ mode, layout }: { mode: AuthShortcodeMode; layou
     <div className="grid w-full max-w-sm gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-900 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
       {mode === "combined" ? (
         <ViewSwitch
-          label="Authentication view"
+          label={t("auth.mode_selector")}
+          hideLabel
           value={combinedMode}
           onChange={setCombinedMode}
           options={[
@@ -1996,7 +2001,7 @@ function AuthShortcodePreview({ mode, layout }: { mode: AuthShortcodeMode; layou
   );
   if (layout === "centered") return <div className="grid min-h-80 place-items-center rounded-3xl bg-zinc-50 p-6 dark:bg-zinc-950">{form}</div>;
   if (layout === "image-bg") return <div className="grid min-h-80 place-items-center rounded-3xl bg-[linear-gradient(rgba(9,9,11,.55),rgba(9,9,11,.75)),url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1400&q=80')] bg-cover bg-center p-6">{form}</div>;
-  return <div className="grid min-h-80 overflow-hidden rounded-3xl bg-zinc-50 dark:bg-zinc-950 lg:grid-cols-2"><div className="grid place-items-center p-6">{form}</div><div className="hidden content-center justify-items-center gap-2 bg-zinc-900 p-8 text-white lg:grid"><Sparkles className="h-8 w-8" /><strong className="font-display text-2xl">Superfunky</strong></div></div>;
+  return <div className="grid min-h-80 overflow-hidden rounded-3xl bg-zinc-50 dark:bg-zinc-950 lg:grid-cols-2"><div className="grid place-items-center p-6">{form}</div><div className="hidden content-center justify-items-center gap-2 bg-zinc-900 p-8 text-white lg:grid"><Sparkles className="h-8 w-8" /><strong className="font-display text-2xl">{brandName}</strong></div></div>;
 }
 
 function OrderSuccessShortcodePreview({ mode }: { mode: OrderSuccessMode }) {

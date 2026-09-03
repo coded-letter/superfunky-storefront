@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useCart, useSoundUX, useToast } from "../state";
+import { useCart, useLayoutPreferences, useSoundUX, useToast } from "../state";
 import { useCurrency, useT } from "../locale";
 import type { ProductCardData } from "./ProductCard";
 import { ResponsiveImage } from "../media";
 import { shouldShowProductLearnMore } from "./productCardCta";
 import { hasProductCardPrice } from "./productCardPrice";
+import { resolveProductQuickViewDescription } from "./productQuickViewDescription";
 
 export type ProductQuickViewModalProps = {
   product: ProductCardData;
@@ -26,6 +27,8 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
   const { playAction } = useSoundUX();
   const { addItem, openDrawer } = useCart();
   const { showToast } = useToast();
+  const { productDescriptionsOrder } = useLayoutPreferences();
+  const description = resolveProductQuickViewDescription(product, productDescriptionsOrder);
   const previewImages = [product.imageUrl, ...(product.gallery ?? [])].filter(Boolean) as string[];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const activeImageUrl = previewImages[activeImageIndex];
@@ -118,7 +121,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
 
           <h3 className="m-0 pr-8 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{product.name}</h3>
 
-          {product.subtitle ? <p className="m-0 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{product.subtitle}</p> : null}
+          {description ? <p className="m-0 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
 
           {(product.rating ?? product.reviewCount) ? (
             <div className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">

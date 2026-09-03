@@ -72,7 +72,7 @@ export type HeaderSearchVariant = "full-width" | "expandable";
 /** `"text"` shows the wordmark+tagline only. `"image"` shows only the gradient icon
  * mark. `"text-image"` (default, current) shows both — mirrors `FooterLogoVariant`. */
 export type HeaderLogoVariant = "text" | "image" | "text-image";
-export type HeaderArrangement = "classic" | "single-row" | "centered";
+export type HeaderArrangement = "classic" | "single-row" | "centered" | "island";
 /** `"drawer"` (default, current) opens `CartDrawer`'s full slide-in side panel.
  * `"dropdown"` opens a compact `CartDropdown` popover anchored under this header's
  * cart icon instead — the mounting page decides which one to render based on this
@@ -274,6 +274,9 @@ export function HeaderMockup({
   const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(
     () => typeof window === "undefined" || window.scrollY <= 4,
   );
+  const [isScrolled, setIsScrolled] = useState(
+    () => typeof window !== "undefined" && window.scrollY > 4,
+  );
   const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml);
   const isAnnouncementBarShown = showAnnouncementBar && Boolean(safeAnnouncementHtml) && isAnnouncementVisible;
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -361,6 +364,12 @@ export function HeaderMockup({
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [announcementScrollEffect]);
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 4);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const [isCartDropdownOpen, setIsCartDropdownOpen] = useState(false);
   const handleCartTriggerClick = () => {
@@ -370,13 +379,47 @@ export function HeaderMockup({
     }
     toggleCartDrawer();
   };
+  const hasInlineDesktopNavigation = arrangement === "single-row" || arrangement === "island";
+  const desktopNavigation = !hideNavigation ? (
+    <nav
+      aria-label={t("header.navigation.main")}
+      className={`${arrangement === "centered" ? "justify-center" : hasInlineDesktopNavigation ? "justify-start" : "-ml-3.5"} flex ${hasInlineDesktopNavigation ? "flex-nowrap" : "flex-wrap"} items-center gap-x-1 gap-y-1.5`}
+    >
+      {primaryNavigation.map((item) =>
+        item.children?.length ? (
+          <NavDropdownItem key={menuItemKey(item)} item={item} />
+        ) : (
+          <NavLink
+            key={menuItemKey(item)}
+            to={item.href}
+            end={item.href === "/"}
+            reloadDocument={isExternalHref(item.href)}
+            title={item.title}
+            target={item.target}
+            rel={menuItemRel(item)}
+            className={(state) => joinMenuClasses(navLinkClass(state), item)}
+          >
+            {item.label}
+          </NavLink>
+        ),
+      )}
+    </nav>
+  ) : null;
+  const islandClasses = arrangement === "island" && sticky
+    ? isScrolled
+      ? "left-1/2 right-auto top-2.5 w-[calc(100%_-_20px)] -translate-x-1/2 rounded-control border shadow-soft-lg"
+      : "inset-x-0 top-0 w-full"
+    : sticky
+      ? "inset-x-0 top-0"
+      : "relative";
 
   return (
     <>
       <header
         ref={headerRef}
         id="sf-header"
-        className={`sf-header funky-header ${sticky ? "fixed inset-x-0 top-0" : "relative"} z-40 border-b border-zinc-200/70 bg-white/80 text-zinc-900 backdrop-blur-lg backdrop-saturate-150 dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-100`}
+        className={`sf-header funky-header ${sticky ? "fixed" : ""} ${islandClasses} z-40 border-b border-zinc-200/70 bg-white/80 text-zinc-900 backdrop-blur-lg backdrop-saturate-150 transition-[top,width,border-radius,box-shadow] duration-300 dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-100`}
+        style={arrangement === "island" && sticky && isScrolled ? { maxWidth: `${themeMaxWidthPx}px` } : undefined}
       >
         <div
           className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${isAnnouncementBarShown ? "max-h-10" : "max-h-0"}`}
@@ -393,12 +436,12 @@ export function HeaderMockup({
           </div>
         </div>
 
-      <div className="mx-auto grid w-full gap-3 px-4 py-4 sm:px-6 lg:px-8" style={{ maxWidth: `${themeMaxWidthPx}px` }}>
+      <div className={`mx-auto grid w-full gap-3 px-4 py-4 sm:px-6 lg:px-8 ${hasInlineDesktopNavigation ? "lg:block" : ""}`} style={{ maxWidth: `${themeMaxWidthPx}px` }}>
         <div className={
           arrangement === "centered"
             ? "grid grid-cols-[1fr_auto_1fr] items-center gap-4"
-            : arrangement === "single-row"
-              ? "flex items-center justify-between gap-3 lg:flex-nowrap"
+            : hasInlineDesktopNavigation
+              ? "flex flex-wrap items-center justify-between gap-3 lg:flex-nowrap"
               : "flex flex-wrap items-center justify-between gap-4"
         }>
           {showLogo ? (
@@ -420,7 +463,7 @@ export function HeaderMockup({
               {logoVariant !== "image" ? (
                 <span className="grid gap-0.5">
                   <strong className="funky-brand-heading font-display text-xl font-bold tracking-tight sm:text-2xl">{projectName}</strong>
-                  <span className={`${arrangement === "single-row" ? "hidden" : ""} text-xs font-medium text-zinc-500 dark:text-zinc-400`}>{projectTagline}</span>
+                  <span className={`${hasInlineDesktopNavigation ? "hidden" : ""} text-xs font-medium text-zinc-500 dark:text-zinc-400`}>{projectTagline}</span>
                 </span>
               ) : null}
             </Link>
@@ -428,14 +471,24 @@ export function HeaderMockup({
             <span aria-hidden="true" />
           )}
 
+          {hasInlineDesktopNavigation && desktopNavigation ? (
+            <div className="hidden min-w-0 flex-1 lg:block">{desktopNavigation}</div>
+          ) : null}
+
           {showSearch && searchVariant !== "expandable" ? (
             <SearchAutocomplete
               search={search}
-              className={`hidden min-w-[220px] flex-1 basis-80 lg:block ${arrangement === "centered" ? "col-start-1 row-start-1 w-full max-w-sm justify-self-start" : ""}`}
+              className={`hidden min-w-[180px] lg:block ${
+                arrangement === "centered"
+                  ? "col-start-1 row-start-1 w-full max-w-sm justify-self-start"
+                  : hasInlineDesktopNavigation
+                    ? "w-56 flex-none xl:w-64"
+                    : "flex-1 basis-80"
+              }`}
             />
           ) : null}
 
-          <div className={`${arrangement === "centered" ? "col-start-3 row-start-1 ml-0 justify-self-end justify-end" : "ml-auto justify-end"} flex flex-wrap items-center gap-2`}>
+          <div className={`${arrangement === "centered" ? "col-start-3 row-start-1 ml-0 justify-self-end justify-end" : "ml-auto justify-end"} flex ${hasInlineDesktopNavigation ? "flex-nowrap" : "flex-wrap"} items-center gap-2`}>
             {showSearch && searchVariant === "expandable" ? (
               <div className="hidden items-center gap-1 lg:flex">
                 <div
@@ -585,7 +638,7 @@ export function HeaderMockup({
           </div>
         </div>
 
-        {!hideNavigation ? <div className={`hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block ${arrangement === "centered" ? "text-center" : ""}`}>
+        {!hasInlineDesktopNavigation && desktopNavigation ? <div className={`hidden border-t border-zinc-100 pt-2.5 dark:border-zinc-800/70 lg:block ${arrangement === "centered" ? "text-center" : ""}`}>
           {/* `flex-wrap` (not `overflow-x-auto`) on purpose: per the CSS spec, setting only
               `overflow-x` to a non-visible value forces the browser to compute `overflow-y`
               as `auto` too — which was silently clipping/scroll-cutting the "Shop" dropdown
@@ -594,26 +647,7 @@ export function HeaderMockup({
               `navLinkClass`) so its label text sits flush with the row's left edge —
               i.e. the same column as the logo above and the theme's max-width edge —
               instead of appearing indented by the pill's hit-area padding. */}
-          <nav aria-label={t("header.navigation.main")} className={`${arrangement === "centered" ? "justify-center" : "-ml-3.5"} flex flex-wrap items-center gap-x-1 gap-y-1.5`}>
-            {primaryNavigation.map((item) =>
-              item.children?.length ? (
-                <NavDropdownItem key={menuItemKey(item)} item={item} />
-              ) : (
-                <NavLink
-                  key={menuItemKey(item)}
-                  to={item.href}
-                  end={item.href === "/"}
-                  reloadDocument={isExternalHref(item.href)}
-                  title={item.title}
-                  target={item.target}
-                  rel={menuItemRel(item)}
-                  className={(state) => joinMenuClasses(navLinkClass(state), item)}
-                >
-                  {item.label}
-                </NavLink>
-              ),
-            )}
-          </nav>
+          {desktopNavigation}
         </div> : null}
       </div>
       </header>
@@ -623,7 +657,7 @@ export function HeaderMockup({
           nor left with a gap. Not needed when `sticky` is off — the header is already
           in normal document flow at that point. */}
       {sticky ? (
-        <div style={{ height: headerHeight }} className="shrink-0" aria-hidden="true" />
+        <div style={{ height: headerHeight + (arrangement === "island" && isScrolled ? 10 : 0) }} className="shrink-0" aria-hidden="true" />
       ) : null}
 
       {hasMountedMobileMenu && !hideNavigation ? (

@@ -14,14 +14,20 @@
     const updateHeight = () => {
       cancelAnimationFrame(heightFrame);
       heightFrame = requestAnimationFrame(() => {
-        const measuredHeight = `${header.getBoundingClientRect().height}px`;
+        const islandOffset = header.classList.contains("storefront-static-header--island")
+          && header.classList.contains("is-scrolled")
+          ? 10
+          : 0;
+        const measuredHeight = `${header.getBoundingClientRect().height + islandOffset}px`;
         spacer.style.setProperty("--storefront-static-header-height", measuredHeight);
         header.style.setProperty("--storefront-static-header-height", measuredHeight);
       });
     };
     const updateAnnouncement = () => {
-      const shouldCollapse = header.dataset.staticAnnouncementScroll !== "false" && scrollY > 4;
+      const hasScrolled = scrollY > 4;
+      const shouldCollapse = header.dataset.staticAnnouncementScroll !== "false" && hasScrolled;
       header.classList.toggle("is-announcement-collapsed", shouldCollapse);
+      header.classList.toggle("is-scrolled", hasScrolled);
       clearTimeout(announcementTimer);
       updateHeight();
       announcementTimer = window.setTimeout(updateHeight, 320);

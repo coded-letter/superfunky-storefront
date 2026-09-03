@@ -62,6 +62,16 @@ test("validateProductInquiryValues trims fields and rejects missing name, email,
   assert.throws(() => validateProductInquiryValues({ name: "Ada", email: "ada@example.test", message: "  " }), /message/i);
 });
 
+test("validateProductInquiryValues surfaces caller-provided localized validation messages", () => {
+  assert.throws(
+    () => validateProductInquiryValues(
+      { name: "", email: "ada@example.test", message: "Hi" },
+      { nameRequired: "Podaj imię.", emailInvalid: "Błędny e-mail.", messageRequired: "Podaj wiadomość." },
+    ),
+    /Podaj imię/,
+  );
+});
+
 test("prefillFromCustomer maps the authenticated session's display name and email, ignoring blanks", () => {
   assert.deepEqual(prefillFromCustomer({ displayName: "Ada Lovelace", email: "ada@example.test" }), {
     name: "Ada Lovelace",

@@ -35,9 +35,11 @@ test("same-page fragment navigation closes mobile overlays before anchor scrolli
   );
 });
 
-test("header supports classic, compact single-row, and centered arrangements", () => {
-  assert.match(headerSource, /export type HeaderArrangement = "classic" \| "single-row" \| "centered"/);
+test("header supports stacked, true single-row, centered, and floating island arrangements", () => {
+  assert.match(headerSource, /export type HeaderArrangement = "classic" \| "single-row" \| "centered" \| "island"/);
   assert.match(headerSource, /arrangement === "centered"/);
-  assert.match(headerSource, /arrangement === "single-row"/);
+  assert.match(headerSource, /arrangement === "single-row" \|\| arrangement === "island"/);
+  assert.match(headerSource, /hasInlineDesktopNavigation && desktopNavigation/);
+  assert.match(headerSource, /top-2\.5 w-\[calc\(100%_-_20px\)\]/);
   assert.match(headerSource, /grid-cols-\[1fr_auto_1fr\]/);
 });

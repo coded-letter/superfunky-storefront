@@ -4,6 +4,7 @@ import type {
   FooterBottomBarLayout,
   FooterColumnsLayout,
   FooterExtraWrapperLayout,
+  FooterFeatureLayout,
   FooterLogoVariant,
   FooterNewsletterLayout,
 } from "../layout/FooterMockup";
@@ -88,6 +89,7 @@ export type LayoutPreferencesState = {
    * `true` (default). */
   showFooterNewsletter: boolean;
   footerAssistantLayout: FooterAssistantLayout;
+  footerFeatureLayout: FooterFeatureLayout;
   footerLogoVariant: FooterLogoVariant;
   footerBottomBarLayout: FooterBottomBarLayout;
   footerExtraWrapperLayout: FooterExtraWrapperLayout;
@@ -212,6 +214,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   footerNewsletterLayout: "banner",
   showFooterNewsletter: true,
   footerAssistantLayout: "side-by-side",
+  footerFeatureLayout: "separate",
   footerLogoVariant: "text-image",
   footerBottomBarLayout: "split",
   footerExtraWrapperLayout: "inline",
@@ -300,6 +303,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setFooterNewsletterLayout: (value: FooterNewsletterLayout) => void;
   setShowFooterNewsletter: (value: boolean) => void;
   setFooterAssistantLayout: (value: FooterAssistantLayout) => void;
+  setFooterFeatureLayout: (value: FooterFeatureLayout) => void;
   setFooterLogoVariant: (value: FooterLogoVariant) => void;
   setFooterBottomBarLayout: (value: FooterBottomBarLayout) => void;
   setFooterExtraWrapperLayout: (value: FooterExtraWrapperLayout) => void;
@@ -415,6 +419,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [footerNewsletterLayout, setFooterNewsletterLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.footerNewsletterLayout);
   const [showFooterNewsletter, setShowFooterNewsletter] = useState(DEFAULT_LAYOUT_PREFERENCES.showFooterNewsletter);
   const [footerAssistantLayout, setFooterAssistantLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.footerAssistantLayout);
+  const [footerFeatureLayout, setFooterFeatureLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.footerFeatureLayout);
   const [footerLogoVariant, setFooterLogoVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.footerLogoVariant);
   const [footerBottomBarLayout, setFooterBottomBarLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.footerBottomBarLayout);
   const [footerExtraWrapperLayout, setFooterExtraWrapperLayout] = useState(
@@ -569,6 +574,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       footerNewsletterLayout,
       showFooterNewsletter,
       footerAssistantLayout,
+      footerFeatureLayout,
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,
@@ -652,6 +658,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setFooterNewsletterLayout,
       setShowFooterNewsletter,
       setFooterAssistantLayout,
+      setFooterFeatureLayout,
       setFooterLogoVariant,
       setFooterBottomBarLayout,
       setFooterExtraWrapperLayout,
@@ -742,6 +749,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       footerNewsletterLayout,
       showFooterNewsletter,
       footerAssistantLayout,
+      footerFeatureLayout,
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,

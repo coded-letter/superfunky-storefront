@@ -224,10 +224,10 @@ function PostMockupPageInner({
               srcSet={post.featuredImage.srcSet}
               priority
               sizes="100vw"
-              className="aspect-[21/9] w-full object-cover"
+              className="aspect-[21/9] min-h-[400px] w-full object-cover md:min-h-0"
             />
           ) : (
-            <div className="aspect-[21/9] w-full bg-gradient-to-br from-zinc-800 via-zinc-700 to-zinc-950" />
+            <div className="aspect-[21/9] min-h-[400px] w-full bg-gradient-to-br from-zinc-800 via-zinc-700 to-zinc-950 md:min-h-0" />
           )}
           {sharePosition === "on-image" ? (
             <div className="absolute bottom-4 right-4">

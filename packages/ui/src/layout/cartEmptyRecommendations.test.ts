@@ -80,7 +80,7 @@ test("variable recommendations add only a concrete priced variation", () => {
   );
   assert.match(
     recommendationsSource,
-    /const canAddVariation = isVariable && Boolean\(selectedVariation\) && hasPrice;/,
+    /const canAddVariation = isVariable && selectedVariation\?\.inStock === true && hasPrice;/,
   );
   assert.match(recommendationsSource, /backendVariationId: selectedVariation\?\.databaseId/);
   assert.match(recommendationsSource, /variationAttributes: selectedVariation\?\.attributes/);

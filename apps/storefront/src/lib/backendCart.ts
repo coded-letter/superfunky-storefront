@@ -19,10 +19,11 @@ import {
   getCart,
   removeFromCart,
   resetStoreApiSession,
+  type StoreApiCart,
   updateCartItem,
 } from "./wcStoreApi.ts";
 
-type SyncResult = { ok: true } | { ok: false; error: string };
+type SyncResult = { ok: true; cart?: StoreApiCart } | { ok: false; error: string };
 
 const PRODUCT_ID_LOOKUP_QUERY = /* GraphQL */ `
   query CheckoutProductIdentity($search: String!) {
@@ -134,6 +135,7 @@ async function performCartSync(
    console.warn("[backendCart] Could not fetch backend cart:", backendResponse.error);
    return { ok: false, error: backendResponse.error };
   }
+  let latestCart = backendResponse.data;
 
   const resolvedLines: ResolvedCartLine[] = [];
   for (const frontendItem of desiredCart) {
@@ -156,19 +158,23 @@ async function performCartSync(
   for (const change of plan.update) {
    const updated = await updateCartItem({ key: change.item.key, quantity: change.quantity });
    if (!updated.ok) return { ok: false, error: updated.error };
+   latestCart = updated.data;
   }
   for (const line of plan.add) {
    const added = await addResolvedCartLine(line);
    if (!added.ok) return added;
+   if (added.cart) latestCart = added.cart;
   }
   for (const item of plan.remove) {
    const removed = await removeFromCart(item.key);
    if (!removed.ok) return { ok: false, error: removed.error };
+   latestCart = removed.data;
   }
 
   if (verifyForCheckout || plan.remove.length > 0 || plan.update.length > 0 || plan.add.length > 0) {
    const verifiedCart = await getCart();
    if (!verifiedCart.ok) return { ok: false, error: verifiedCart.error };
+   latestCart = verifiedCart.data;
    if (desiredCart.length > 0 && (verifiedCart.data.items?.length ?? 0) === 0) {
      return { ok: false, error: "empty-cart-after-sync" };
    }
@@ -178,7 +184,7 @@ async function performCartSync(
    }
   }
 
-  return { ok: true };
+  return { ok: true, cart: latestCart };
 }
 
 async function addResolvedCartLine(line: ResolvedCartLine): Promise<SyncResult> {
@@ -192,10 +198,11 @@ async function addResolvedCartLine(line: ResolvedCartLine): Promise<SyncResult> 
   if (!added.ok && line.variationId) {
     const variationFallback = await addToCart({ id: line.variationId, quantity: line.quantity });
     if (!variationFallback.ok) return { ok: false, error: variationFallback.error };
+    return { ok: true, cart: variationFallback.data };
   } else if (!added.ok) {
     return { ok: false, error: added.error };
   }
-  return { ok: true };
+  return { ok: true, cart: added.data };
 }
 
 /** Synchronizes the frontend cart with the backend. Called after cart mutations

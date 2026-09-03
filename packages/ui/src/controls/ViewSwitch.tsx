@@ -10,6 +10,7 @@ export type ViewSwitchProps<TValue extends string> = {
   /** Short caption shown before the options — makes it clear this toggles a preview
    * rather than being a permanent piece of site content (e.g. "Hero layout preview"). */
   label: string;
+  hideLabel?: boolean;
   options: ViewSwitchOption<TValue>[];
   value: TValue;
   onChange: (value: TValue) => void;
@@ -25,10 +26,10 @@ export type ViewSwitchProps<TValue extends string> = {
  * setting yet (a future WP customizer option would pick a default site-wide instead of
  * a per-visit local toggle like this).
  */
-export function ViewSwitch<TValue extends string>({ label, options, value, onChange }: ViewSwitchProps<TValue>) {
+export function ViewSwitch<TValue extends string>({ label, hideLabel = false, options, value, onChange }: ViewSwitchProps<TValue>) {
   return (
     <div className="sf-view-switch flex flex-wrap items-center gap-2.5 text-xs">
-      <span className="font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{label}</span>
+      {hideLabel ? null : <span className="font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{label}</span>}
       <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-control border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
         {options.map((option) => {
           const Icon = option.icon;

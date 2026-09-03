@@ -175,6 +175,12 @@ export type AbandonedCartPublicConfig = {
   };
 };
 
+export function isAbandonedCartFeatureAvailable(
+  config: AbandonedCartPublicConfig | null | undefined,
+): boolean {
+  return Boolean(config?.checkout.enabled && config.endpoints.headless);
+}
+
 const RECOVERY_PARAM_KEYS = ["funkycommerce_recovery", "mode", "language", "locale"] as const;
 
 function trimmed(value: string | undefined | null, maxLength: number): string {

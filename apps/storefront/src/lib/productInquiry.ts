@@ -24,6 +24,18 @@ export type ProductInquiryPrefill = {
   email?: string;
 };
 
+export type ProductInquiryValidationMessages = {
+  nameRequired: string;
+  emailInvalid: string;
+  messageRequired: string;
+};
+
+const DEFAULT_VALIDATION_MESSAGES: ProductInquiryValidationMessages = {
+  nameRequired: "Enter your name so we know who to reply to.",
+  emailInvalid: "Enter a valid email address.",
+  messageRequired: "Enter a message describing what you'd like to know.",
+};
+
 /** Best-effort split of a display name into a form's separate name field — the
  *  authenticated customer session only stores a single display name. */
 export function prefillFromCustomer(customer: { email?: string; displayName?: string } | null | undefined): ProductInquiryPrefill {
@@ -38,14 +50,17 @@ export function prefillFromCustomer(customer: { email?: string; displayName?: st
 
 /** Validate and normalize inquiry field values, throwing an explicit, user-facing
  *  error for the first invalid field. */
-export function validateProductInquiryValues(values: ProductInquiryValues): ProductInquiryValues {
+export function validateProductInquiryValues(
+  values: ProductInquiryValues,
+  messages: ProductInquiryValidationMessages = DEFAULT_VALIDATION_MESSAGES,
+): ProductInquiryValues {
   const name = values.name.trim();
   const email = values.email.trim();
   const message = values.message.trim();
 
-  if (!name) throw new Error("Enter your name so we know who to reply to.");
-  if (!email || !/\S+@\S+\.\S+/.test(email)) throw new Error("Enter a valid email address.");
-  if (!message) throw new Error("Enter a message describing what you'd like to know.");
+  if (!name) throw new Error(messages.nameRequired);
+  if (!email || !/\S+@\S+\.\S+/.test(email)) throw new Error(messages.emailInvalid);
+  if (!message) throw new Error(messages.messageRequired);
 
   return { name, email, message };
 }
@@ -56,9 +71,9 @@ export function validateProductInquiryValues(values: ProductInquiryValues): Prod
 export function buildProductInquirySubmission(
   product: ProductInquiryContext,
   values: ProductInquiryValues,
-  options: { language?: string; origin?: string } = {},
+  options: { language?: string; origin?: string; validationMessages?: ProductInquiryValidationMessages } = {},
 ): Parameters<typeof submitFormSubmission>[0] {
-  const { name, email, message } = validateProductInquiryValues(values);
+  const { name, email, message } = validateProductInquiryValues(values, options.validationMessages);
   const source = options.origin ? new URL(product.uri, options.origin).toString() : product.uri;
 
   return {
@@ -84,7 +99,7 @@ export function buildProductInquirySubmission(
 export async function submitProductInquiry(
   product: ProductInquiryContext,
   values: ProductInquiryValues,
-  options: { language?: string; origin?: string } = {},
+  options: { language?: string; origin?: string; validationMessages?: ProductInquiryValidationMessages } = {},
 ): Promise<void> {
   await submitFormSubmission(buildProductInquirySubmission(product, values, options));
 }

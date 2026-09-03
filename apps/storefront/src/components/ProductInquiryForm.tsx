@@ -43,6 +43,11 @@ export function ProductInquiryForm({
         {
           language: typeof document !== "undefined" ? document.documentElement.lang : undefined,
           origin: typeof window !== "undefined" ? window.location.origin : undefined,
+          validationMessages: {
+            nameRequired: t("inquiry.validation.name_required"),
+            emailInvalid: t("inquiry.validation.email_invalid"),
+            messageRequired: t("inquiry.validation.message_required"),
+          },
         },
       );
       setShowSuccess(true);

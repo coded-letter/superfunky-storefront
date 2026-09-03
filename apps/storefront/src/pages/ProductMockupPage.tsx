@@ -518,7 +518,7 @@ function ProductPageLayoutShell({
   if (layout === "classic") {
     return (
       <>
-        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
+        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)] lg:items-start">
           {gallery}
           {summary}
         </section>

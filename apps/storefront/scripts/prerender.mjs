@@ -404,6 +404,7 @@ const DEFAULT_STATIC_CHROME = {
   storeName: "FunkyCommerce",
   tagline: "Modern storefront",
   logoUrl: "",
+  iconUrl: "",
   promoHtml: "",
   showAnnouncementBar: false,
   announcementBarScrollEffect: true,
@@ -473,7 +474,7 @@ const COMPATIBLE_COMMUNITY_BUILD_POSTS_QUERY = `
   }
 `;
 
-const DEFAULT_CSP = "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'; connect-src 'self' https: wss:; frame-src 'self' https:; worker-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
+const DEFAULT_CSP = "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'inline-speculation-rules' https: blob:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' 'inline-speculation-rules' https: blob:; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'; connect-src 'self' https: wss:; frame-src 'self' https:; worker-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
 const DEFAULT_SECURITY_HEADERS = {
   "X-Frame-Options": "SAMEORIGIN",
   "X-Content-Type-Options": "nosniff",
@@ -846,7 +847,8 @@ async function discoverStaticChrome() {
     tagline: typeof branding?.tagline === "string" && branding.tagline.trim()
       ? branding.tagline.trim()
       : DEFAULT_STATIC_CHROME.tagline,
-    logoUrl: safeStaticMediaUrl(branding?.logoUrl) || safeStaticMediaUrl(decorationBranding?.iconUrl),
+    logoUrl: safeStaticMediaUrl(branding?.logoUrl),
+    iconUrl: safeStaticMediaUrl(decorationBranding?.iconUrl),
     promoHtml: sanitizeCmsHtml(decorationBranding?.promoHtml || ""),
     showAnnouncementBar: decorationLayout?.showAnnouncementBar === true,
     announcementBarScrollEffect: decorationLayout?.announcementBarScrollEffect !== false,
@@ -862,10 +864,10 @@ async function discoverStaticChrome() {
       && layout.themeMaxWidthPx <= 1920
       ? layout.themeMaxWidthPx
       : DEFAULT_STATIC_CHROME.themeMaxWidthPx,
-    headerArrangement: ["classic", "single-row", "centered"].includes(layoutVariantConfig?.headerArrangement)
+    headerArrangement: ["classic", "single-row", "centered", "island"].includes(layoutVariantConfig?.headerArrangement)
       ? layoutVariantConfig.headerArrangement
       : DEFAULT_STATIC_CHROME.headerArrangement,
-    footerColumnsLayout: ["grid-1", "grid-2-wide", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"].includes(layoutVariantConfig?.footerColumnsLayout)
+    footerColumnsLayout: ["grid-1", "grid-2-wide", "grid-3", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"].includes(layoutVariantConfig?.footerColumnsLayout)
       ? layoutVariantConfig.footerColumnsLayout
       : DEFAULT_STATIC_CHROME.footerColumnsLayout,
     recentOrders: {
@@ -1138,13 +1140,23 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
       "WPGraphQL route discovery",
     );
   } catch (error) {
-    if (
-      commerceRoutesAvailable
-      && error instanceof GraphqlResponseError
-      && hasOnlyUnknownTypes(error.errors, COMMERCE_ROUTE_TYPES)
-    ) {
+    const commerceMetadataUnavailable = commerceRoutesAvailable && (
+      (
+        error instanceof GraphqlResponseError
+        && hasOnlyUnknownTypes(error.errors, COMMERCE_ROUTE_TYPES)
+      )
+      || (
+        !backendLanguageFieldsAvailable
+        && error instanceof Error
+        && /WPGraphQL route discovery failed with status 500/.test(error.message)
+      )
+    );
+    if (commerceMetadataUnavailable) {
+      const compatibilityReason = error instanceof GraphqlResponseError
+        ? "WooGraphQL route types are unavailable"
+        : "WooCommerce multilingual route metadata is unavailable";
       console.warn(
-        "[prerender] WooGraphQL route types are unavailable; retrying route discovery without commerce metadata.",
+        `[prerender] ${compatibilityReason}; retrying route discovery without commerce metadata.`,
       );
       discovery = await discoverRouteNodes(
         buildRoutesQuery({
@@ -1157,7 +1169,10 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
         routeConnections,
         "WPGraphQL route discovery without commerce metadata",
       );
-    } else if (commerceRoutesAvailable || backendProfile === "full") {
+    } else if (
+      commerceRoutesAvailable
+      || backendProfile === "full"
+    ) {
       throw error;
     } else {
       console.warn(
@@ -1591,6 +1606,13 @@ async function renderRoute(route) {
       ? `<script type="application/json" id="storefront-static-hydration-assets">${JSON.stringify(hydrationAssetUrls).replaceAll("<", "\\u003c")}</script>`
       : "",
   ].filter(Boolean);
+  if (staticChromeConfig.iconUrl) {
+    rendered = rendered.replace(/\s*<link\b[^>]*\brel=(["'])(?:icon|shortcut icon|apple-touch-icon)\1[^>]*>/gi, "");
+    staticHead.push(
+      `<link rel="icon" href="${escapeAttribute(staticChromeConfig.iconUrl)}">`,
+      `<link rel="apple-touch-icon" href="${escapeAttribute(staticChromeConfig.iconUrl)}">`,
+    );
+  }
   if (staticHead.length) {
     rendered = rendered.replace("</head>", `    ${staticHead.join("\n    ")}\n  </head>`);
   }
@@ -1646,7 +1668,9 @@ function renderStaticChrome(route) {
     : normalizeLanguageRoutePath("/", route.lang, configuredLanguageCodes);
   const logo = staticChromeConfig.logoUrl
     ? `<img src="${escapeAttribute(staticChromeConfig.logoUrl)}" alt="" width="40" height="40" />`
-    : '<span class="storefront-static-brand-mark" aria-hidden="true"></span>';
+    : staticChromeConfig.iconUrl
+      ? `<span class="storefront-static-brand-mark" aria-hidden="true"><img src="${escapeAttribute(staticChromeConfig.iconUrl)}" alt="" width="40" height="40" /></span>`
+      : '<span class="storefront-static-brand-mark" aria-hidden="true"></span>';
   const homeLabel = route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home";
   const searchPlaceholder = route.lang === "pl"
     ? "Szukaj produktów, artykułów, osób i tagów…"

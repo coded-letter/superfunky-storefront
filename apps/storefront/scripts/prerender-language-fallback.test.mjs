@@ -19,3 +19,18 @@ test("prerender uses the WordPress site language when Polylang is unavailable", 
   );
   assert.match(prerenderSource, /backendLanguageFieldsAvailable = hasGraphqlLanguages/);
 });
+
+test("prerender retries commerce route discovery without multilingual WooCommerce metadata", () => {
+  assert.match(
+    prerenderSource,
+    /!backendLanguageFieldsAvailable[\s\S]*?WPGraphQL route discovery failed with status 500/,
+  );
+  assert.match(
+    prerenderSource,
+    /WooCommerce multilingual route metadata is unavailable[\s\S]*?buildRoutesQuery\(\{[\s\S]*?commerce: false/,
+  );
+  assert.match(
+    prerenderSource,
+    /"WPGraphQL route discovery without commerce metadata"/,
+  );
+});

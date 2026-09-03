@@ -48,6 +48,7 @@ import {
   type FooterBottomBarLayout,
   type FooterColumnsLayout,
   type FooterExtraWrapperLayout,
+  type FooterFeatureLayout,
   type FooterLogoVariant,
   type FooterNewsletterLayout,
   type HeaderLogoVariant,
@@ -85,6 +86,7 @@ const HEADER_ARRANGEMENT_OPTIONS: { value: HeaderArrangement; label: string }[] 
   { value: "classic", label: "Classic balanced" },
   { value: "single-row", label: "Compact single row" },
   { value: "centered", label: "Centered brand and icons" },
+  { value: "island", label: "Floating island" },
 ];
 
 const BACK_TO_TOP_STYLE_OPTIONS: { value: BackToTopStyle; label: string }[] = [
@@ -282,6 +284,7 @@ function RangeControl({
 const FOOTER_COLUMNS_OPTIONS: { value: FooterColumnsLayout; label: string }[] = [
   { value: "grid-1", label: "1 column" },
   { value: "grid-2-wide", label: "2 wide columns" },
+  { value: "grid-3", label: "3-column grid" },
   { value: "grid-4", label: "4-column grid" },
   { value: "grid-5", label: "5-column grid" },
   { value: "grid-6", label: "6-column grid" },
@@ -299,6 +302,14 @@ const FOOTER_ASSISTANT_OPTIONS: { value: FooterAssistantLayout; label: string }[
   { value: "side-by-side", label: "Side by side" },
   { value: "tabbed", label: "Tabbed" },
   { value: "stacked", label: "Stacked (full width)" },
+];
+
+const FOOTER_FEATURE_OPTIONS: { value: FooterFeatureLayout; label: string }[] = [
+  { value: "separate", label: "Separate sections" },
+  { value: "newsletter-spotify", label: "Newsletter + Spotify" },
+  { value: "newsletter-assistant", label: "Newsletter + AI assistant" },
+  { value: "assistant-spotify", label: "AI assistant + Spotify" },
+  { value: "none", label: "No feature section" },
 ];
 
 const FOOTER_LOGO_OPTIONS: { value: FooterLogoVariant; label: string }[] = [
@@ -436,6 +447,8 @@ export function LayoutStudioMockupPage() {
     setShowFooterNewsletter,
     footerAssistantLayout,
     setFooterAssistantLayout,
+    footerFeatureLayout,
+    setFooterFeatureLayout,
     footerLogoVariant,
     setFooterLogoVariant,
     footerBottomBarLayout,
@@ -593,6 +606,7 @@ export function LayoutStudioMockupPage() {
       footerNewsletterLayout,
       showFooterNewsletter,
       footerAssistantLayout,
+      footerFeatureLayout,
       footerLogoVariant,
       footerBottomBarLayout,
       footerExtraWrapperLayout,
@@ -1099,6 +1113,12 @@ export function LayoutStudioMockupPage() {
           value={footerAssistantLayout}
           onChange={setFooterAssistantLayout}
           options={FOOTER_ASSISTANT_OPTIONS}
+        />
+        <ViewSwitch
+          label="Feature combination"
+          value={footerFeatureLayout}
+          onChange={setFooterFeatureLayout}
+          options={FOOTER_FEATURE_OPTIONS}
         />
         <LiveChromeNotice text="Also in the footer, just above the columns." />
       </LayoutStudioSection>

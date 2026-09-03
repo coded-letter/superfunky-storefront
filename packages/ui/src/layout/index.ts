@@ -11,6 +11,7 @@ export type {
   FooterBottomBarLayout,
   FooterColumnsLayout,
   FooterExtraWrapperLayout,
+  FooterFeatureLayout,
   FooterLogoVariant,
   FooterNewsletterLayout,
 } from "./FooterMockup";

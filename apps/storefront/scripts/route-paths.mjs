@@ -97,9 +97,12 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
   const socialImage = routeImage(seo.opengraphImage) || routeImage(seo.twitterImage);
   const image = featuredImage || socialImage;
   const publicRobots = node?.funkycommercePublicRobots;
-  const noindex = publicRobots
-    ? publicRobots.noindex === true
-    : seo.metaRobotsNoindex === "noindex";
+  const forcePublicCommerceArchive = type === "ProductBrand" || type === "ProductTag";
+  const noindex = forcePublicCommerceArchive
+    ? false
+    : publicRobots
+      ? publicRobots.noindex === true
+      : seo.metaRobotsNoindex === "noindex";
   const nofollow = publicRobots
     ? publicRobots.nofollow === true
     : seo.metaRobotsNofollow === "nofollow";
@@ -143,7 +146,7 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
       || (type === "Post" ? "Article" : type?.includes("Product") ? "Product" : "WebPage"),
     source: "cms",
     redirectFrom: type === "Post" && sourcePath !== path ? sourcePath : "",
-    robotsSource: publicRobots ? "explicit" : "seo",
+    robotsSource: forcePublicCommerceArchive ? "public-commerce-archive" : publicRobots ? "explicit" : "seo",
     type,
     indexable: !robots.startsWith("noindex"),
     cmsContent: type === "Page" && typeof node.headlessContent === "string"

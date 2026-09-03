@@ -212,6 +212,7 @@ function StorefrontChromeShell({
     footerNewsletterLayout,
     showFooterNewsletter,
     footerAssistantLayout,
+    footerFeatureLayout,
     footerLogoVariant,
     footerBottomBarLayout,
     footerExtraWrapperLayout,
@@ -246,20 +247,34 @@ function StorefrontChromeShell({
   useEffect(() => {
     const iconUrl = storefrontConfig?.branding.iconUrl;
     if (!iconUrl) return;
-    let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    const previousHref = icon?.href;
-    const createdIcon = !icon;
-    if (!icon) {
-      icon = document.createElement("link");
+    let icons = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
+    const createdIcon = icons.length === 0;
+    if (createdIcon) {
+      const icon = document.createElement("link");
       icon.rel = "icon";
       document.head.appendChild(icon);
+      icons = [icon];
     }
-    icon.href = iconUrl;
+    const previous = icons.map((icon) => ({
+      icon,
+      href: icon.getAttribute("href"),
+      type: icon.getAttribute("type"),
+      sizes: icon.getAttribute("sizes"),
+    }));
+    for (const icon of icons) {
+      icon.href = iconUrl;
+      icon.removeAttribute("type");
+      icon.removeAttribute("sizes");
+    }
     return () => {
       if (createdIcon) {
-        icon.remove();
-      } else if (previousHref) {
-        icon.href = previousHref;
+        icons[0]?.remove();
+        return;
+      }
+      for (const { icon, href, type, sizes } of previous) {
+        if (href === null) icon.removeAttribute("href"); else icon.setAttribute("href", href);
+        if (type === null) icon.removeAttribute("type"); else icon.setAttribute("type", type);
+        if (sizes === null) icon.removeAttribute("sizes"); else icon.setAttribute("sizes", sizes);
       }
     };
   }, [storefrontConfig?.branding.iconUrl]);
@@ -331,6 +346,7 @@ function StorefrontChromeShell({
           privacyConsentLabel={storefrontConfig?.footer?.newsletterPrivacyLabel || undefined}
           showNewsletter={showFooterNewsletter}
           assistantSpotifyLayout={footerAssistantLayout}
+          featureLayout={footerFeatureLayout}
           logoVariant={footerLogoVariant}
           showLogo={showFooterLogo}
           bottomBarLayout={footerBottomBarLayout}

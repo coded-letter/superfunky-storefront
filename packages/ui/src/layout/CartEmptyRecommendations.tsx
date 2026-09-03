@@ -62,7 +62,7 @@ function PromotedProductCard({
     && product.productType !== "grouped"
     && product.inStock !== false
     && hasPrice;
-  const canAddVariation = isVariable && Boolean(selectedVariation) && hasPrice;
+  const canAddVariation = isVariable && selectedVariation?.inStock === true && hasPrice;
   const canAdd = canAddSimple || canAddVariation;
 
   const addToCart = () => {
