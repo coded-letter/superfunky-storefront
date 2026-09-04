@@ -56,6 +56,26 @@ test("dedicated shortcode-backed routes remain discoverable", () => {
   );
   assert.deepEqual(
     classifyPageRouteKeys(page({
+      uri: "/produkty/",
+      slug: "produkty",
+      isShopPage: true,
+      headlessShortcodes: [
+        "[categories type=\"product\"]",
+        "[grid type=\"product\" columns=\"4\" paginated=\"true\"]",
+      ],
+    })),
+    ["shop"],
+  );
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
+      uri: "/promocje/",
+      slug: "promocje",
+      headlessShortcodes: ["[grid type=\"product\" paginated=\"true\"]"],
+    })),
+    [],
+  );
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
       uri: "/journal/",
       slug: "journal",
       headlessShortcodes: ["[funkycommerce_blog]"],
