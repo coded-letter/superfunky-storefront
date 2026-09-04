@@ -144,6 +144,7 @@ test("multiple recommendations use a horizontally scrollable snap rail", () => {
 test("purchasable recommendations expose bounded quantity controls", () => {
   assert.match(recommendationsSource, /const \[quantity, setQuantity\] = useState\(1\)/);
   assert.match(recommendationsSource, /Math\.max\(1, current - 1\)/);
-  assert.match(recommendationsSource, /Math\.min\(99, current \+ 1\)/);
+  assert.match(recommendationsSource, /Math\.min\(maximumQuantity, current \+ 1\)/);
+  assert.match(recommendationsSource, /disabled=\{quantity >= maximumQuantity\}/);
   assert.match(recommendationsSource, /addItem\([\s\S]*quantity,[\s\S]*\);/);
 });

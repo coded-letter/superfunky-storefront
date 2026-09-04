@@ -1396,7 +1396,9 @@ export async function getProductArchive(
     async (first, after) => {
       const pageData = firstPageData || await loadArchivePage(first, after);
       firstPageData = null;
-      const archiveProducts = pageData.localizedProducts || pageData.archive?.products;
+      // The archive connection is already scoped to the resolved taxonomy term and
+      // avoids walking unrelated products to fill a language-filtered page.
+      const archiveProducts = pageData.archive?.products || pageData.localizedProducts;
       return {
         nodes: archiveProducts?.nodes || [],
         pageInfo: archiveProducts?.pageInfo || { hasNextPage: false },
@@ -1559,7 +1561,9 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
     stockQuantity,
     backordersAllowed: product.backordersAllowed === true,
     inStock:
-      stockStatus === null && stockQuantity === null
+      product.backordersAllowed === true
+        ? true
+        : stockStatus === null && stockQuantity === null
         ? true
         : stockStatus === "IN_STOCK" || (stockQuantity !== null && stockQuantity > 0),
   };

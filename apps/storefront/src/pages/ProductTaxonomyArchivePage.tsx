@@ -25,7 +25,7 @@ export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTax
   const lastResolvedArchive = useRef<CmsProductArchive | null>(null);
   const currentIdentifier = resolveTaxonomyArchiveIdentifier(pathname, slug);
   const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
-    `product-${taxonomy}:${currentIdentifier.idType}:${currentIdentifier.identifier}:${languageCode}`,
+    `product-${taxonomy}:v2:${currentIdentifier.idType}:${currentIdentifier.identifier}:${languageCode}`,
     () => getProductArchive(
       taxonomy,
       currentIdentifier.identifier,
@@ -129,7 +129,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         />
       </div>
 
-      {archive.siblings.length ? (
+      {archive.siblings?.length ? (
         <nav aria-label={t("archive.product_taxonomy_aria", { taxonomy: taxonomyLabel })} className="flex flex-wrap gap-2">
           {archive.siblings.map((term) => (
             <Link
@@ -147,7 +147,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
         </nav>
       ) : null}
 
-      {archive.taxonomy === "category" && showProductArchiveSubcategories && archive.children.length ? (
+      {archive.taxonomy === "category" && showProductArchiveSubcategories && archive.children?.length ? (
         <nav aria-label={`${title} subcategories`} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {archive.children.map((term) => (
             <Link

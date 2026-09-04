@@ -776,9 +776,11 @@ export function App() {
                     <Route path="/shop/:slug" element={<ProductMockupPage />} />
                     <Route path="/product/*" element={<ProductMockupPage />} />
                     <Route path="/product-category/*" element={<ProductCategoryMockupPage />} />
+                    <Route path="/pro-cat/*" element={<ProductCategoryMockupPage />} />
                     <Route path="/product-tag/*" element={<ProductTagMockupPage />} />
                     <Route path="/brand/*" element={<ProductBrandMockupPage />} />
                     <Route path="/:language/product-category/*" element={<ProductCategoryMockupPage />} />
+                    <Route path="/:language/pro-cat/*" element={<ProductCategoryMockupPage />} />
                     <Route path="/:language/product-tag/*" element={<ProductTagMockupPage />} />
                     <Route path="/:language/brand/:slug" element={<ProductBrandMockupPage />} />
                     <Route path="/blog" element={<StorefrontPageRoute routeKey="blog" fallback="/blog" />} />

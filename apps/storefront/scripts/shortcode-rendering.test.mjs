@@ -207,7 +207,7 @@ test("hero background media always fills and centers its mobile frame", async ()
   assert.match(styles, /\.shortcode-prerender-hero__image \{[\s\S]*object-fit: cover !important;[\s\S]*object-position: center !important;/);
 });
 
-test("hero calls to action follow brand radius and stay above mobile video controls", async () => {
+test("calls to action follow brand radius, layering, and consistent typography", async () => {
   const [hero, videoHero, productCard] = await Promise.all([
     readFile(new URL("src/components/HeroMock.tsx", appRoot), "utf8"),
     readFile(new URL("src/components/VideoHero.tsx", appRoot), "utf8"),
@@ -216,7 +216,8 @@ test("hero calls to action follow brand radius and stay above mobile video contr
   assert.doesNotMatch(hero, /HeroCtaLink[\s\S]{0,180}rounded-full/);
   assert.match(videoHero, /relative z-30 flex flex-wrap gap-3/);
   assert.match(videoHero, /primaryCta[\s\S]{0,180}rounded-control/);
-  assert.match(productCard, /product\.cta\.learn_more[\s\S]*?font-display text-xs font-semibold/);
+  assert.match(productCard, /product\.cta\.learn_more[\s\S]*?rounded-control bg-zinc-900 px-4 py-2\.5 text-xs font-semibold/);
+  assert.doesNotMatch(productCard, /product\.cta\.learn_more[\s\S]*?rounded-control[^"]*font-display/);
 });
 
 test("slider product cards keep equal heights and crop media independently of source aspect", async () => {

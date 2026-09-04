@@ -55,6 +55,11 @@ function PromotedProductCard({
   const resolvedImageUrl = selectedVariation?.imageUrl || product.imageUrl;
   const resolvedPriceLabel = selectedVariation?.priceLabel || product.priceLabel;
   const resolvedPriceAmount = selectedVariation?.priceAmount ?? product.priceAmount;
+  const resolvedStockQuantity = selectedVariation?.stockQuantity ?? product.stockQuantity;
+  const resolvedBackordersAllowed = selectedVariation?.backordersAllowed ?? product.backordersAllowed;
+  const maximumQuantity = resolvedBackordersAllowed || resolvedStockQuantity == null
+    ? 99
+    : Math.max(1, resolvedStockQuantity);
   const hasPrice = resolvedPriceAmount !== undefined || resolvedPriceLabel.trim().length > 0;
   const canAddSimple =
     !isVariable
@@ -64,6 +69,10 @@ function PromotedProductCard({
     && hasPrice;
   const canAddVariation = isVariable && selectedVariation?.inStock === true && hasPrice;
   const canAdd = canAddSimple || canAddVariation;
+
+  useEffect(() => {
+    setQuantity((current) => Math.min(current, maximumQuantity));
+  }, [maximumQuantity]);
 
   const addToCart = () => {
     if (!canAdd) return;
@@ -82,8 +91,8 @@ function PromotedProductCard({
         imageUrl: resolvedImageUrl,
         priceLabel: resolvedPriceLabel,
         priceAmount: resolvedPriceAmount,
-        stockQuantity: selectedVariation?.stockQuantity ?? product.stockQuantity,
-        backordersAllowed: selectedVariation?.backordersAllowed ?? product.backordersAllowed,
+        stockQuantity: resolvedStockQuantity,
+        backordersAllowed: resolvedBackordersAllowed,
       },
       quantity,
     );
@@ -174,8 +183,8 @@ function PromotedProductCard({
             </span>
             <button
               type="button"
-              onClick={() => setQuantity((current) => Math.min(99, current + 1))}
-              disabled={quantity === 99}
+              onClick={() => setQuantity((current) => Math.min(maximumQuantity, current + 1))}
+              disabled={quantity >= maximumQuantity}
               aria-label={`Increase quantity of ${product.name}`}
               className="inline-grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             >

@@ -115,6 +115,10 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   const remainingStock = backordersAllowed || stockQuantity == null
     ? undefined
     : Math.max(0, stockQuantity - quantityInCart);
+
+  useEffect(() => {
+    setQuantity((current) => Math.min(current, Math.max(1, remainingStock ?? current)));
+  }, [remainingStock]);
   const priceAmount = selectedVariation?.priceAmount ?? product.card.priceAmount;
   const price = formatProductPrice(priceAmount) ?? selectedVariation?.priceLabel ?? product.card.priceLabel;
   // External and grouped products always resolve their own price/link presentation,
