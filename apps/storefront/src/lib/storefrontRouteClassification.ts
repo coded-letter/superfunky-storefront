@@ -24,6 +24,7 @@ export type RoutePageNode = {
   slug: string | null;
   language: { code: string | null } | null;
   isFrontPage?: boolean | null;
+  isShopPage?: boolean | null;
   headlessShortcodes?: (string | null)[] | null;
 };
 
@@ -75,6 +76,7 @@ function parseShortcodeAttributes(shortcode: string): Record<string, string> {
 
 export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[] {
   if (page.isFrontPage) return ["home"];
+  if (page.isShopPage) return ["shop"];
 
   const keys = new Set<StorefrontRouteKey>();
   const slug = page.slug?.toLowerCase();

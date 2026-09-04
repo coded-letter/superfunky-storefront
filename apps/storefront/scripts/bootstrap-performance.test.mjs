@@ -418,6 +418,11 @@ test("fleet media origins use the shared image optimization pipeline", () => {
   assert.match(netlifySource, /images\\\\\.unsplash\\\\\.com/);
 });
 
+test("Netlify builds managed storefronts only for production main updates", () => {
+  assert.match(netlifySource, /\[context\.deploy-preview\]\s+ignore = "exit 0"/);
+  assert.match(netlifySource, /\[context\.branch-deploy\]\s+ignore = "exit 0"/);
+});
+
 test("core CMS navigation remains split out of the static-first bundle", () => {
   assert.match(appSource, /const ContentNodeRoute = lazy/);
   assert.doesNotMatch(appSource, /void loadContentNodeRoute\(\)/);

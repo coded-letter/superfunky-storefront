@@ -52,7 +52,7 @@ type RouteRegistryResult = {
   } | null;
 };
 
-export const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v7";
+export const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v9";
 
 const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
   query StorefrontRouteRegistry($after: String) {
@@ -61,6 +61,7 @@ const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
         uri
         slug
         isFrontPage
+        isShopPage
         language {
           code
         }
@@ -82,6 +83,7 @@ const PAGE_STATUS_COMPATIBILITY_RULE: GraphqlCompatibilityRule = {
 const ROUTE_REGISTRY_COMPATIBILITY_RULES = [
   PAGE_STATUS_COMPATIBILITY_RULE,
   missingGraphqlFieldRule("language"),
+  missingGraphqlFieldRule("isShopPage"),
 ] as const;
 
 function normalizeUri(uri: string): string {
