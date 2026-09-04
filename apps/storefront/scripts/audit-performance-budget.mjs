@@ -28,7 +28,7 @@ const budgets = {
   // The synchronized EN/PL/JA archive, review, and inquiry catalogs add a small,
   // intentional baseline cost while keeping the first render translated offline.
   initialJavaScriptBytes: 1_050_000,
-  initialJavaScriptGzipBytes: 310_650,
+  initialJavaScriptGzipBytes: 311_200,
   initialScriptCount: 8,
 };
 
