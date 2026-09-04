@@ -95,6 +95,7 @@ function ConnectedStorefrontChrome() {
   const shopPath = useStorefrontPath("shop", "/shop");
   const accountPath = useStorefrontPath("account", "/account");
   const wishlistPath = useStorefrontPath("wishlist", "/wishlist");
+  const readingListPath = useStorefrontPath("reading-list", "/reading-list");
   const cartPath = useStorefrontPath("cart", "/cart");
   const privacyPolicyPath = useStorefrontPath("privacy-policy", "/privacy-policy");
   const termsPath = useStorefrontPath("terms", "/terms");
@@ -240,6 +241,7 @@ function ConnectedStorefrontChrome() {
           shop: shopPath,
           account: accountPath,
           wishlist: wishlistPath,
+          readingList: readingListPath,
           cart: cartPath,
           checkout: checkoutPath,
           privacyPolicy: privacyPolicyPath,

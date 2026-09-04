@@ -164,7 +164,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
 
       {archive.products.length ? (
         <PaginableProductGrid
-          title={t("archive.products_title", { title })}
+          title={title}
           products={archive.products}
           pageSize={6}
           cardVariant={shopProductCardVariant}
