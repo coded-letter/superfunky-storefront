@@ -14,6 +14,9 @@ export type CartDrawerProps = {
   /** Whole empty-cart "you might like" promoted-product block on/off — independent of
    * whether a `featuredProduct` was actually passed in. `true` (default). */
   showPromotedProduct?: boolean;
+  shopPath?: string;
+  cartPath?: string;
+  checkoutPath?: string;
 };
 
 /**
@@ -21,7 +24,13 @@ export type CartDrawerProps = {
  * a full-page redirect. Right-side panel on desktop, full-width bottom-anchored sheet
  * on mobile so it stays reachable with a thumb.
  */
-export function CartDrawer({ featuredProducts = [], showPromotedProduct = true }: CartDrawerProps) {
+export function CartDrawer({
+  featuredProducts = [],
+  showPromotedProduct = true,
+  shopPath = "/shop",
+  cartPath = "/cart",
+  checkoutPath = "/checkout",
+}: CartDrawerProps) {
   const t = useT();
   const { items, itemCount, subtotalLabel, isDrawerOpen, closeDrawer, removeItem, updateQuantity } = useCart();
   const { playAction } = useSoundUX();
@@ -113,6 +122,7 @@ export function CartDrawer({ featuredProducts = [], showPromotedProduct = true }
               featuredProducts={featuredProducts}
               showPromotedProduct={showPromotedProduct}
               onNavigate={handleClose}
+              shopPath={shopPath}
             />
           ) : (
             <ul className="m-0 grid list-none gap-4 p-0">
@@ -149,8 +159,9 @@ export function CartDrawer({ featuredProducts = [], showPromotedProduct = true }
                         <button
                           type="button"
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          disabled={!item.backordersAllowed && item.stockQuantity != null && item.quantity >= item.stockQuantity}
                           aria-label={`Increase quantity of ${item.name}`}
-                          className="inline-grid h-6 w-6 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                          className="inline-grid h-6 w-6 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                         >
                           <Plus className="h-3 w-3" aria-hidden="true" />
                         </button>
@@ -181,14 +192,14 @@ export function CartDrawer({ featuredProducts = [], showPromotedProduct = true }
             <p className="m-0 text-xs text-zinc-500 dark:text-zinc-400">{t("cart.shipping_notice")}</p>
             <div className="flex gap-2">
               <Link
-                to="/cart"
+                to={cartPath}
                 onClick={handleClose}
                 className="flex-1 rounded-full border border-zinc-200 px-4 py-2.5 text-center text-sm font-semibold text-zinc-700 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 {t("cart.view_cart")}
               </Link>
               <Link
-                to="/checkout"
+                to={checkoutPath}
                 onClick={handleClose}
                 className="flex-1 rounded-full bg-brand-gradient px-4 py-2.5 text-center text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
               >
@@ -206,10 +217,12 @@ function EmptyCartState({
   featuredProducts,
   showPromotedProduct = true,
   onNavigate,
+  shopPath,
 }: {
   featuredProducts: ProductCardData[];
   showPromotedProduct?: boolean;
   onNavigate: () => void;
+  shopPath: string;
 }) {
   const t = useT();
 
@@ -228,7 +241,7 @@ function EmptyCartState({
       ) : null}
 
       <Link
-        to="/shop"
+        to={shopPath}
         onClick={onNavigate}
         className="rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
       >

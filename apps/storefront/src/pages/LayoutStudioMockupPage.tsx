@@ -30,6 +30,7 @@ import {
   PAYMENT_METHODS,
   SOCIAL_LINKS,
   ViewSwitch,
+  useT,
   useLayoutPreferences,
   type ArchiveHeroLayout,
   type AuthLayout,
@@ -70,11 +71,6 @@ import {
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useNavigationData } from "../state/navigationData";
-
-const HEADER_SEARCH_OPTIONS: { value: HeaderSearchVariant; label: string }[] = [
-  { value: "full-width", label: "Full-width bar" },
-  { value: "expandable", label: "Icon → expands" },
-];
 
 const HEADER_LOGO_OPTIONS: { value: HeaderLogoVariant; label: string }[] = [
   { value: "text", label: "Text only" },
@@ -397,6 +393,12 @@ const DISCUSSION_LAYOUT_OPTIONS: { value: DiscussionLayout; label: string }[] = 
  * generated sitemaps by its route wrapper in `App.tsx`.
  */
 export function LayoutStudioMockupPage() {
+  const t = useT();
+  const headerSearchOptions: { value: HeaderSearchVariant; label: string }[] = [
+    { value: "full-width", label: t("layout.search.full_width") },
+    { value: "expandable", label: t("layout.search.expandable") },
+    { value: "overlay", label: t("layout.search.overlay") },
+  ];
   const backendLayout = useNavigationData().data?.storefrontConfig.layout;
   const {
     showAnnouncementBar,
@@ -407,6 +409,9 @@ export function LayoutStudioMockupPage() {
     setHeaderSticky,
     headerSearchVariant,
     setHeaderSearchVariant,
+    mobileMenuWidth, setMobileMenuWidth,
+    mobileMenuHeight, setMobileMenuHeight,
+    showCodeControls, setShowCodeControls,
     headerLogoVariant,
     setHeaderLogoVariant,
     headerArrangement,
@@ -555,6 +560,8 @@ export function LayoutStudioMockupPage() {
     setAuthorProfileHeaderLayout,
     productArchiveHeroLayout,
     setProductArchiveHeroLayout,
+    showProductArchiveSubcategories,
+    setShowProductArchiveSubcategories,
     postArchiveHeroLayout,
     setPostArchiveHeroLayout,
     showArchiveDescriptionInHero,
@@ -586,6 +593,9 @@ export function LayoutStudioMockupPage() {
       announcementBarScrollEffect,
       headerSticky,
       headerSearchVariant,
+      mobileMenuWidth,
+      mobileMenuHeight,
+      showCodeControls,
       headerLogoVariant,
       headerArrangement,
       showHeaderLogo,
@@ -658,6 +668,7 @@ export function LayoutStudioMockupPage() {
       communityProfileHeaderLayout,
       authorProfileHeaderLayout,
       productArchiveHeroLayout,
+      showProductArchiveSubcategories,
       postArchiveHeroLayout,
       showArchiveDescriptionInHero,
       postTocLayout,
@@ -828,7 +839,10 @@ export function LayoutStudioMockupPage() {
         title="Nav search"
         description="Full-width search bar (current default) vs. an icon button that smoothly expands into the same search box in place — saves header width on busy nav bars."
       >
-        <ViewSwitch label="Search style" value={headerSearchVariant} onChange={setHeaderSearchVariant} options={HEADER_SEARCH_OPTIONS} />
+        <ViewSwitch label={t("layout.search.style")} value={headerSearchVariant} onChange={setHeaderSearchVariant} options={headerSearchOptions} />
+        <ViewSwitch label="Mobile menu width" value={mobileMenuWidth} onChange={setMobileMenuWidth} options={[{ value: "standard", label: "Standard" }, { value: "wide", label: "Wide" }, { value: "full", label: "Full screen" }]} />
+        <ViewSwitch label="Mobile menu height" value={mobileMenuHeight} onChange={setMobileMenuHeight} options={[{ value: "full", label: "Full height" }, { value: "content", label: "Content height" }]} />
+        <BoolSwitch label="Show code controls" value={showCodeControls} onChange={setShowCodeControls} />
         <LiveChromeNotice text="Scroll up — the header at the top of this page reflects your choice." />
       </LayoutStudioSection>
 
@@ -1269,6 +1283,11 @@ export function LayoutStudioMockupPage() {
           value={productArchiveHeroLayout}
           onChange={setProductArchiveHeroLayout}
           options={ARCHIVE_HERO_LAYOUT_OPTIONS}
+        />
+        <BoolSwitch
+          label="Show direct subcategories"
+          value={showProductArchiveSubcategories}
+          onChange={setShowProductArchiveSubcategories}
         />
         <BoolSwitch
           label="Description excerpt in hero"

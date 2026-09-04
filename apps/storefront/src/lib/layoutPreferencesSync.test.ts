@@ -87,6 +87,7 @@ test("applyLayoutConfiguration hydrates every StorefrontLayoutConfiguration fiel
     "communityProfileHeaderLayout",
     "authorProfileHeaderLayout",
     "productArchiveHeroLayout",
+    "showProductArchiveSubcategories",
     "postArchiveHeroLayout",
     "postTocLayout",
     "postSharePosition",

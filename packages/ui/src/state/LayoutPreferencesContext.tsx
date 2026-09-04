@@ -8,7 +8,7 @@ import type {
   FooterLogoVariant,
   FooterNewsletterLayout,
 } from "../layout/FooterMockup";
-import type { CartTriggerVariant, HeaderArrangement, HeaderLogoVariant, HeaderSearchVariant } from "../layout/HeaderMockup";
+import type { CartTriggerVariant, HeaderArrangement, HeaderLogoVariant, HeaderSearchVariant, MobileMenuWidth, MobileMenuHeight } from "../layout/HeaderMockup";
 import type { NewsletterPopupVariant } from "../layout/NewsletterSignupPopup";
 import type { ProfileHeaderLayout } from "../social/ProfileHeader";
 import type { ProductCardVariant } from "../catalog/ProductCard";
@@ -60,6 +60,9 @@ export type LayoutPreferencesState = {
    * times. `false` lets it scroll away with the page like any other content. */
   headerSticky: boolean;
   headerSearchVariant: HeaderSearchVariant;
+  mobileMenuWidth: MobileMenuWidth;
+  mobileMenuHeight: MobileMenuHeight;
+  showCodeControls: boolean;
   headerLogoVariant: HeaderLogoVariant;
   headerArrangement: HeaderArrangement;
   showHeaderLogo: boolean;
@@ -173,6 +176,8 @@ export type LayoutPreferencesState = {
   authorProfileHeaderLayout: ProfileHeaderLayout;
   /** Hero treatment on product category/tag/brand archive pages. `"split"` (default). */
   productArchiveHeroLayout: ArchiveHeroLayout;
+  /** Whether direct child categories appear above product category archive grids. */
+  showProductArchiveSubcategories: boolean;
   /** Hero treatment on blog category/tag archive pages. `"split"` (default). */
   postArchiveHeroLayout: ArchiveHeroLayout;
   /** Show a three-line taxonomy-description excerpt in archive heroes. Full content
@@ -194,6 +199,9 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   announcementBarScrollEffect: true,
   headerSticky: true,
   headerSearchVariant: "full-width",
+  mobileMenuWidth: "standard",
+  mobileMenuHeight: "full",
+  showCodeControls: true,
   headerLogoVariant: "text-image",
   headerArrangement: "classic",
   showHeaderLogo: true,
@@ -268,6 +276,7 @@ const DEFAULT_LAYOUT_PREFERENCES: LayoutPreferencesState = {
   communityProfileHeaderLayout: "card",
   authorProfileHeaderLayout: "card",
   productArchiveHeroLayout: "split",
+  showProductArchiveSubcategories: true,
   postArchiveHeroLayout: "split",
   showArchiveDescriptionInHero: false,
   postTocLayout: "current",
@@ -283,6 +292,9 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setAnnouncementBarScrollEffect: (value: boolean) => void;
   setHeaderSticky: (value: boolean) => void;
   setHeaderSearchVariant: (value: HeaderSearchVariant) => void;
+  setMobileMenuWidth: (value: MobileMenuWidth) => void;
+  setMobileMenuHeight: (value: MobileMenuHeight) => void;
+  setShowCodeControls: (value: boolean) => void;
   setHeaderLogoVariant: (value: HeaderLogoVariant) => void;
   setHeaderArrangement: (value: HeaderArrangement) => void;
   setShowHeaderLogo: (value: boolean) => void;
@@ -367,6 +379,7 @@ type LayoutPreferencesContextValue = LayoutPreferencesState & {
   setCommunityProfileHeaderLayout: (value: ProfileHeaderLayout) => void;
   setAuthorProfileHeaderLayout: (value: ProfileHeaderLayout) => void;
   setProductArchiveHeroLayout: (value: ArchiveHeroLayout) => void;
+  setShowProductArchiveSubcategories: (value: boolean) => void;
   setPostArchiveHeroLayout: (value: ArchiveHeroLayout) => void;
   setShowArchiveDescriptionInHero: (value: boolean) => void;
   setPostTocLayout: (value: PostTocLayout) => void;
@@ -385,6 +398,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   );
   const [headerSticky, setHeaderSticky] = useState(DEFAULT_LAYOUT_PREFERENCES.headerSticky);
   const [headerSearchVariant, setHeaderSearchVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.headerSearchVariant);
+  const [mobileMenuWidth, setMobileMenuWidth] = useState(DEFAULT_LAYOUT_PREFERENCES.mobileMenuWidth);
+  const [mobileMenuHeight, setMobileMenuHeight] = useState(DEFAULT_LAYOUT_PREFERENCES.mobileMenuHeight);
+  const [showCodeControls, setShowCodeControls] = useState(DEFAULT_LAYOUT_PREFERENCES.showCodeControls);
   const [headerLogoVariant, setHeaderLogoVariant] = useState(DEFAULT_LAYOUT_PREFERENCES.headerLogoVariant);
   const [headerArrangement, setHeaderArrangement] = useState(DEFAULT_LAYOUT_PREFERENCES.headerArrangement);
   const [showHeaderLogo, setShowHeaderLogo] = useState(DEFAULT_LAYOUT_PREFERENCES.showHeaderLogo);
@@ -507,6 +523,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
   const [productArchiveHeroLayout, setProductArchiveHeroLayout] = useState(
     DEFAULT_LAYOUT_PREFERENCES.productArchiveHeroLayout,
   );
+  const [showProductArchiveSubcategories, setShowProductArchiveSubcategories] = useState(
+    DEFAULT_LAYOUT_PREFERENCES.showProductArchiveSubcategories,
+  );
   const [postArchiveHeroLayout, setPostArchiveHeroLayout] = useState(DEFAULT_LAYOUT_PREFERENCES.postArchiveHeroLayout);
   const [showArchiveDescriptionInHero, setShowArchiveDescriptionInHero] = useState(
     DEFAULT_LAYOUT_PREFERENCES.showArchiveDescriptionInHero,
@@ -554,6 +573,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       announcementBarScrollEffect,
       headerSticky,
       headerSearchVariant,
+      mobileMenuWidth,
+      mobileMenuHeight,
+      showCodeControls,
       headerLogoVariant,
       headerArrangement,
       showHeaderLogo,
@@ -628,6 +650,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       communityProfileHeaderLayout,
       authorProfileHeaderLayout,
       productArchiveHeroLayout,
+      showProductArchiveSubcategories,
       postArchiveHeroLayout,
       showArchiveDescriptionInHero,
       postTocLayout,
@@ -638,6 +661,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setAnnouncementBarScrollEffect,
       setHeaderSticky,
       setHeaderSearchVariant,
+      setMobileMenuWidth,
+      setMobileMenuHeight,
+      setShowCodeControls,
       setHeaderLogoVariant,
       setHeaderArrangement,
       setShowHeaderLogo,
@@ -716,6 +742,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       setCommunityProfileHeaderLayout,
       setAuthorProfileHeaderLayout,
       setProductArchiveHeroLayout,
+      setShowProductArchiveSubcategories,
       setPostArchiveHeroLayout,
       setShowArchiveDescriptionInHero,
       setPostTocLayout,
@@ -729,6 +756,9 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       announcementBarScrollEffect,
       headerSticky,
       headerSearchVariant,
+      mobileMenuWidth,
+      mobileMenuHeight,
+      showCodeControls,
       headerLogoVariant,
       headerArrangement,
       showHeaderLogo,
@@ -803,6 +833,7 @@ export function LayoutPreferencesProvider({ children }: { children: ReactNode })
       communityProfileHeaderLayout,
       authorProfileHeaderLayout,
       productArchiveHeroLayout,
+      showProductArchiveSubcategories,
       postArchiveHeroLayout,
       showArchiveDescriptionInHero,
       postTocLayout,

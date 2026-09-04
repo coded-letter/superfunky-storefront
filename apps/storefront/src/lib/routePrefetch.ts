@@ -35,7 +35,10 @@ export async function prefetchStorefrontRoute(
 
   const [page, node] = await Promise.all([
     prefetchIncrementalData(`content-page-by-uri:v1:${uri}`, () => getPageByUri(uri)),
-    prefetchIncrementalData(`content-node:v2:${uri}`, () => getContentNodeInfo(uri)),
+    prefetchIncrementalData(
+      `content-node:v3:${uri}`,
+      () => getContentNodeInfo(uri, undefined, undefined, { probePage: false }),
+    ),
   ]);
   if (node?.type === "Page" || page) {
     await Promise.all([

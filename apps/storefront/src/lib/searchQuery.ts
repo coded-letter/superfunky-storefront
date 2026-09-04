@@ -50,6 +50,10 @@ export const LEGACY_SEARCH_QUERY = SEARCH_QUERY.replace(
   "communityMembers",
 );
 
+export const SINGLE_LANGUAGE_SEARCH_QUERY = SEARCH_QUERY
+  .replace("($search: String!, $language: LanguageCodeFilterEnum)", "($search: String!)")
+  .replaceAll(", language: $language", "");
+
 export const COMPATIBLE_SEARCH_QUERY = /* GraphQL */ `
   query StorefrontSearchCompatible($search: String!) {
     posts(first: 6, where: { search: $search }) {

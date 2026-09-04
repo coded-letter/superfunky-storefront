@@ -75,6 +75,7 @@ const expectedLanguages = (process.env.STOREFRONT_EXPECTED_LOCALES || "")
   .filter((locale) => /^[a-z]{2}(?:-[a-z0-9]+)*$/.test(locale));
 const artifactConfig = artifactConfigFromEnvironment();
 let artifactDelivery = null;
+const publicMediaProxyRoutes = new Map();
 let backendLanguageFieldsAvailable = true;
 let staticHydrationAssets = new Map();
 let staticRouteRegistryAsset = null;
@@ -243,6 +244,9 @@ const STATIC_HEADER_CONTROLS_QUERY = `
       }
       layout {
         headerSearchVariant
+        mobileMenuWidth
+        mobileMenuHeight
+        showCodeControls
         showHeaderSearchIcon
         showHeaderLanguageSwitcher
         showHeaderCurrencySwitcher
@@ -372,6 +376,9 @@ const DEFAULT_STATIC_HEADER_CONTROLS = {
   },
   layout: {
     headerSearchVariant: "full-width",
+    mobileMenuWidth: "standard",
+    mobileMenuHeight: "full",
+    showCodeControls: true,
     showHeaderSearchIcon: true,
     showHeaderLanguageSwitcher: true,
     showHeaderCurrencySwitcher: true,
@@ -1383,10 +1390,25 @@ function rewriteStaticProxiedMediaUrls(html) {
       backendOrigin,
       baseUrl: backendOrigin,
     });
+    const opaqueUrl = storefrontUrl ? registerPublicMediaProxyRoute(storefrontUrl, backendOrigin) : null;
     return storefrontUrl
-      ? ` ${name}=${quote}${escapeAttribute(storefrontUrl)}${quote}`
+      ? ` ${name}=${quote}${escapeAttribute(opaqueUrl)}${quote}`
       : attribute;
   });
+}
+
+function registerPublicMediaProxyRoute(storefrontUrl, backendOrigin) {
+  const mediaUrl = new URL(storefrontUrl, backendOrigin);
+  const integrity = createHash("sha256").update(mediaUrl.pathname).digest("hex");
+  const filename = mediaUrl.pathname.split("/").pop() || "media";
+  const publicPath = `/media/${integrity}/${filename}`;
+  const existingTarget = publicMediaProxyRoutes.get(publicPath);
+  const target = `${backendOrigin}${mediaUrl.pathname}`;
+  if (existingTarget && existingTarget !== target) {
+    throw new Error(`Public media integrity collision for ${publicPath}`);
+  }
+  publicMediaProxyRoutes.set(publicPath, target);
+  return `${publicPath}${mediaUrl.search}${mediaUrl.hash}`;
 }
 
 function selectStaticPriorityImageIndex(html) {
@@ -2669,6 +2691,9 @@ function renderRedirects(appleMerchantFileEnabled) {
   const mediaDocumentProxy = graphqlEndpoint
     ? [`/wp-content/uploads/*  ${new URL(graphqlEndpoint).origin}/wp-content/uploads/:splat  200`]
     : [];
+  const opaqueMediaProxy = [...publicMediaProxyRoutes]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([publicPath, target]) => `${publicPath}  ${target}  200!`);
   return [
     "/product.feed.xml  /product-feed.xml  301",
     ...redirectRules,
@@ -2678,6 +2703,7 @@ function renderRedirects(appleMerchantFileEnabled) {
     ...(artifactDelivery?.mode === "artifact"
       ? artifactProxyRedirects(artifactDelivery.manifest, artifactDelivery.origin)
       : []),
+    ...opaqueMediaProxy,
     ...mediaDocumentProxy,
     ...rewriteRules,
     "/*  /index.html  200",

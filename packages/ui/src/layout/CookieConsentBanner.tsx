@@ -179,7 +179,10 @@ export function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
  * two-tab structure as the updated legacy prototype (Preferences grid + a grouped Cookies
  * list with provider/lifetime metadata and per-item delete), restyled to match this app's
  * design system instead of the legacy's hardcoded dark theme. */
-export function CookieConsentBanner({ providerName = "Superfunky" }: { providerName?: string }) {
+export function CookieConsentBanner({
+  providerName = "Superfunky",
+  privacyPolicyPath = "/privacy-policy",
+}: { providerName?: string; privacyPolicyPath?: string }) {
   const t = useT();
   const {
     consent,
@@ -237,7 +240,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
               <p className="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
                 {t("cookie.banner.description", { providerName })}{" "}
                 <Link
-                  to="/privacy-policy#cookies"
+                  to={`${privacyPolicyPath}#cookies`}
                   className="font-medium text-brand-600 underline dark:text-brand-400"
                 >
                   {t("cookie.banner.policy_link")}
@@ -322,7 +325,7 @@ export function CookieConsentBanner({ providerName = "Superfunky" }: { providerN
                   <p className="m-0 max-w-sm text-xs leading-snug text-zinc-500 dark:text-zinc-400">
                     {t("cookie.manager.subtitle")}{" "}
                     <Link
-                      to="/privacy-policy#cookies"
+                      to={`${privacyPolicyPath}#cookies`}
                       className="font-medium text-brand-600 underline underline-offset-2 dark:text-brand-400"
                     >
                       {t("cookie.banner.policy_link")}

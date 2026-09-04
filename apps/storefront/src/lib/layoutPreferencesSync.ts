@@ -17,6 +17,9 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setAnnouncementBarScrollEffect(layout.announcementBarScrollEffect);
   prefs.setHeaderSticky(layout.headerSticky);
   prefs.setHeaderSearchVariant(layout.headerSearchVariant);
+  prefs.setMobileMenuWidth(layout.mobileMenuWidth);
+  prefs.setMobileMenuHeight(layout.mobileMenuHeight);
+  prefs.setShowCodeControls(layout.showCodeControls);
   prefs.setHeaderLogoVariant(layout.headerLogoVariant);
   prefs.setHeaderArrangement(layout.headerArrangement);
   prefs.setShowHeaderLogo(layout.showHeaderLogo);
@@ -89,6 +92,7 @@ export function applyLayoutConfiguration(prefs: PrefsContext, layout: Storefront
   prefs.setCommunityProfileHeaderLayout(layout.communityProfileHeaderLayout);
   prefs.setAuthorProfileHeaderLayout(layout.authorProfileHeaderLayout);
   prefs.setProductArchiveHeroLayout(layout.productArchiveHeroLayout);
+  prefs.setShowProductArchiveSubcategories(layout.showProductArchiveSubcategories);
   prefs.setPostArchiveHeroLayout(layout.postArchiveHeroLayout);
   prefs.setShowArchiveDescriptionInHero(layout.showArchiveDescriptionInHero);
   prefs.setPostTocLayout(layout.postTocLayout);

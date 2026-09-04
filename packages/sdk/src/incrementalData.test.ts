@@ -2,10 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import {
+  preloadIncrementalData,
   seedIncrementalData,
   seedStorefrontHydration,
   useIncrementalData,
 } from "./incrementalData.ts";
+
+test("private responses are never persisted in the incremental cache", async () => {
+  const dom = new JSDOM("", { url: "https://storefront.test/" });
+  Object.assign(globalThis, { localStorage: dom.window.localStorage, window: dom.window });
+  const key = `private-test:${Date.now()}`;
+
+  await preloadIncrementalData(key, async () => ({ cachePrivate: true, secret: "protected" }));
+
+  assert.equal(dom.window.localStorage.getItem(`funkycommerce-isg-cache:${key}`), null);
+  dom.window.close();
+});
 
 test("a prerendered hydration seed is immediately revalidated with fresh content", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://storefront.test/" });

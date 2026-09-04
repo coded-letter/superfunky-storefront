@@ -60,8 +60,19 @@ export async function resolveContentLanguageFallback(
   const selectedLanguage = selectedLanguageCode.trim().toLowerCase();
   const candidates = getContentLanguageFallbackCandidates(pathname, configuredLanguageCodes);
 
-  for (const candidate of candidates) {
-    const page = await dependencies.getPage(candidate);
+  // Every candidate is independent. Resolve the complete compatibility matrix in
+  // one network round trip, then apply the original configured-language priority.
+  const results = await Promise.all(candidates.map(async (candidate) => {
+    const [page, node] = await Promise.allSettled([
+      dependencies.getPage(candidate),
+      dependencies.getNodeInfo(candidate),
+    ]);
+    return { candidate, page, node };
+  }));
+
+  for (const { candidate, page: pageResult, node: nodeResult } of results) {
+    if (pageResult.status === "rejected") throw pageResult.reason;
+    const page = pageResult.value;
     if (page) {
       const translation = page.translations.find(
         ({ languageCode }) => languageCode.toLowerCase() === selectedLanguage,
@@ -69,7 +80,8 @@ export async function resolveContentLanguageFallback(
       return toInternalPath(translation?.uri || page.uri || candidate);
     }
 
-    if (await dependencies.getNodeInfo(candidate)) {
+    if (nodeResult.status === "rejected") throw nodeResult.reason;
+    if (nodeResult.value) {
       return candidate;
     }
   }

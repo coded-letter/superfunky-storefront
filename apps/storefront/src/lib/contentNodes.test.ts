@@ -71,19 +71,13 @@ test("content-node lookup preserves errors from the post fallback", async () => 
   await assert.rejects(getContentNodeInfo("/clean-post/", request), /Post lookup failed/);
 });
 
-test("free profiles probe clean post permalinks before the malformed generic resolver", async () => {
+test("free profiles probe root-level post and page schemas in priority order", async () => {
   const requestedQueries: string[] = [];
   const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
     requestedQueries.push(query);
     return query.includes("post(")
       ? { data: { post: { id: "post-1" } } as T }
-      : {
-          data: null,
-          errors: [{
-            message: "Internal server error",
-            extensions: { debugMessage: "Cannot access offset of type string on string" },
-          }],
-        };
+      : { data: { page: null } as T };
   };
 
   assert.deepEqual(await getContentNodeInfo("/clean-post/", request, "blog"), { type: "Post" });
@@ -104,4 +98,23 @@ test("free-profile post probe still classifies a root-level page", async () => {
   assert.equal(requestedQueries.length, 2);
   assert.match(requestedQueries[0], /post\(/);
   assert.match(requestedQueries[1], /page\(/);
+});
+
+test("concurrent page callers can skip the duplicate page probe", async () => {
+  const requestedQueries: string[] = [];
+  const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
+    requestedQueries.push(query);
+    if (query.includes("nodeByUri")) {
+      return { data: { nodeByUri: { __typename: "ProductCategory" } } as T };
+    }
+    return { data: { post: null } as T };
+  };
+
+  assert.deepEqual(
+    await getContentNodeInfo("/sale/", request, "shop", { probePage: false }),
+    { type: "ProductCategory" },
+  );
+  assert.equal(requestedQueries.length, 2);
+  assert.match(requestedQueries[0], /post\(/);
+  assert.match(requestedQueries[1], /nodeByUri/);
 });

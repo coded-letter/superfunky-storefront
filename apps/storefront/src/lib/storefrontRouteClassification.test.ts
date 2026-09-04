@@ -101,3 +101,8 @@ test("a WordPress posts page without a URI falls back to its canonical slug", ()
   assert.equal(resolveRoutePageUri(page({ uri: null, slug: null })), null);
   assert.equal(resolveRoutePageUri(page({ uri: "/en/blog-2/", slug: "blog-2" })), "/en/blog-2/");
 });
+
+test("legal special pages are included in the shared route registry", () => {
+  assert.deepEqual(classifyPageRouteKeys(page({ slug: "privacy-policy", uri: "/polityka-prywatnosci/" })), ["privacy-policy"]);
+  assert.deepEqual(classifyPageRouteKeys(page({ slug: "terms-and-conditions", uri: "/warunki/" })), ["terms"]);
+});

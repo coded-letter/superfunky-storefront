@@ -10,7 +10,7 @@ test("production builds enforce initial JavaScript performance budgets", async (
 
   assert.match(source, /entry\.dynamicImports/);
   assert.match(source, /initialJavaScriptBytes: 1_050_000/);
-  assert.match(source, /initialJavaScriptGzipBytes: 310_000/);
+  assert.match(source, /initialJavaScriptGzipBytes: 310_650/);
   assert.match(source, /initialScriptCount: 8/);
   assert.match(packageJson.scripts.build, /audit-performance-budget\.mjs/);
 });

@@ -45,6 +45,7 @@ import { LocationsShortcode, MapShortcode } from "./LocationsShortcode";
 import { SliderMock, type SliderWidth } from "./SliderMock";
 import { CONTENT_SHORTCODE_NAMES } from "../lib/shortcodeRegistry.mjs";
 import { withCollectionOffset } from "../lib/shortcodeCollections";
+import { matchesPostTaxonomy, matchesShortcodeValues } from "../lib/shortcodeFiltering";
 import { resolveShortcodeImage, resolveSliderContentType, resolveStaticSliderItems } from "../lib/shortcodeSlider";
 import { resolveShortcodeCta } from "../lib/shortcodeCta";
 import { getOrderDownloadAccess, type OrderDownloadAccess } from "../lib/downloads";
@@ -955,9 +956,7 @@ function filterPosts(posts: PostCardData[], attributes: WordPressShortcodeAttrib
     posts.filter((post) =>
       (!include.length || include.includes(post.id) || include.includes(post.slug)) &&
       inDateRange(post.date, attributes["date-from"], attributes["date-to"]) &&
-      (!attributes.category || post.categories?.some((term) => term.slug === attributes.category)) &&
-      (!attributes.tag || post.tags?.some((term) => term.slug === attributes.tag)) &&
-      (!attributes.author || post.author.slug === attributes.author),
+      matchesPostTaxonomy(post, attributes),
     ),
     attributes.orderby === "title" ? (post) => post.title.toLowerCase() : (post) => Date.parse(post.date),
     attributes.order,
@@ -969,13 +968,13 @@ function filterProducts(
   attributes: WordPressShortcodeAttributes,
 ) {
   const include = csv(attributes.include);
-  const category = attributes.category?.toLocaleLowerCase();
-  const tag = attributes.tag?.toLocaleLowerCase();
+  const category = attributes.category;
+  const tag = attributes.tag;
   const brand = attributes.brand?.toLocaleLowerCase();
   const filtered = products.filter((product) =>
     (!include.length || include.includes(product.id) || include.includes(product.slug)) &&
-    (!category || product.categorySlugs?.some((slug) => slug.toLocaleLowerCase() === category) || product.category?.toLocaleLowerCase() === category) &&
-    (!tag || product.tagSlugs?.some((slug) => slug.toLocaleLowerCase() === tag)) &&
+    matchesShortcodeValues([...(product.categorySlugs || []), product.category], category) &&
+    matchesShortcodeValues(product.tagSlugs || [], tag) &&
     (!brand || product.brandSlugs?.some((slug) => slug.toLocaleLowerCase() === brand) || product.brand?.toLocaleLowerCase() === brand) &&
     (product.rating || 0) >= toNumber(attributes["min-rating"], 0, 0, 5),
   );

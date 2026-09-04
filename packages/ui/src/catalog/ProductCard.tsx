@@ -50,6 +50,7 @@ export type ProductCardVariation = {
   sku?: string;
   inStock: boolean;
   stockQuantity?: number | null;
+  backordersAllowed?: boolean;
 };
 
 export type ProductCardData = {
@@ -81,6 +82,8 @@ export type ProductCardData = {
   rating?: number;
   reviewCount?: number;
   inStock?: boolean;
+  stockQuantity?: number | null;
+  backordersAllowed?: boolean;
   badge?: string;
   isNew?: boolean;
   /** WooCommerce product type — governs the CTA label/behaviour. Defaults to "simple". */
@@ -134,7 +137,7 @@ export function ProductCard({
   const { quickViewEnabled } = useContext(ProductCardPreferencesContext);
   const { has, toggle } = useWishlist();
   const { playAction } = useSoundUX();
-  const { addItem, openDrawer } = useCart();
+  const { addItem, items, openDrawer } = useCart();
   const { showToast } = useToast();
   const wishlistId = savedListEntityId(product);
   const isWishlisted = has(wishlistId);
@@ -178,6 +181,12 @@ export function ProductCard({
     [product.variations, selectedOptions],
   );
   const selectedPriceAmount = selectedVariation?.priceAmount ?? product.priceAmount;
+  const selectedStockQuantity = selectedVariation?.stockQuantity ?? product.stockQuantity;
+  const selectedBackordersAllowed = selectedVariation?.backordersAllowed ?? product.backordersAllowed;
+  const selectedCartId = selectedVariation?.id || product.id;
+  const isAtStockLimit = !selectedBackordersAllowed
+    && selectedStockQuantity != null
+    && (items.find((item) => item.id === selectedCartId)?.quantity ?? 0) >= selectedStockQuantity;
   const selectedCompareAtPriceAmount = selectedVariation?.compareAtPriceAmount ?? product.compareAtPriceAmount;
   const selectedPriceLabel = selectedPriceAmount !== undefined ? formatBaseAmount(selectedPriceAmount) : selectedVariation?.priceLabel || product.priceLabel;
   const selectedCompareAtPriceLabel = selectedCompareAtPriceAmount !== undefined
@@ -251,6 +260,7 @@ export function ProductCard({
   };
 
   const handleAddToCart = () => {
+    if (isAtStockLimit) return;
     if (!hasPrice || product.productType === "external" || product.productType === "grouped") return;
     if (product.inStock === false) {
       showToast({
@@ -288,6 +298,8 @@ export function ProductCard({
       imageUrl: selectedVariation?.imageUrl || product.imageUrl,
       priceLabel: selectedPriceLabel,
       priceAmount: selectedPriceAmount,
+      stockQuantity: selectedStockQuantity,
+      backordersAllowed: selectedBackordersAllowed,
     });
     showToast({
       title: t("product.added"),
@@ -594,7 +606,8 @@ export function ProductCard({
             <button
               type="button"
               onClick={handleAddToCart}
-              className="flex-1 rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+              disabled={isAtStockLimit}
+              className="flex-1 rounded-control bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
             >
               {ctaLabel}
             </button>

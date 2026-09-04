@@ -10,6 +10,9 @@ const backendLocaleRoot = new URL(
 const requiredKeys = [
   "navigation.back_to_top",
   "inquiry.success",
+  "inquiry.heading",
+  "inquiry.button",
+  "inquiry.copy",
   "review.section_heading",
   "review.form_title_product",
   "comment.section_heading",

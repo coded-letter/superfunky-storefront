@@ -28,6 +28,8 @@ export type StorefrontChromeMockupProps = {
   pushBusy?: boolean;
   /** Language-aware home path (e.g. `"/en"`, `"/pl"`) for the logo link. Defaults to `"/"`. */
   homePath?: string;
+  /** Canonical, language-aware destinations for WordPress special pages. */
+  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "cart" | "checkout" | "privacyPolicy" | "terms", string>>;
   storefrontConfig?: {
     branding: {
       storeName: string;
@@ -182,6 +184,7 @@ function StorefrontChromeShell({
   pushSubscribed,
   pushBusy,
   homePath,
+  specialPagePaths,
   storefrontConfig,
   headerActionSlot,
   footerAssistantSlot,
@@ -193,6 +196,8 @@ function StorefrontChromeShell({
     announcementBarScrollEffect,
     headerSticky,
     headerSearchVariant,
+    mobileMenuWidth,
+    mobileMenuHeight,
     headerLogoVariant,
     headerArrangement,
     showHeaderLogo,
@@ -290,6 +295,7 @@ function StorefrontChromeShell({
         mobileNavigation={mobileNavigation}
         hideNavigation={hideNavigation}
         homePath={homePath}
+        specialPagePaths={specialPagePaths}
         announcementHtml={storefrontConfig?.branding.promoHtml ?? ""}
         projectName={storefrontConfig?.branding.storeName}
         projectTagline={storefrontConfig?.branding.tagline}
@@ -301,6 +307,8 @@ function StorefrontChromeShell({
         announcementScrollEffect={announcementBarScrollEffect}
         sticky={headerSticky}
         searchVariant={headerSearchVariant}
+        mobileMenuWidth={mobileMenuWidth}
+        mobileMenuHeight={mobileMenuHeight}
         logoVariant={headerLogoVariant}
         arrangement={headerArrangement}
         showLogo={showHeaderLogo}
@@ -375,7 +383,10 @@ function StorefrontChromeShell({
         />
       ) : null}
 
-      <CookieConsentBanner providerName={storefrontConfig?.branding.storeName || "Superfunky"} />
+      <CookieConsentBanner
+        providerName={storefrontConfig?.branding.storeName || "Superfunky"}
+        privacyPolicyPath={specialPagePaths?.privacyPolicy}
+      />
       <NewsletterSignupPopup
         title={storefrontConfig?.footer?.newsletterHeading || undefined}
         description={storefrontConfig?.footer?.newsletterText || undefined}
@@ -386,6 +397,9 @@ function StorefrontChromeShell({
         <CartDrawer
           featuredProducts={cartFeaturedProducts}
           showPromotedProduct={showCartDrawerPromotedProduct}
+          shopPath={specialPagePaths?.shop}
+          cartPath={specialPagePaths?.cart}
+          checkoutPath={specialPagePaths?.checkout}
         />
       ) : null}
       {assistantOverlaySlot}

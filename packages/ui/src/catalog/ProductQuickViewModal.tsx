@@ -25,7 +25,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
   const t = useT();
   const { formatBaseAmount } = useCurrency();
   const { playAction } = useSoundUX();
-  const { addItem, openDrawer } = useCart();
+  const { addItem, items, openDrawer } = useCart();
   const { showToast } = useToast();
   const { productDescriptionsOrder } = useLayoutPreferences();
   const description = resolveProductQuickViewDescription(product, productDescriptionsOrder);
@@ -45,6 +45,9 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
     variationPriceAmounts: variationAmounts,
   });
   const showLearnMore = shouldShowProductLearnMore(product, hasPrice);
+  const isAtStockLimit = !product.backordersAllowed
+    && product.stockQuantity != null
+    && (items.find((item) => item.id === product.id)?.quantity ?? 0) >= product.stockQuantity;
   const ctaLabel =
     showLearnMore
       ? t("product.cta.learn_more")
@@ -185,7 +188,9 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
             ) : (
               <button
                 type="button"
+                disabled={isAtStockLimit}
                 onClick={() => {
+                  if (isAtStockLimit) return;
                   playAction("add-to-cart");
                   addItem({
                     id: product.id,
@@ -194,6 +199,8 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                     imageUrl: product.imageUrl,
                     priceLabel: rangeLabel ?? priceLabel,
                     priceAmount: product.priceAmount,
+                    stockQuantity: product.stockQuantity,
+                    backordersAllowed: product.backordersAllowed,
                   });
                   showToast({
                     title: t("product.added"),
@@ -202,7 +209,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                   });
                   onClose();
                 }}
-                className="flex-1 rounded-control bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
+                className="flex-1 rounded-control bg-zinc-900 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-glow active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-brand-400"
               >
                 {ctaLabel}
               </button>

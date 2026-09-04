@@ -1,5 +1,9 @@
 import { normalizeDisplayLabel, type SearchResultItem } from "@funky/ui";
-import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import {
+  graphqlRequest,
+  STOREFRONT_BACKEND_PROFILE,
+  STOREFRONT_EXPECTED_LOCALES,
+} from "@funky/sdk";
 import {
   mapStorefrontSearchResults,
   type StorefrontSearchQueryResult,
@@ -10,6 +14,7 @@ import {
   isSearchCompatibilitySchemaError,
   LEGACY_SEARCH_QUERY,
   SEARCH_QUERY,
+  SINGLE_LANGUAGE_SEARCH_QUERY,
 } from "./searchQuery.ts";
 import { searchWordPressRest } from "./searchRest.ts";
 
@@ -32,9 +37,15 @@ export async function searchStorefront(
     search: query,
     language: backendLanguageCode,
   };
-  let response = await graphqlRequest<StorefrontSearchQueryResult>(SEARCH_QUERY, variables);
+  const primaryQuery = STOREFRONT_EXPECTED_LOCALES.length > 1
+    ? SEARCH_QUERY
+    : SINGLE_LANGUAGE_SEARCH_QUERY;
+  let response = await graphqlRequest<StorefrontSearchQueryResult>(primaryQuery, variables);
   if (isLegacyCommunityMemberSearchSchema(response.errors)) {
-    response = await graphqlRequest<StorefrontSearchQueryResult>(LEGACY_SEARCH_QUERY, variables);
+    const legacyQuery = primaryQuery === SEARCH_QUERY
+      ? LEGACY_SEARCH_QUERY
+      : primaryQuery.replace("communityMembers(search: $search, first: 6)", "communityMembers");
+    response = await graphqlRequest<StorefrontSearchQueryResult>(legacyQuery, variables);
   }
   if (isSearchCompatibilitySchemaError(response.errors)) {
     response = await graphqlRequest<StorefrontSearchQueryResult>(COMPATIBLE_SEARCH_QUERY, {

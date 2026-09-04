@@ -28,11 +28,25 @@ test("expandable search is focusable when open and does not clip its results", (
   assert.match(searchSource, /if \(autoFocus\) inputRef\.current\?\.focus\(\)/);
 });
 
+test("only the full-width search variant renders the permanent desktop field", () => {
+  assert.match(headerSource, /\{showSearch && searchVariant === "full-width" \? \(/);
+  assert.doesNotMatch(headerSource, /\{showSearch && searchVariant !== "expandable" \? \(/);
+});
+
 test("same-page fragment navigation closes mobile overlays before anchor scrolling", () => {
   assert.match(
     headerSource,
     /useEffect\(\(\) => setIsMenuOpen\(false\), \[location\.hash, location\.pathname, location\.search\]\)/,
   );
+});
+
+test("top-level fragment links highlight only the section in active view", () => {
+  assert.match(headerSource, /const \[activeFragmentHref, setActiveFragmentHref\] = useState<string \| null>\(null\)/);
+  assert.match(headerSource, /activeFragmentHref === item\.href/);
+  assert.match(headerSource, /window\.addEventListener\("scroll", updateActiveFragment/);
+  assert.match(headerSource, /\.filter\(\(\{ rect \}\) => rect\.bottom > headerHeight && rect\.top < window\.innerHeight\)/);
+  assert.match(headerSource, /setActiveFragmentHref\(activeSection\?\.href \?\? null\)/);
+  assert.doesNotMatch(headerSource, /\}, null\) \?\? sections\[0\]/);
 });
 
 test("header supports stacked, true single-row, centered, and floating island arrangements", () => {
@@ -42,4 +56,15 @@ test("header supports stacked, true single-row, centered, and floating island ar
   assert.match(headerSource, /hasInlineDesktopNavigation && desktopNavigation/);
   assert.match(headerSource, /top-2\.5 w-\[calc\(100%_-_20px\)\]/);
   assert.match(headerSource, /grid-cols-\[1fr_auto_1fr\]/);
+});
+
+test("island centers its desktop menu without changing wrapping or other arrangements", () => {
+  assert.match(
+    headerSource,
+    /arrangement === "centered" \|\| arrangement === "island" \? "justify-center" : hasInlineDesktopNavigation \? "justify-start" : "-ml-3\.5"/,
+  );
+  assert.match(
+    headerSource,
+    /hasInlineDesktopNavigation \? "flex-nowrap" : "flex-wrap"/,
+  );
 });

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { parseLocalizedPrice, useCurrency } from "../locale";
 import { persistCartItems, readStoredCartItems } from "./cartStorage";
 import { mergeCartLineItemsByMaxQuantity, type MergeCartItemInput } from "./cartMerge";
+import { clampCartQuantity } from "./cartStock";
 
 export type CartLineItem = {
   /** Unique cart line id — usually the product id, or `${productId}-${variantLabel}`
@@ -22,6 +23,9 @@ export type CartLineItem = {
   /** Unit price in the WooCommerce base currency. */
   priceAmount?: number;
   quantity: number;
+  /** Available units for this exact product/variation. Undefined means unbounded. */
+  stockQuantity?: number | null;
+  backordersAllowed?: boolean;
 };
 
 export type AddCartItemInput = Omit<CartLineItem, "quantity">;
@@ -95,9 +99,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setItems((previous) => {
           const existing = previous.find((line) => line.id === item.id);
           if (existing) {
-            return previous.map((line) => (line.id === item.id ? { ...line, quantity: line.quantity + quantity } : line));
+            return previous.map((line) => (line.id === item.id
+              ? { ...line, ...item, quantity: clampCartQuantity(line.quantity + quantity, item) }
+              : line));
           }
-          return [...previous, { ...item, quantity }];
+          const nextQuantity = clampCartQuantity(quantity, item);
+          return nextQuantity > 0 ? [...previous, { ...item, quantity: nextQuantity }] : previous;
         }),
       mergeItem: (item, quantity = 1) =>
         setItems((previous) =>
@@ -110,7 +117,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setItems((previous) =>
           quantity <= 0
             ? previous.filter((line) => line.id !== id)
-            : previous.map((line) => (line.id === id ? { ...line, quantity } : line)),
+            : previous.map((line) => (line.id === id
+              ? { ...line, quantity: clampCartQuantity(quantity, line) }
+              : line)),
         ),
       clear: () => setItems([]),
     };

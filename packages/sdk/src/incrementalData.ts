@@ -116,8 +116,13 @@ export function preloadIncrementalData<T>(cacheKey: string, fetcher: () => Promi
 
   const request = fetcher()
     .then((fresh) => {
-      memoryCache.set(storageKey, fresh);
-      writePersistedCache(storageKey, fresh);
+      const privateResponse = Boolean(
+        fresh && typeof fresh === "object" && (fresh as { cachePrivate?: boolean }).cachePrivate,
+      );
+      if (!privateResponse) {
+        memoryCache.set(storageKey, fresh);
+        writePersistedCache(storageKey, fresh);
+      }
       return fresh;
     })
     .finally(() => {

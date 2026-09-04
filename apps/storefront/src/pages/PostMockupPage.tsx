@@ -47,6 +47,7 @@ type AuthorLayout = "fullwidth" | "compact" | "editorial";
 export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
   const t = useT();
   const { pathname } = useLocation();
+  const { showCodeControls } = useLayoutPreferences();
   const { languageCode, configuredLanguageCodes } = useLanguage();
   const postUri = backendPostUriFromStorefrontPath(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -71,13 +72,13 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
 
   useEffect(() => {
     if (!post || !contentRef.current) return;
-    const unmountBehaviors = mountCmsBehaviors(contentRef.current);
+    const unmountBehaviors = mountCmsBehaviors(contentRef.current, showCodeControls);
     const unmountScripts = mountEnqueuedScripts(post.scripts);
     return () => {
       unmountBehaviors();
       unmountScripts();
     };
-  }, [post]);
+  }, [post, showCodeControls]);
 
   useLayoutEffect(() => {
     if (!post) return undefined;

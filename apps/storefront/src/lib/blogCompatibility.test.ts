@@ -4,7 +4,10 @@ import test from "node:test";
 import { BLOG_DATA_COMPATIBILITY_RULES, createCompatibleBlogDataQuery } from "./blogGraphqlCompatibility.ts";
 import { requestGraphqlWithCompatibility, type GraphqlFieldFallbackRequester } from "./graphqlFieldFallback.ts";
 import { createCompatiblePostArchiveQuery } from "./postArchiveGraphqlCompatibility.ts";
-import { createCompatibleAuthorArchiveQuery } from "./authorArchiveGraphqlCompatibility.ts";
+import {
+  AUTHOR_ARCHIVE_COMPATIBILITY_RULE,
+  createCompatibleAuthorArchiveQuery,
+} from "./authorArchiveGraphqlCompatibility.ts";
 import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility.ts";
 import {
   createCoreBlogQuery,
@@ -179,7 +182,7 @@ test("blog fallback retries opaque Polylang term-language resolver failures", as
   const requestedQueries: string[] = [];
   const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
     requestedQueries.push(query);
-    if (query.includes("language {")) {
+    if (requestedQueries.length === 1) {
       return {
         data: null,
         errors: [{
@@ -293,6 +296,53 @@ test("author fallback fetches core posts without malformed connection filters", 
     /\$authorName|\$language|LanguageCodeFilterEnum|\bwhere\s*:|\blanguage\s*\{|\bcontent\s*\(|\bseo\s*\{/,
   );
   assert.match(compatible, /\$slug:\s*ID!|\bposts\(first: 100\)|\btitle\b|\bexcerpt\s*\(/);
+});
+
+test("author fallback handles malformed legacy Polylang term language values", async () => {
+  const requestedQueries: string[] = [];
+  const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
+    requestedQueries.push(query);
+    if (query.includes("language {")) {
+      return {
+        data: null,
+        errors: [{
+          message: "Internal server error",
+          path: ["posts", "nodes", 0, "tags", "nodes", 0, "language", "code"],
+          extensions: {
+            debugMessage: "Expected a value of type LanguageCodeEnum but received: false. Cannot serialize value as enum: false",
+          },
+        }],
+      };
+    }
+    return { data: { user: { id: "user-1" }, posts: { nodes: [] } } as T };
+  };
+
+  const response = await requestGraphqlWithCompatibility(
+    request,
+    `query Author(
+      $slug: ID!
+      $authorName: String!
+      $language: LanguageCodeFilterEnum!
+    ) {
+      user(id: $slug, idType: SLUG) {
+        id
+      }
+      posts(first: 100, where: { authorName: $authorName, language: $language }) {
+        nodes {
+          title
+          language {
+            code
+          }
+        }
+      }
+    }`,
+    { slug: "aris", authorName: "aris", language: "PL" },
+    [AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
+  );
+
+  assert.equal(response.errors, undefined);
+  assert.equal(requestedQueries.length, 2);
+  assert.doesNotMatch(requestedQueries[1], /\$authorName|\$language|\blanguage\s*\{|\bwhere\s*:/);
 });
 
 test("post fallback preserves approved comments when only a Polylang resolver is malformed", async () => {

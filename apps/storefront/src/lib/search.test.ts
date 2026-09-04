@@ -11,6 +11,7 @@ import {
   isSearchCompatibilitySchemaError,
   LEGACY_SEARCH_QUERY,
   SEARCH_QUERY,
+  SINGLE_LANGUAGE_SEARCH_QUERY,
 } from "./searchQuery.ts";
 import { searchWordPressRest } from "./searchRest.ts";
 
@@ -176,6 +177,12 @@ test("search query language-filters supported content while keeping global profi
     backend,
     /'communityMembers'[\s\S]*?'search' => array\( 'type' => 'String' \)[\s\S]*?'first'\s+=> array\( 'type' => 'Int' \)[\s\S]*?array_slice\( \$users, 0, min\( max\( absint\( \$args\['first'\] \), 1 \), 20 \) \)/,
   );
+});
+
+test("single-language search keeps WooCommerce results without requiring Polylang schema fields", () => {
+  assert.match(SINGLE_LANGUAGE_SEARCH_QUERY, /products\(first: 6, where: \{ search: \$search \}\)/);
+  assert.match(SINGLE_LANGUAGE_SEARCH_QUERY, /productCategories\(first: 4, where: \{ search: \$search \}\)/);
+  assert.doesNotMatch(SINGLE_LANGUAGE_SEARCH_QUERY, /LanguageCodeFilterEnum|language: \$language/);
 });
 
 test("WordPress REST search avoids optional plugin fields and filters localized links", async () => {

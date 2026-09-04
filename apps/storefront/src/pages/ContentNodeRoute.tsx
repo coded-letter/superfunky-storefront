@@ -39,7 +39,6 @@ export function ContentNodeRoute() {
   const pendingSelectionPath = useRef<string | null>(null);
   const uri = pathname.endsWith("/") ? pathname : `${pathname}/`;
   const useRouteRegistry = !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE);
-  const loadConcurrentPage = useRouteRegistry || uri.split("/").filter(Boolean).length !== 1;
   const { data: routeRegistry, isLoading: isLoadingRouteRegistry } = useIncrementalData(
     `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || "default"}`,
     () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
@@ -53,7 +52,6 @@ export function ContentNodeRoute() {
   } = useIncrementalData(
     `content-page-by-uri:v1:${uri}`,
     () => getPageByUri(uri),
-    loadConcurrentPage,
   );
   const matchedRoute = useRouteRegistry
     ? matchStorefrontRoute(routeRegistry || [], pathname)
@@ -68,7 +66,10 @@ export function ContentNodeRoute() {
   );
   const languageSelectionChanged = handledSelectionRevision.current !== languageSelectionRevision;
   const languageSelectionPending = languageSelectionChanged || pendingSelectionPath.current === pathname;
-  const { data: nodeInfo, isLoading, error } = useIncrementalData(`content-node:v2:${uri}`, () => getContentNodeInfo(uri));
+  const { data: nodeInfo, isLoading, error } = useIncrementalData(
+    `content-node:v3:${uri}`,
+    () => getContentNodeInfo(uri, undefined, undefined, { probePage: false }),
+  );
   const shouldResolveLanguageFallback = !isLoadingRouteRegistry
     && !isLoadingPage
     && !isLoading
@@ -86,7 +87,7 @@ export function ContentNodeRoute() {
     () => shouldResolveLanguageFallback
       ? resolveContentLanguageFallback(pathname, languageCode, configuredLanguageCodes, {
           getPage: getPageByUri,
-          getNodeInfo: getContentNodeInfo,
+          getNodeInfo: (candidate) => getContentNodeInfo(candidate, undefined, undefined, { probePage: false }),
         })
       : Promise.resolve(null),
   );

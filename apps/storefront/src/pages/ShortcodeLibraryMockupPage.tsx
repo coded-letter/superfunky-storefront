@@ -28,6 +28,7 @@ import { SliderMock } from "../components/SliderMock";
 import { ShortcodeLabel } from "../components/ShortcodeLabel";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { CommentsSection } from "./CommentThread";
+import { useStorefrontPath } from "../lib/storefrontPaths";
 import { useBlogData } from "../state/blogData";
 import { useCommerceData } from "../state/commerceData";
 import { useCommunityData } from "../state/communityData";
@@ -270,6 +271,10 @@ const COLUMN_COUNT_CLASS: Record<ColumnCount, string> = {
  * configuration shown above each live example. Not linked from the storefront's real
  * shopping flow; purely a design-system/CMS-editor reference. */
 export function ShortcodeLibraryMockupPage() {
+  const cartPath = useStorefrontPath("cart", "/cart");
+  const checkoutPath = useStorefrontPath("checkout", "/checkout");
+  const wishlistPath = useStorefrontPath("wishlist", "/wishlist");
+  const accountPath = useStorefrontPath("account", "/account");
   const t = useT();
   const { playAction } = useSoundUX();
   const { themeMaxWidthPx } = useLayoutPreferences();
@@ -1621,7 +1626,7 @@ export function ShortcodeLibraryMockupPage() {
           <AcceptedValues name="layout" values={["classic", "editorial"]} />
           <AcceptedValues name="summary_position" values={["sticky", "static"]} />
           <CartShortcodePreview layout={cartLayout} summaryPosition={cartSummaryPosition} products={liveProducts.slice(0, 3)} />
-          <FullPageLink href="/cart" label="Open the shortcode-driven cart page" />
+          <FullPageLink href={cartPath} label="Open the shortcode-driven cart page" />
         </div>
       </LibrarySection>
 
@@ -1689,7 +1694,7 @@ export function ShortcodeLibraryMockupPage() {
             showTerms={checkoutTerms === "show"}
             showPrivacy={checkoutPrivacy === "show"}
           />
-          <FullPageLink href="/checkout" label="Open the shortcode-driven checkout page" />
+          <FullPageLink href={checkoutPath} label="Open the shortcode-driven checkout page" />
         </div>
       </LibrarySection>
 
@@ -1714,7 +1719,7 @@ export function ShortcodeLibraryMockupPage() {
           <div className="grid grid-cols-2 gap-5 lg:grid-cols-3">
             {liveProducts.slice(0, 3).map((product) => <ProductCard key={`wishlist-${product.id}`} product={product} variant={wishlistCardVariant} />)}
           </div>
-          <FullPageLink href="/wishlist" label="Open the shortcode-driven wishlist page" />
+          <FullPageLink href={wishlistPath} label="Open the shortcode-driven wishlist page" />
         </div>
       </LibrarySection>
 
@@ -1757,7 +1762,7 @@ export function ShortcodeLibraryMockupPage() {
           <AcceptedValues name="default_tab" values={["dashboard", "orders", "downloads", "addresses", "community"]} />
           <AcceptedValues name="tabs" values={["comma-separated dashboard, orders, downloads, addresses, community"]} />
           <AccountShortcodePreview tab={accountTab} />
-          <FullPageLink href={`/account#${accountTab}`} label={`Open the shortcode-driven ${accountTab} account panel`} />
+          <FullPageLink href={`${accountPath}#${accountTab}`} label={`Open the shortcode-driven ${accountTab} account panel`} />
         </div>
       </LibrarySection>
 

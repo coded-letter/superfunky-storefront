@@ -147,6 +147,8 @@ export function CheckoutMockupPage() {
   const navigate = useNavigate();
   const cartPath = useStorefrontPath("cart", "/cart");
   const orderSuccessPath = useStorefrontPath("order-success", "/order-success");
+  const termsPath = useStorefrontPath("terms", "/terms");
+  const privacyPolicyPath = useStorefrontPath("privacy-policy", "/privacy-policy");
   const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
   const orderSuccessDigitalPath = normalizeLanguagePath(
     "/order-success/digital",
@@ -1671,7 +1673,7 @@ export function CheckoutMockupPage() {
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-800"
                     />
                     <span>
-                      {renderLinkedLabel(t("checkout.terms"), t("checkout.terms_link"), "#terms")}
+                      {renderLinkedLabel(t("checkout.terms"), t("checkout.terms_link"), termsPath)}
                       <span aria-hidden="true"> *</span>
                     </span>
                   </label>
@@ -1685,7 +1687,7 @@ export function CheckoutMockupPage() {
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-800"
                     />
                     <span>
-                      {renderLinkedLabel(t("checkout.privacy"), t("checkout.privacy_link"), "#privacy")}
+                      {renderLinkedLabel(t("checkout.privacy"), t("checkout.privacy_link"), privacyPolicyPath)}
                       <span aria-hidden="true"> *</span>
                     </span>
                   </label>

@@ -128,6 +128,9 @@ export type StorefrontLayoutConfiguration = {
   announcementBarScrollEffect: boolean;
   headerSticky: boolean;
   headerSearchVariant: HeaderSearchVariant;
+  mobileMenuWidth: "standard" | "wide" | "full";
+  mobileMenuHeight: "full" | "content";
+  showCodeControls: boolean;
   headerLogoVariant: HeaderLogoVariant;
   headerArrangement: "classic" | "single-row" | "centered" | "island";
   cartTriggerVariant: CartTriggerVariant;
@@ -200,6 +203,7 @@ export type StorefrontLayoutConfiguration = {
   cartLayout: "classic" | "editorial";
   cartSummaryPosition: "sticky" | "static";
   productArchiveHeroLayout: "split" | "fullbleed" | "minimal";
+  showProductArchiveSubcategories: boolean;
   postArchiveHeroLayout: "split" | "fullbleed" | "minimal";
   showArchiveDescriptionInHero: boolean;
   postTocLayout: "current" | "rail-left" | "rail-right" | "above";
@@ -380,6 +384,9 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   announcementBarScrollEffect: true,
   headerSticky: true,
   headerSearchVariant: "full-width",
+  mobileMenuWidth: "standard",
+  mobileMenuHeight: "full",
+  showCodeControls: true,
   headerLogoVariant: "text-image",
   headerArrangement: "classic",
   cartTriggerVariant: "drawer",
@@ -452,6 +459,7 @@ export const DEFAULT_STOREFRONT_LAYOUT_CONFIGURATION: StorefrontLayoutConfigurat
   cartLayout: "classic",
   cartSummaryPosition: "sticky",
   productArchiveHeroLayout: "split",
+  showProductArchiveSubcategories: true,
   postArchiveHeroLayout: "split",
   showArchiveDescriptionInHero: false,
   postTocLayout: "current",
@@ -693,6 +701,9 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         announcementBarScrollEffect
         headerSticky
         headerSearchVariant
+        mobileMenuWidth
+        mobileMenuHeight
+        showCodeControls
         headerLogoVariant
         headerArrangement
         cartTriggerVariant
@@ -765,6 +776,7 @@ const NAVIGATION_QUERY = /* GraphQL */ `
         cartLayout
         cartSummaryPosition
         productArchiveHeroLayout
+        showProductArchiveSubcategories
         postArchiveHeroLayout
         showArchiveDescriptionInHero
         postTocLayout
@@ -1630,7 +1642,10 @@ export function normalizeStorefrontLayoutConfiguration(
     showAnnouncementBar: pickBoolean(source.showAnnouncementBar, defaults.showAnnouncementBar),
     announcementBarScrollEffect: pickBoolean(source.announcementBarScrollEffect, defaults.announcementBarScrollEffect),
     headerSticky: pickBoolean(source.headerSticky, defaults.headerSticky),
-    headerSearchVariant: pickEnum(source.headerSearchVariant, ["full-width", "expandable"] as const, defaults.headerSearchVariant),
+    headerSearchVariant: pickEnum(source.headerSearchVariant, ["full-width", "expandable", "overlay"] as const, defaults.headerSearchVariant),
+    mobileMenuWidth: pickEnum(source.mobileMenuWidth, ["standard", "wide", "full"] as const, defaults.mobileMenuWidth),
+    mobileMenuHeight: pickEnum(source.mobileMenuHeight, ["full", "content"] as const, defaults.mobileMenuHeight),
+    showCodeControls: pickBoolean(source.showCodeControls, defaults.showCodeControls),
     headerLogoVariant: pickEnum(source.headerLogoVariant, ["text", "image", "text-image"] as const, defaults.headerLogoVariant),
     headerArrangement: pickEnum(
       source.headerArrangement,
@@ -1754,6 +1769,10 @@ export function normalizeStorefrontLayoutConfiguration(
       source.productArchiveHeroLayout,
       ["split", "fullbleed", "minimal"] as const,
       defaults.productArchiveHeroLayout,
+    ),
+    showProductArchiveSubcategories: pickBoolean(
+      source.showProductArchiveSubcategories,
+      defaults.showProductArchiveSubcategories,
     ),
     postArchiveHeroLayout: pickEnum(
       source.postArchiveHeroLayout,

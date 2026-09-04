@@ -520,6 +520,7 @@ export type ProductVariationCombo = {
   sku: string;
   inStock: boolean;
   stockQuantity: number | null;
+  backordersAllowed?: boolean;
 };
 
 export type ProductReview = {
