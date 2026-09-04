@@ -52,7 +52,7 @@ type RouteRegistryResult = {
   } | null;
 };
 
-export const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v6";
+export const ROUTE_REGISTRY_CACHE_KEY = "storefront-route-registry:v7";
 
 const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
   query StorefrontRouteRegistry($after: String) {
@@ -213,7 +213,7 @@ export function useResolvedStorefrontPath(
   const { data: registry, isLoading } = useIncrementalData(
     `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || STOREFRONT_DEFAULT_LANGUAGE}`,
     () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
-    !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE),
+    true,
   );
 
   return {
@@ -235,7 +235,7 @@ export function useResolvedStorefrontLanguageRoute(
   const { data: registry, isLoading } = useIncrementalData(
     `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || STOREFRONT_DEFAULT_LANGUAGE}`,
     () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
-    !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE),
+    true,
   );
   return {
     resolution: resolveCanonicalLanguageRoute(

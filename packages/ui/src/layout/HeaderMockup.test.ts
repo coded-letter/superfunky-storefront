@@ -19,6 +19,16 @@ test("all header action visibility controls also govern the mobile drawer", () =
 
   assert.match(headerSource, /headerIcons=\{headerIcons\}/);
   assert.match(headerSource, /headerIconMedia=\{headerIconMedia\}/);
+  assert.match(headerSource, /specialPagePaths=\{specialPagePaths\}/);
+  assert.match(headerSource, /specialPagePaths\?: HeaderMockupProps\["specialPagePaths"\]/);
+  assert.match(headerSource, /specialPagePaths\?\.readingList \|\| "\/reading-list"/);
+});
+
+test("overlay search uses translated labels", () => {
+  assert.match(headerSource, /aria-label=\{t\("search\.title"\)\}/);
+  assert.match(headerSource, /\{t\("search\.title"\)\}<\/h2>/);
+  assert.match(headerSource, /aria-label=\{t\("search\.close"\)\}/);
+  assert.doesNotMatch(headerSource, /aria-label="Search"/);
 });
 
 test("expandable search is focusable when open and does not clip its results", () => {

@@ -127,6 +127,9 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     ? resolveProductPriceMode(priceAmount, product.priceBehavior, productPresentation.noPriceBehavior)
     : "purchase";
   const isInquiry = priceMode === "inquiry";
+  const inquiryHeading = productPresentation.inquiryHeading === "Product inquiry"
+    ? t("inquiry.heading")
+    : productPresentation.inquiryHeading;
   const compareAtPriceAmount = selectedVariation
     ? selectedVariation.compareAtPriceAmount
     : product.card.compareAtPriceAmount;
@@ -282,7 +285,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 </>
               ) : (
                 <p className="m-0 text-sm font-semibold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
-                  {productPresentation.inquiryHeading}
+                  {inquiryHeading}
                 </p>
               )}
             </div>
@@ -338,7 +341,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             <div className="grid gap-3">
               <ProductInquiryForm
                 product={{ databaseId: product.databaseId, name: product.name, uri: product.uri, sku: product.sku || undefined }}
-                heading={productPresentation.inquiryHeading}
+                heading={inquiryHeading}
                 buttonLabel={productPresentation.inquiryButtonLabel}
                 copy={productPresentation.inquiryCopy}
               />

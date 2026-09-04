@@ -29,7 +29,7 @@ export type StorefrontChromeMockupProps = {
   /** Language-aware home path (e.g. `"/en"`, `"/pl"`) for the logo link. Defaults to `"/"`. */
   homePath?: string;
   /** Canonical, language-aware destinations for WordPress special pages. */
-  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "cart" | "checkout" | "privacyPolicy" | "terms", string>>;
+  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "readingList" | "cart" | "checkout" | "privacyPolicy" | "terms", string>>;
   storefrontConfig?: {
     branding: {
       storeName: string;

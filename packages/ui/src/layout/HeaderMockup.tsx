@@ -108,7 +108,7 @@ export type HeaderMockupProps = {
    * home path (e.g. `"/en"` or `"/pl"`) so the link lands on the correct home
    * without triggering an intermediate redirect. */
   homePath?: string;
-  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "cart" | "checkout", string>>;
+  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "readingList" | "cart" | "checkout", string>>;
   headerIcons?: Partial<HeaderIconConfiguration>;
   headerIconMedia?: HeaderIconMediaConfiguration;
   primaryNavigation?: HeaderNavItem[];
@@ -655,7 +655,7 @@ export function HeaderMockup({
             ) : null}
             {showReadingListLink ? (
               <Link
-                to="/reading-list"
+                to={specialPagePaths?.readingList || "/reading-list"}
                 data-storefront-control="reading-list"
                 aria-label={readingListSyncError
                   ? t("header.sync_error", { label: t("header.reading_list") })
@@ -764,6 +764,7 @@ export function HeaderMockup({
           cartBadgeCount={cartBadgeCount}
           onCartClick={handleCartTriggerClick}
           search={search}
+          specialPagePaths={specialPagePaths}
           headerIcons={headerIcons}
           headerIconMedia={headerIconMedia}
           showSearch={showSearch}
@@ -779,8 +780,8 @@ export function HeaderMockup({
       ) : null}
       {isSearchOverlayOpen && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[100] bg-zinc-950/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSearchOverlayOpen(false); }}>
-          <div ref={searchOverlayRef} role="dialog" aria-modal="true" aria-label="Search" className="mx-auto mt-[12vh] grid max-w-3xl gap-4 rounded-2xl bg-white p-5 shadow-2xl dark:bg-zinc-950">
-            <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Search</h2><button type="button" aria-label="Close search" onClick={() => setIsSearchOverlayOpen(false)} className="rounded-full p-2"><X aria-hidden="true" /></button></div>
+          <div ref={searchOverlayRef} role="dialog" aria-modal="true" aria-label={t("search.title")} className="mx-auto mt-[12vh] grid max-w-3xl gap-4 rounded-2xl bg-white p-5 shadow-2xl dark:bg-zinc-950">
+            <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{t("search.title")}</h2><button type="button" aria-label={t("search.close")} onClick={() => setIsSearchOverlayOpen(false)} className="rounded-full p-2"><X aria-hidden="true" /></button></div>
             <SearchAutocomplete search={search} className="w-full" />
           </div>
         </div>, document.body
@@ -800,6 +801,7 @@ function MobileDrawer({
   cartBadgeCount,
   onCartClick,
   search,
+  specialPagePaths,
   mobileMenuWidth = "standard",
   mobileMenuHeight = "full",
   headerIcons,
@@ -822,6 +824,7 @@ function MobileDrawer({
   cartBadgeCount: number;
   onCartClick: () => void;
   search?: SearchAutocompleteProps["search"];
+  specialPagePaths?: HeaderMockupProps["specialPagePaths"];
   mobileMenuWidth?: MobileMenuWidth;
   mobileMenuHeight?: MobileMenuHeight;
   headerIcons?: Partial<HeaderIconConfiguration>;
@@ -935,7 +938,7 @@ function MobileDrawer({
                 </Link>
               ) : null}
               {showReadingListLink ? (
-                <Link to="/reading-list" className={mobileActionLinkClass}>
+                <Link to={specialPagePaths?.readingList || "/reading-list"} className={mobileActionLinkClass}>
                   <HeaderActionIcon name={headerIcons?.readingList} mediaUrl={headerIconMedia?.readingList} fallback={BookMarked} /> {t("header.reading_list")}
                   {readingListCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{readingListCount}</span> : null}
                   {readingListSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={readingListSyncError} /> : null}
