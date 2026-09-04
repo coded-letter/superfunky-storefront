@@ -42,6 +42,11 @@ test("nested product category archives preserve the hierarchy for URI lookup and
   assert.match(archiveQuery("category"), /localizedProducts: products[\s\S]*category: \$taxonomySlug/);
 });
 
+test("backorderable products remain purchasable even when stock is exhausted", () => {
+  const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
+  assert.match(source, /product\.backordersAllowed === true\s*\?\s*true/);
+});
+
 test("catalog product cards request gallery images for the gallery variant", () => {
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages\s*\(\s*first:\s*12\s*\)/);
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages[\s\S]*\bsourceUrl\b/);

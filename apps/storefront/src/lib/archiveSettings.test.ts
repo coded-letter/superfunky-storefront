@@ -80,6 +80,7 @@ test("taxonomy archives batch backend pagination and remain publicly indexable",
   assert.match(commerceSource, /function compatibleLocalizedBrandArchiveQuery[\s\S]*?localizedProducts:\s*products\(first:\s*\$first,\s*after:\s*\$after,\s*where:/);
   assert.match(commerceSource, /pageInfo\s*\{\s*hasNextPage\s*endCursor\s*\}/);
   assert.match(commerceSource, /fetchArchiveNodesInBatches<RawProductCard>\(/);
+  assert.match(commerceSource, /pageData\.archive\?\.products \|\| pageData\.localizedProducts/);
 
   assert.match(commerceSource, /robots: "index, follow"/);
   assert.match(postArchiveSource, /robots: "index, follow"/);
