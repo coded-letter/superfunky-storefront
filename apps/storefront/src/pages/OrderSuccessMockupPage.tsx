@@ -4,6 +4,7 @@ import { useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SummaryRow, type OrderLineItem } from "./shared";
 import type { StoreApiCheckoutResult } from "../lib/wcStoreApi";
+import { useStorefrontPath } from "../lib/storefrontPaths";
 
 const ORDER_ITEMS: OrderLineItem[] = [
   { id: "sku-01", name: "Aurora Weekender Bag", variant: "Sandstone / One size", quantity: 1, price: "€128.00" },
@@ -17,6 +18,10 @@ const ORDER_ITEMS: OrderLineItem[] = [
  * payment-intent confirmation logic (not applicable to this backend-less mockup). */
 export function OrderSuccessMockupPage() {
   const t = useT();
+  const homePath = useStorefrontPath("home", "/");
+  const checkoutPath = useStorefrontPath("checkout", "/checkout");
+  const shopPath = useStorefrontPath("shop", "/shop");
+  const accountPath = useStorefrontPath("account", "/account");
   const { state } = useLocation();
   const order = (state as { order?: StoreApiCheckoutResult } | null)?.order;
   const orderNumber = order?.order_number ?? `FC-2026-1042`;
@@ -34,7 +39,7 @@ export function OrderSuccessMockupPage() {
 
   return (
     <section className="mx-auto grid max-w-3xl gap-6">
-      <Breadcrumbs items={[{ label: t("nav.home"), href: "/" }, { label: t("checkout.title"), href: "/checkout" }, { label: t("order_success.breadcrumb") }]} />
+      <Breadcrumbs items={[{ label: t("nav.home"), href: homePath }, { label: t("checkout.title"), href: checkoutPath }, { label: t("order_success.breadcrumb") }]} />
 
       <div className="grid gap-4 rounded-3xl border border-zinc-200/80 bg-white p-8 text-center shadow-soft-lg dark:border-zinc-800 dark:bg-zinc-900 sm:p-12">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-emerald-600 shadow-soft dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -94,7 +99,7 @@ export function OrderSuccessMockupPage() {
 
         <div className="flex flex-wrap justify-center gap-3">
           <Link
-            to="/shop"
+            to={shopPath}
             className="rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-900 no-underline transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
             {t("order_success.cta.shopping")}
@@ -108,7 +113,7 @@ export function OrderSuccessMockupPage() {
             </a>
           ) : null}
           <Link
-            to="/account#orders"
+            to={`${accountPath}#orders`}
             className="inline-flex items-center gap-1.5 rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
           >
             <UserCircle2 className="h-4 w-4" aria-hidden="true" />
@@ -130,7 +135,7 @@ export function OrderSuccessMockupPage() {
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
         <LifeBuoy className="h-4 w-4 shrink-0" aria-hidden="true" />
         {t("order_success.support")}
-        <Link to="/account?section=orders" className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
+        <Link to={`${accountPath}?section=orders`} className="font-semibold text-brand-600 no-underline hover:underline dark:text-brand-400">
           {t("order_success.contact")}
         </Link>
       </div>

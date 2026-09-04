@@ -15,7 +15,9 @@ export type StorefrontRouteKey =
   | "auth-forgot-password"
   | "order-success"
   | "order-success-digital"
-  | "unsubscribe";
+  | "unsubscribe"
+  | "privacy-policy"
+  | "terms";
 
 export type RoutePageNode = {
   uri: string | null;
@@ -46,6 +48,8 @@ export const ROUTE_PAGE_RECIPES: Record<StorefrontRouteKey, readonly string[]> =
   "order-success": ["order-success"],
   "order-success-digital": ["order-success"],
   unsubscribe: ["unsubscribe-form"],
+  "privacy-policy": [],
+  terms: [],
 };
 
 const SHORTCODE_ROUTE_KEYS: Record<string, StorefrontRouteKey> = {
@@ -73,6 +77,9 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
   if (page.isFrontPage) return ["home"];
 
   const keys = new Set<StorefrontRouteKey>();
+  const slug = page.slug?.toLowerCase();
+  if (slug === "privacy-policy" || slug === "privacy") keys.add("privacy-policy");
+  if (slug === "terms" || slug === "terms-and-conditions") keys.add("terms");
   const shortcodes = page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [];
 
   for (const shortcode of shortcodes) {

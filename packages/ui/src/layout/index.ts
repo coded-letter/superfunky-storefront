@@ -1,6 +1,6 @@
 export { HeaderMockup } from "./HeaderMockup";
 export { headerIconButtonClassName, resolveHeaderActionIcon } from "./HeaderMockup";
-export type { CartTriggerVariant, HeaderArrangement, HeaderLogoVariant, HeaderMockupProps, HeaderNavItem, HeaderSearchVariant } from "./HeaderMockup";
+export type { CartTriggerVariant, HeaderArrangement, HeaderLogoVariant, HeaderMockupProps, HeaderNavItem, HeaderSearchVariant, MobileMenuWidth, MobileMenuHeight } from "./HeaderMockup";
 
 export { FooterMockup } from "./FooterMockup";
 export type {

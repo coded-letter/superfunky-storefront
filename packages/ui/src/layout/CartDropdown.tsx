@@ -11,6 +11,9 @@ export type CartDropdownProps = {
   onClose: () => void;
   featuredProducts?: ProductCardData[];
   showPromotedProduct?: boolean;
+  shopPath?: string;
+  cartPath?: string;
+  checkoutPath?: string;
 };
 
 /**
@@ -26,6 +29,9 @@ export function CartDropdown({
   onClose,
   featuredProducts = [],
   showPromotedProduct = true,
+  shopPath = "/shop",
+  cartPath = "/cart",
+  checkoutPath = "/checkout",
 }: CartDropdownProps) {
   const t = useT();
   const { items, itemCount, subtotalLabel, removeItem, updateQuantity } = useCart();
@@ -93,8 +99,9 @@ export function CartDropdown({
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        disabled={!item.backordersAllowed && item.stockQuantity != null && item.quantity >= item.stockQuantity}
                         aria-label={`Increase quantity of ${item.name}`}
-                        className="inline-grid h-5 w-5 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                        className="inline-grid h-5 w-5 place-items-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                       >
                         <Plus className="h-2.5 w-2.5" aria-hidden="true" />
                       </button>
@@ -123,14 +130,14 @@ export function CartDropdown({
             </div>
             <div className="flex gap-2">
               <Link
-                to="/cart"
+                to={cartPath}
                 onClick={onClose}
                 className="flex-1 rounded-full border border-zinc-200 px-3 py-2 text-center text-xs font-semibold text-zinc-700 no-underline transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 {t("cart.view_cart")}
               </Link>
               <Link
-                to="/checkout"
+                to={checkoutPath}
                 onClick={onClose}
                 className="flex-1 rounded-full bg-brand-gradient px-3 py-2 text-center text-xs font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
               >
@@ -140,7 +147,7 @@ export function CartDropdown({
           </div>
         ) : (
           <Link
-            to="/shop"
+            to={shopPath}
             onClick={onClose}
             className="mt-2 block rounded-full bg-brand-gradient px-3 py-2 text-center text-xs font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
           >

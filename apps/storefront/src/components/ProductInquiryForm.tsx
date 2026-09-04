@@ -22,6 +22,11 @@ export function ProductInquiryForm({
   copy: string;
 }) {
   const t = useT();
+  const localizedHeading = heading === "Product inquiry" ? t("inquiry.heading") : heading;
+  const localizedButtonLabel = buttonLabel === "Ask about this product" ? t("inquiry.button") : buttonLabel;
+  const localizedCopy = copy === "Send us a message and we will follow up with availability and pricing."
+    ? t("inquiry.copy")
+    : copy;
   const customer = authStore.load()?.user;
   const prefill = prefillFromCustomer(customer);
   const [name, setName] = useState(prefill.name || "");
@@ -62,8 +67,8 @@ export function ProductInquiryForm({
   return (
     <div className="sf-product-inquiry grid gap-4 rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
       <div className="grid gap-1">
-        <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{heading}</h3>
-        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{copy}</p>
+        <h3 className="m-0 font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">{localizedHeading}</h3>
+        <p className="m-0 text-sm text-zinc-500 dark:text-zinc-400">{localizedCopy}</p>
       </div>
 
       {showSuccess ? (
@@ -121,7 +126,7 @@ export function ProductInquiryForm({
           disabled={isSubmitting}
           className="justify-self-start rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? t("inquiry.sending") : buttonLabel}
+          {isSubmitting ? t("inquiry.sending") : localizedButtonLabel}
         </button>
       </form>
     </div>

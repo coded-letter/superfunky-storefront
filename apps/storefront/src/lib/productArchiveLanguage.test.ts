@@ -100,7 +100,8 @@ test("taxonomy archive queries and pages carry translation routes into loop-safe
   );
   assert.match(commerceSource, /languageCode:\s*archiveLanguageCode/);
   assert.match(commerceSource, /archive\.translations\?\.flatMap/);
-  assert.match(commerceSource, /idType === "URI"[\s\S]*?productSlugFromIdentifier\(identifier\)[\s\S]*?idType: "SLUG"/);
+  assert.match(commerceSource, /idType === "URI"[\s\S]*?normalizedIdentifier\.hierarchicalSlug[\s\S]*?idType: "SLUG"/);
+  assert.match(commerceSource, /normalizedIdentifier\.slug[\s\S]*?idType: "SLUG"/);
   assert.match(commerceSource, /if \(data\?\.archive\) break/);
   assert.match(archivePageSource, /useCanonicalContentLanguage/);
   assert.match(archivePageSource, /lastResolvedArchive/);

@@ -68,7 +68,9 @@ function navItemMatchesPath(item: HeaderNavItem, pathname: string): boolean {
  * default). `"expandable"` collapses it down to a single icon button that smoothly
  * grows into the same search field on click — a denser alternative for headers with
  * more nav items or branding that needs the extra horizontal room by default. */
-export type HeaderSearchVariant = "full-width" | "expandable";
+export type HeaderSearchVariant = "full-width" | "expandable" | "overlay";
+export type MobileMenuWidth = "standard" | "wide" | "full";
+export type MobileMenuHeight = "full" | "content";
 /** `"text"` shows the wordmark+tagline only. `"image"` shows only the gradient icon
  * mark. `"text-image"` (default, current) shows both — mirrors `FooterLogoVariant`. */
 export type HeaderLogoVariant = "text" | "image" | "text-image";
@@ -106,6 +108,7 @@ export type HeaderMockupProps = {
    * home path (e.g. `"/en"` or `"/pl"`) so the link lands on the correct home
    * without triggering an intermediate redirect. */
   homePath?: string;
+  specialPagePaths?: Partial<Record<"shop" | "account" | "wishlist" | "cart" | "checkout", string>>;
   headerIcons?: Partial<HeaderIconConfiguration>;
   headerIconMedia?: HeaderIconMediaConfiguration;
   primaryNavigation?: HeaderNavItem[];
@@ -114,6 +117,8 @@ export type HeaderMockupProps = {
   showSearch?: boolean;
   searchVariant?: HeaderSearchVariant;
   search?: SearchAutocompleteProps["search"];
+  mobileMenuWidth?: MobileMenuWidth;
+  mobileMenuHeight?: MobileMenuHeight;
   /** Which parts of the header brand mark render — mirrors `FooterLogoVariant`. */
   logoVariant?: HeaderLogoVariant;
   arrangement?: HeaderArrangement;
@@ -234,6 +239,7 @@ export function HeaderMockup({
   logoUrl,
   iconUrl,
   homePath = "/",
+  specialPagePaths,
   headerIcons,
   headerIconMedia,
   primaryNavigation = DEFAULT_PRIMARY_NAVIGATION,
@@ -242,6 +248,8 @@ export function HeaderMockup({
   showSearch = true,
   searchVariant = "full-width",
   search,
+  mobileMenuWidth = "standard",
+  mobileMenuHeight = "full",
   logoVariant = "text-image",
   arrangement = "classic",
   showLanguageSwitcher = true,
@@ -280,6 +288,8 @@ export function HeaderMockup({
   const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml);
   const isAnnouncementBarShown = showAnnouncementBar && Boolean(safeAnnouncementHtml) && isAnnouncementVisible;
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
+  const searchOverlayRef = useRef<HTMLDivElement>(null);
   const openMobileMenu = () => {
     setHasMountedMobileMenu(true);
     setIsMenuOpen(true);
@@ -292,6 +302,7 @@ export function HeaderMockup({
   const location = useLocation();
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [activeFragmentHref, setActiveFragmentHref] = useState<string | null>(null);
 
   // The header is `fixed` (not `sticky`) so it's always pinned regardless of ancestor
   // overflow — `position: sticky` silently stops sticking in some browsers once any
@@ -318,9 +329,11 @@ export function HeaderMockup({
   useEffect(() => setIsMenuOpen(false), [location.hash, location.pathname, location.search]);
   useEffect(() => {
     setIsSearchExpanded(false);
+    setIsSearchOverlayOpen(false);
   }, [location.hash, location.pathname, location.search]);
   useEffect(() => {
     if (!showSearch || searchVariant !== "expandable") setIsSearchExpanded(false);
+    if (!showSearch || searchVariant !== "overlay") setIsSearchOverlayOpen(false);
   }, [searchVariant, showSearch]);
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -344,6 +357,26 @@ export function HeaderMockup({
       window.scrollTo(0, scrollY);
     };
   }, [isMenuOpen]);
+
+  useEffect(() => {
+    if (!isSearchOverlayOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const firstInput = searchOverlayRef.current?.querySelector<HTMLInputElement>("input");
+    firstInput?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setIsSearchOverlayOpen(false);
+      if (event.key === "Tab" && searchOverlayRef.current) {
+        const focusable = [...searchOverlayRef.current.querySelectorAll<HTMLElement>('button, input, [href], [tabindex]:not([tabindex="-1"])')];
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKeyDown); };
+  }, [isSearchOverlayOpen]);
 
   // Collapse the announcement bar once the user scrolls away from the very top, and only
   // bring it back once they scroll back up to the top again. Deliberately does NOT reveal
@@ -370,6 +403,56 @@ export function HeaderMockup({
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+  useEffect(() => {
+    const fragmentItems = primaryNavigation.flatMap(function collectFragmentItems(item): HeaderNavItem[] {
+      return [
+        ...(isSamePageFragmentHref(item.href, location.pathname) ? [item] : []),
+        ...(item.children ?? []).flatMap(collectFragmentItems),
+      ];
+    });
+    const sections = fragmentItems.flatMap((item) => {
+      const id = fragmentId(item.href);
+      const element = id ? document.getElementById(id) : null;
+      return element ? [{ href: item.href, element }] : [];
+    });
+    if (!sections.length) {
+      setActiveFragmentHref(null);
+      return;
+    }
+
+    const updateActiveFragment = () => {
+      const activeLine = Math.max(headerHeight, window.innerHeight * 0.35);
+      const visibleSections = sections
+        .map((section) => ({ ...section, rect: section.element.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.bottom > headerHeight && rect.top < window.innerHeight);
+      const activeSection = visibleSections.reduce<(typeof visibleSections)[number] | null>((closest, section) => {
+        const distance = section.rect.top > activeLine
+          ? section.rect.top - activeLine
+          : activeLine > section.rect.bottom
+            ? activeLine - section.rect.bottom
+            : 0;
+        if (!closest) return section;
+        const closestDistance = closest.rect.top > activeLine
+          ? closest.rect.top - activeLine
+          : activeLine > closest.rect.bottom
+            ? activeLine - closest.rect.bottom
+            : 0;
+        return distance < closestDistance
+          || (distance === closestDistance && section.rect.top > closest.rect.top)
+          ? section
+          : closest;
+      }, null);
+      setActiveFragmentHref(activeSection?.href ?? null);
+    };
+
+    updateActiveFragment();
+    window.addEventListener("scroll", updateActiveFragment, { passive: true });
+    window.addEventListener("resize", updateActiveFragment);
+    return () => {
+      window.removeEventListener("scroll", updateActiveFragment);
+      window.removeEventListener("resize", updateActiveFragment);
+    };
+  }, [headerHeight, location.pathname, primaryNavigation]);
 
   const [isCartDropdownOpen, setIsCartDropdownOpen] = useState(false);
   const handleCartTriggerClick = () => {
@@ -383,7 +466,7 @@ export function HeaderMockup({
   const desktopNavigation = !hideNavigation ? (
     <nav
       aria-label={t("header.navigation.main")}
-      className={`${arrangement === "centered" ? "justify-center" : hasInlineDesktopNavigation ? "justify-start" : "-ml-3.5"} flex ${hasInlineDesktopNavigation ? "flex-nowrap" : "flex-wrap"} items-center gap-x-1 gap-y-1.5`}
+      className={`${arrangement === "centered" || arrangement === "island" ? "justify-center" : hasInlineDesktopNavigation ? "justify-start" : "-ml-3.5"} flex ${hasInlineDesktopNavigation ? "flex-nowrap" : "flex-wrap"} items-center gap-x-1 gap-y-1.5`}
     >
       {primaryNavigation.map((item) =>
         item.children?.length ? (
@@ -397,7 +480,11 @@ export function HeaderMockup({
             title={item.title}
             target={item.target}
             rel={menuItemRel(item)}
-            className={(state) => joinMenuClasses(navLinkClass(state), item)}
+            className={({ isActive }) => joinMenuClasses(navLinkClass({
+              isActive: isSamePageFragmentHref(item.href, location.pathname)
+                ? activeFragmentHref === item.href
+                : isActive,
+            }), item)}
           >
             {item.label}
           </NavLink>
@@ -475,7 +562,7 @@ export function HeaderMockup({
             <div className="hidden min-w-0 flex-1 lg:block">{desktopNavigation}</div>
           ) : null}
 
-          {showSearch && searchVariant !== "expandable" ? (
+          {showSearch && searchVariant === "full-width" ? (
             <SearchAutocomplete
               search={search}
               className={`hidden min-w-[180px] lg:block ${
@@ -489,21 +576,23 @@ export function HeaderMockup({
           ) : null}
 
           <div className={`${arrangement === "centered" ? "col-start-3 row-start-1 ml-0 justify-self-end justify-end" : "ml-auto justify-end"} flex ${hasInlineDesktopNavigation ? "flex-nowrap" : "flex-wrap"} items-center gap-2`}>
-            {showSearch && searchVariant === "expandable" ? (
+            {showSearch && (searchVariant === "expandable" || searchVariant === "overlay") ? (
               <div className="hidden items-center gap-1 lg:flex">
-                <div
+                {searchVariant === "expandable" ? <div
                   inert={isSearchExpanded ? undefined : true}
                   className={`transition-[width,opacity] duration-300 ease-in-out ${
                     isSearchExpanded ? "w-72 overflow-visible opacity-100" : "w-0 overflow-hidden opacity-0"
                   }`}
                 >
                   <SearchAutocomplete search={search} autoFocus={isSearchExpanded} className="w-72" />
-                </div>
+                </div> : null}
                 <button
                   type="button"
-                  onClick={() => setIsSearchExpanded((value) => !value)}
-                  aria-label={t(isSearchExpanded ? "search.close" : "search.open")}
-                  aria-expanded={isSearchExpanded}
+                  onClick={() => searchVariant === "overlay"
+                    ? setIsSearchOverlayOpen(true)
+                    : setIsSearchExpanded((value) => !value)}
+                  aria-label={t(searchVariant === "expandable" && isSearchExpanded ? "search.close" : "search.open")}
+                  aria-expanded={searchVariant === "overlay" ? isSearchOverlayOpen : isSearchExpanded}
                   className={iconButtonClass}
                 >
                   <span className="grid transition-transform duration-300">
@@ -560,7 +649,7 @@ export function HeaderMockup({
             ) : null}
 
             {showAccountLink ? (
-              <Link to="/account" data-storefront-control="account" aria-label={t("header.account")} title={t("header.account")} className={`${iconButtonClass} hidden lg:inline-grid`}>
+              <Link to={specialPagePaths?.account || "/account"} data-storefront-control="account" aria-label={t("header.account")} title={t("header.account")} className={`${iconButtonClass} hidden lg:inline-grid`}>
                 <HeaderActionIcon name={headerIcons?.account} mediaUrl={headerIconMedia?.account} fallback={User} />
               </Link>
             ) : null}
@@ -583,7 +672,7 @@ export function HeaderMockup({
             ) : null}
             {showWishlistLink ? (
               <Link
-                to="/wishlist"
+                to={specialPagePaths?.wishlist || "/wishlist"}
                 data-storefront-control="wishlist"
                 aria-label={wishlistSyncError
                   ? t("header.sync_error", { label: t("header.wishlist") })
@@ -617,6 +706,9 @@ export function HeaderMockup({
                     onClose={() => setIsCartDropdownOpen(false)}
                     featuredProducts={cartFeaturedProducts}
                     showPromotedProduct={showCartPromotedProduct}
+                    shopPath={specialPagePaths?.shop}
+                    cartPath={specialPagePaths?.cart}
+                    checkoutPath={specialPagePaths?.checkout}
                   />
                 ) : null}
               </div>
@@ -681,7 +773,17 @@ export function HeaderMockup({
           showReadingListLink={showReadingListLink}
           showWishlistLink={showWishlistLink}
           showCartIcon={showCartIcon}
+          mobileMenuWidth={mobileMenuWidth}
+          mobileMenuHeight={mobileMenuHeight}
         />
+      ) : null}
+      {isSearchOverlayOpen && typeof document !== "undefined" ? createPortal(
+        <div className="fixed inset-0 z-[100] bg-zinc-950/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSearchOverlayOpen(false); }}>
+          <div ref={searchOverlayRef} role="dialog" aria-modal="true" aria-label="Search" className="mx-auto mt-[12vh] grid max-w-3xl gap-4 rounded-2xl bg-white p-5 shadow-2xl dark:bg-zinc-950">
+            <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Search</h2><button type="button" aria-label="Close search" onClick={() => setIsSearchOverlayOpen(false)} className="rounded-full p-2"><X aria-hidden="true" /></button></div>
+            <SearchAutocomplete search={search} className="w-full" />
+          </div>
+        </div>, document.body
       ) : null}
     </>
   );
@@ -698,6 +800,8 @@ function MobileDrawer({
   cartBadgeCount,
   onCartClick,
   search,
+  mobileMenuWidth = "standard",
+  mobileMenuHeight = "full",
   headerIcons,
   headerIconMedia,
   showSearch,
@@ -718,6 +822,8 @@ function MobileDrawer({
   cartBadgeCount: number;
   onCartClick: () => void;
   search?: SearchAutocompleteProps["search"];
+  mobileMenuWidth?: MobileMenuWidth;
+  mobileMenuHeight?: MobileMenuHeight;
   headerIcons?: Partial<HeaderIconConfiguration>;
   headerIconMedia?: HeaderIconMediaConfiguration;
   showSearch: boolean;
@@ -788,7 +894,7 @@ function MobileDrawer({
         aria-modal="true"
         aria-label={t("header.menu.site")}
         inert={isOpen ? undefined : true}
-        className={`fixed inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-soft-lg transition-transform duration-300 ease-out dark:bg-zinc-950 ${
+        className={`fixed right-0 ${mobileMenuHeight === "content" ? "top-0 max-h-[85vh]" : "inset-y-0"} ${mobileMenuWidth === "full" ? "w-screen max-w-none" : mobileMenuWidth === "wide" ? "w-[min(96vw,32rem)]" : "w-80 max-w-[85vw]"} flex flex-col bg-white shadow-soft-lg transition-transform duration-300 ease-out dark:bg-zinc-950 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -824,7 +930,7 @@ function MobileDrawer({
           {showAccountLink || showReadingListLink || showWishlistLink || showCartIcon ? (
             <div className="grid gap-1 border-t border-zinc-200 pt-4 dark:border-zinc-800">
               {showAccountLink ? (
-                <Link to="/account" className={mobileActionLinkClass}>
+                <Link to={specialPagePaths?.account || "/account"} className={mobileActionLinkClass}>
                   <HeaderActionIcon name={headerIcons?.account} mediaUrl={headerIconMedia?.account} fallback={User} /> {t("header.account")}
                 </Link>
               ) : null}
@@ -836,7 +942,7 @@ function MobileDrawer({
                 </Link>
               ) : null}
               {showWishlistLink ? (
-                <Link to="/wishlist" className={mobileActionLinkClass}>
+                <Link to={specialPagePaths?.wishlist || "/wishlist"} className={mobileActionLinkClass}>
                   <HeaderActionIcon name={headerIcons?.wishlist} mediaUrl={headerIconMedia?.wishlist} fallback={Heart} /> {t("header.wishlist")}
                   {wishlistCount > 0 ? <span className="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-400">{wishlistCount}</span> : null}
                   {wishlistSyncError ? <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" title={wishlistSyncError} /> : null}
@@ -1304,6 +1410,22 @@ function menuItemKey(item: HeaderNavItem): string {
 
 function isExternalHref(href: string): boolean {
   return /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href);
+}
+
+function fragmentId(href: string): string | null {
+  const hashIndex = href.indexOf("#");
+  if (hashIndex < 0 || hashIndex === href.length - 1) return null;
+  try {
+    return decodeURIComponent(href.slice(hashIndex + 1));
+  } catch {
+    return href.slice(hashIndex + 1);
+  }
+}
+
+function isSamePageFragmentHref(href: string, pathname: string): boolean {
+  if (!fragmentId(href) || isExternalHref(href)) return false;
+  const hrefPathname = href.startsWith("#") ? pathname : href.slice(0, href.indexOf("#"));
+  return hrefPathname === pathname;
 }
 
 function joinMenuClasses(baseClassName: string, item: HeaderNavItem): string {

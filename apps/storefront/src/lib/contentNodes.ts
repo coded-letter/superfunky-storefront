@@ -13,6 +13,10 @@ export type ContentNodeInfo = {
   type: ContentNodeType;
 };
 
+export type ContentNodeLookupOptions = {
+  probePage?: boolean;
+};
+
 type ContentNodeTypeResult = {
   nodeByUri: { __typename: string } | null;
 };
@@ -53,12 +57,15 @@ export async function getContentNodeInfo(
   uri: string,
   request: GraphqlFieldFallbackRequester = graphqlRequest,
   profile: StorefrontBackendProfile = STOREFRONT_BACKEND_PROFILE,
+  options: ContentNodeLookupOptions = {},
 ): Promise<ContentNodeInfo | null> {
   if (shouldPreferCoreGraphqlQueries(profile) && isRootLevelUri(uri)) {
     const postInfo = await getPostNodeInfo(uri, request);
     if (postInfo) return postInfo;
-    const pageInfo = await getPageNodeInfo(uri, request);
-    if (pageInfo) return pageInfo;
+    if (options.probePage !== false) {
+      const pageInfo = await getPageNodeInfo(uri, request);
+      if (pageInfo) return pageInfo;
+    }
   }
 
   const { data, errors } = await request<ContentNodeTypeResult>(CONTENT_NODE_TYPE_QUERY, { uri });
@@ -69,8 +76,11 @@ export async function getContentNodeInfo(
   // archive into a "Content unavailable" error page.
   if (!data) {
     if (hasMalformedNodeByUriError(errors)) {
-      return getPostNodeInfo(uri, request);
+      return shouldPreferCoreGraphqlQueries(profile) && isRootLevelUri(uri)
+        ? null
+        : getPostNodeInfo(uri, request);
     }
+
     if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
     throw new Error("The content-node query returned no data");
   }

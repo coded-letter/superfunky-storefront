@@ -19,6 +19,13 @@ import {
   type LoginClient,
   type LoginProvider,
 } from "../lib/auth";
+import {
+  consumeOAuthAuthRef,
+  oauthStateFromAuthorizationUrl,
+  parseStorefrontAuthRef,
+  storeOAuthAuthRef,
+  withStorefrontAuthRef,
+} from "../lib/authRef";
 
 export type AuthMode = "login" | "register" | "forgot-password";
 export type AuthShortcodeMode = AuthMode | "combined";
@@ -59,6 +66,7 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
   const [searchParams] = useSearchParams();
+  const authRef = parseStorefrontAuthRef(searchParams.get("ref"));
   const config = useApplicationShortcode(["funkycommerce_auth"], { mode });
   const brandName = useNavigationData().data?.storefrontConfig.branding.storeName || "FunkyCommerce";
   const { authLayout: layout } = useLayoutPreferences();
@@ -71,7 +79,7 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
 
   if (isLoggedIn) {
     if (isLoadingAccountPath) return null;
-    return <Navigate to={accountPath} replace />;
+    return <Navigate to={authRef || accountPath} replace />;
   }
 
   const formColumn = (
@@ -91,9 +99,9 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
         />
       ) : embedded ? null : (
         <div className="flex flex-wrap gap-1.5 rounded-control bg-zinc-100 p-1 dark:bg-zinc-800/60">
-          <AuthTab href={authLoginPath} label={t("auth.tab.login")} isActive={activeMode === "login"} />
-          <AuthTab href={authRegisterPath} label={t("auth.tab.register")} isActive={activeMode === "register"} />
-          <AuthTab href={authForgotPath} label={t("auth.tab.forgot")} isActive={activeMode === "forgot-password"} />
+          <AuthTab href={withStorefrontAuthRef(authLoginPath, authRef)} label={t("auth.tab.login")} isActive={activeMode === "login"} />
+          <AuthTab href={withStorefrontAuthRef(authRegisterPath, authRef)} label={t("auth.tab.register")} isActive={activeMode === "register"} />
+          <AuthTab href={withStorefrontAuthRef(authForgotPath, authRef)} label={t("auth.tab.forgot")} isActive={activeMode === "forgot-password"} />
         </div>
       )}
 
@@ -103,11 +111,11 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
         </p>
       ) : null}
 
-      {activeMode === "login" || activeMode === "register" ? <AuthProviders /> : null}
+      {activeMode === "login" || activeMode === "register" ? <AuthProviders authRef={authRef} /> : null}
 
-      {activeMode === "login" ? <LoginFormMock accountPath={accountPath} authForgotPath={authForgotPath} /> : null}
-      {activeMode === "register" ? <RegisterFormMock accountPath={accountPath} authLoginPath={authLoginPath} /> : null}
-      {activeMode === "forgot-password" ? <ForgotPasswordFormMock authLoginPath={authLoginPath} /> : null}
+      {activeMode === "login" ? <LoginFormMock destination={authRef || accountPath} authForgotPath={withStorefrontAuthRef(authForgotPath, authRef)} /> : null}
+      {activeMode === "register" ? <RegisterFormMock destination={authRef || accountPath} authLoginPath={withStorefrontAuthRef(authLoginPath, authRef)} /> : null}
+      {activeMode === "forgot-password" ? <ForgotPasswordFormMock authLoginPath={withStorefrontAuthRef(authLoginPath, authRef)} /> : null}
     </div>
   );
 
@@ -174,7 +182,7 @@ function AuthSplitLayout({ children, brandName }: { children: ReactNode; brandNa
   );
 }
 
-function AuthProviders() {
+function AuthProviders({ authRef }: { authRef: string | null }) {
   const t = useT();
   const { clients, error } = useLoginClients();
   const providers = clients.filter((client) =>
@@ -201,6 +209,7 @@ function AuthProviders() {
             <a
               key={provider.provider}
               href={provider.authorizationUrl || undefined}
+              onClick={() => storeOAuthAuthRef(oauthStateFromAuthorizationUrl(provider.authorizationUrl || ""), authRef)}
               title={t("auth.continue_with", { provider: providerLabel(provider) })}
               aria-label={t("auth.continue_with", { provider: providerLabel(provider) })}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500"
@@ -253,7 +262,7 @@ function isSafeAuthorizationUrl(value: string | null): boolean {
   }
 }
 
-function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; authForgotPath: string }) {
+function LoginFormMock({ destination, authForgotPath }: { destination: string; authForgotPath: string }) {
   const t = useT();
   const navigate = useNavigate();
   const [values, setValues] = useState({ identity: "", password: "" });
@@ -274,7 +283,7 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
     setSubmitError(null);
     try {
       await login(values.identity, values.password, rememberMe);
-      navigate(accountPath, { replace: true });
+      navigate(destination, { replace: true });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("auth.login.error"));
     } finally {
@@ -319,7 +328,7 @@ function LoginFormMock({ accountPath, authForgotPath }: { accountPath: string; a
   );
 }
 
-function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string; authLoginPath: string }) {
+function RegisterFormMock({ destination, authLoginPath }: { destination: string; authLoginPath: string }) {
   const t = useT();
   const navigate = useNavigate();
   const [values, setValues] = useState({ firstName: "", lastName: "", username: "", email: "", password: "", confirmPassword: "" });
@@ -352,7 +361,7 @@ function RegisterFormMock({ accountPath, authLoginPath }: { accountPath: string;
       if (marketingConsent) saveNewsletterEmail(values.email);
       const session = await registerCustomer(values);
       if (session) {
-        navigate(accountPath, { replace: true });
+        navigate(destination, { replace: true });
       } else {
         setSubmitted(true);
       }
@@ -503,6 +512,7 @@ export function ResetPasswordMockupPage() {
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
   const key = searchParams.get("key");
   const login = searchParams.get("login");
+  const authRef = parseStorefrontAuthRef(searchParams.get("ref"));
   const hasValidLink = Boolean(key && login);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -525,7 +535,7 @@ export function ResetPasswordMockupPage() {
     setSubmitError(null);
     try {
       await resetUserPassword(key, login, password);
-      navigate(`${authLoginPath}?password-reset=success`, { replace: true });
+      navigate(withStorefrontAuthRef(`${authLoginPath}?password-reset=success`, authRef), { replace: true });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("auth.reset.error.failed"));
     } finally {
@@ -557,7 +567,7 @@ export function ResetPasswordMockupPage() {
           </form>
         ) : (
           <Link
-            to={authForgotPath}
+            to={withStorefrontAuthRef(authForgotPath, authRef)}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white no-underline transition hover:-translate-y-0.5 hover:shadow-soft dark:bg-zinc-100 dark:text-zinc-900"
           >
             Request a new reset link
@@ -579,6 +589,7 @@ export function OAuthCallbackPage() {
   const normalizedProvider = provider.toUpperCase() as LoginProvider;
   const code = searchParams.get("code") || "";
   const state = searchParams.get("state") || undefined;
+  const [authRef] = useState(() => consumeOAuthAuthRef(state));
   const providerError = searchParams.get("error_description") || searchParams.get("error");
 
   useEffect(() => {
@@ -593,7 +604,7 @@ export function OAuthCallbackPage() {
     let cancelled = false;
     loginWithProvider(normalizedProvider, code, state)
       .then(() => {
-        if (!cancelled) navigate(accountPath, { replace: true });
+        if (!cancelled) navigate(authRef || accountPath, { replace: true });
       })
       .catch((callbackError) => {
         if (!cancelled) setError(callbackError instanceof Error ? callbackError.message : t("auth.oauth.error"));
@@ -601,7 +612,7 @@ export function OAuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [code, navigate, normalizedProvider, providerError, state, t]);
+  }, [accountPath, authRef, code, navigate, normalizedProvider, providerError, state, t]);
 
   return (
     <div className="grid min-h-[60vh] place-items-center px-4 py-16">
@@ -610,7 +621,7 @@ export function OAuthCallbackPage() {
         {error ? (
           <>
             <p role="alert" className="m-0 text-sm text-rose-600 dark:text-rose-400">{error}</p>
-            <Link to={authLoginPath} className="text-sm font-semibold text-brand-600 dark:text-brand-400">Return to sign in</Link>
+            <Link to={withStorefrontAuthRef(authLoginPath, authRef)} className="text-sm font-semibold text-brand-600 dark:text-brand-400">Return to sign in</Link>
           </>
         ) : (
           <p role="status" className="m-0 text-sm text-zinc-500 dark:text-zinc-400">Exchanging the authorization response with the site…</p>

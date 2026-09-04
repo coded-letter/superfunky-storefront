@@ -125,7 +125,7 @@ test("auth shortcode supports a combined view switch and redirects active sessio
   assert.match(authPage, /label=\{t\("auth\.mode_selector"\)\}[\s\S]*hideLabel/);
   assert.doesNotMatch(authPage, /Authentication view|>Superfunky</);
   assert.match(authPage, /config\["default-mode"\]/);
-  assert.match(authPage, /return <Navigate to=\{accountPath\} replace \/>/);
+  assert.match(authPage, /return <Navigate to=\{authRef \|\| accountPath\} replace \/>/);
   assert.match(themeFunctions, /'mode'\s*=>\s*array\(\s*'default'\s*=>\s*'login',\s*'enum'\s*=>\s*array\(\s*'login',\s*'register',\s*'forgot-password',\s*'combined'\s*\)\s*\)/);
   assert.match(themeFunctions, /'default_mode'\s*=>\s*array\(\s*'default'\s*=>\s*'login',\s*'enum'\s*=>\s*array\(\s*'login',\s*'register',\s*'forgot-password'\s*\)\s*\)/);
   assert.match(auth, /export function useIsUserLoggedIn\(\)/);
@@ -295,7 +295,8 @@ test("shared product, post, and social grids filter before pagination", async ()
   assert.match(social, /activeTagFilter[\s\S]*author[\s\S]*normalizedQuery/);
   assert.match(shortcodes, /function filterProducts\(/);
   assert.match(shortcodes, /include\.includes\(product\.slug\)/);
-  assert.match(shortcodes, /product\.tagSlugs\?\.some/);
+  assert.match(shortcodes, /matchesShortcodeValues\(product\.tagSlugs \|\| \[\], tag\)/);
+  assert.match(shortcodes, /matchesShortcodeValues\(\[\.\.\.\(product\.categorySlugs \|\| \[\]\), product\.category\], category\)/);
   assert.match(commerce, /const PRODUCT_LIST_CARD_FIELDS[\s\S]*productTags \{/);
 });
 

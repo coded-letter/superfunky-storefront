@@ -683,6 +683,22 @@ html[data-storefront-checkout="true"] .storefront-recent-orders {
     color: #a1a1aa;
   }
 
+  html:not(.dark) .funky-footer a {
+    color: #d4d4d8;
+  }
+
+  html:not(.dark) .funky-footer a:hover,
+  html:not(.dark) .funky-footer a:active,
+  html:not(.dark) .funky-footer a[aria-current="page"],
+  html:not(.dark) .funky-footer a:focus-visible {
+    color: rgb(var(--brand-300));
+  }
+
+  html:not(.dark) .funky-footer a:focus-visible {
+    outline: 2px solid rgb(var(--brand-300));
+    outline-offset: 3px;
+  }
+
   .entry-content .text-green-400 {
     color: #15803d !important;
   }

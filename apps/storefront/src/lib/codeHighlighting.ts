@@ -163,7 +163,7 @@ function addCodeControls(
   return controls;
 }
 
-export function mountCmsCodeHighlighting(container: HTMLElement): () => void {
+export function mountCmsCodeHighlighting(container: HTMLElement, showControls = true): () => void {
   const controls: HTMLElement[] = [];
   const themedBlocks: Array<{ anchor: HTMLElement; code: HTMLElement }> = [];
   const candidates = [
@@ -193,7 +193,7 @@ export function mountCmsCodeHighlighting(container: HTMLElement): () => void {
     if (!language || !Prism.languages[language]) {
       code.classList.add("language-none");
       pre?.classList.add("language-none");
-      if (pre) controls.push(addCodeControls(pre, code, controlLanguage, themePreference));
+      if (pre && showControls) controls.push(addCodeControls(pre, code, controlLanguage, themePreference));
       return;
     }
 
@@ -202,7 +202,7 @@ export function mountCmsCodeHighlighting(container: HTMLElement): () => void {
     code.classList.add(`language-${language}`);
     pre?.classList.add(`language-${language}`);
     Prism.highlightElement(code);
-    if (pre) controls.push(addCodeControls(pre, code, controlLanguage, themePreference));
+    if (pre && showControls) controls.push(addCodeControls(pre, code, controlLanguage, themePreference));
   });
 
   if (candidates.some((code) => code.dataset.cmsHighlighted === "true")) {

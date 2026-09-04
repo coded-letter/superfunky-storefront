@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
-import { Seo, useLanguage, useT } from "@funky/ui";
+import { Link, useLocation } from "react-router-dom";
+import { Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, seoBreadcrumbsToItems } from "./Breadcrumbs";
 import { useIncrementalData } from "@funky/sdk/react";
 import { mountCmsBehaviors, sanitizeCmsHtml } from "../lib/cmsBehaviors";
@@ -26,6 +26,9 @@ import {
   slotRenderableShortcodeMarkers,
   type SlottedShortcodeMarker,
 } from "../lib/shortcodeMarkup";
+import { ProtectedPageError, unlockProtectedPage } from "../lib/protectedPages";
+import { parseStorefrontAuthRef, withStorefrontAuthRef } from "../lib/authRef";
+import { useStorefrontPath } from "../lib/storefrontPaths";
 
 type CmsPageContentProps = {
   className?: string;
@@ -40,6 +43,74 @@ type CmsPageContentProps = {
   synchronizeLanguage?: boolean;
 };
 
+function ProtectedPageGate({
+  error,
+  pageUri,
+  onUnlocked,
+}: {
+  error: ProtectedPageError;
+  pageUri: string;
+  onUnlocked: () => void;
+}) {
+  const { pathname, search, hash } = useLocation();
+  const loginPath = useStorefrontPath("auth-login", "/auth");
+  const [password, setPassword] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const safeRef = parseStorefrontAuthRef(`${pathname}${search}${hash}`);
+
+  if (error.kind === "auth-required") {
+    return (
+      <section aria-labelledby="private-page-title" className="mx-auto grid max-w-xl gap-4 rounded-3xl border border-zinc-200 p-8 dark:border-zinc-700">
+        <h1 id="private-page-title" className="m-0 text-2xl font-bold">Private page</h1>
+        <p className="m-0">Sign in with an administrator or editor account that can read private pages.</p>
+        <Link className="w-fit rounded-full bg-brand-600 px-5 py-3 font-semibold text-white no-underline" to={withStorefrontAuthRef(loginPath, safeRef)}>
+          Sign in to continue
+        </Link>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-labelledby="protected-page-title" className="mx-auto grid max-w-xl gap-4 rounded-3xl border border-zinc-200 p-8 dark:border-zinc-700">
+      <h1 id="protected-page-title" className="m-0 text-2xl font-bold">Password-protected page</h1>
+      <p className="m-0">Enter the WordPress page password to continue.</p>
+      <form
+        className="grid gap-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setSubmitting(true);
+          setSubmitError("");
+          try {
+            await unlockProtectedPage(pageUri, password);
+            onUnlocked();
+          } catch (unlockError) {
+            setSubmitError(unlockError instanceof Error ? unlockError.message : "The page could not be unlocked.");
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <label htmlFor="protected-page-password" className="font-semibold">Page password</label>
+        <input
+          id="protected-page-password"
+          type="password"
+          required
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          aria-describedby={submitError ? "protected-page-error" : undefined}
+          className="rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        />
+        {submitError ? <p id="protected-page-error" role="alert" className="m-0 text-sm text-red-700 dark:text-red-300">{submitError}</p> : null}
+        <button type="submit" disabled={submitting} className="w-fit rounded-full bg-brand-600 px-5 py-3 font-semibold text-white disabled:opacity-60">
+          {submitting ? "Checking password…" : "Unlock page"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 export function CmsPageContent({
   className = "",
   fallback,
@@ -53,14 +124,16 @@ export function CmsPageContent({
   synchronizeLanguage = true,
 }: CmsPageContentProps) {
   const t = useT();
+  const { showCodeControls } = useLayoutPreferences();
   const { pathname } = useLocation();
   const { languageCode, configuredLanguageCodes } = useLanguage();
   const pageUri = normalizePageUri(pathname);
   const contentRef = useRef<HTMLDivElement>(null);
   const snapshotRef = useRef<HTMLElement>(null);
   const [pageStylesReady, setPageStylesReady] = useState(false);
+  const [protectedPageRevision, setProtectedPageRevision] = useState(0);
   const { data: page, isLoading, isRevalidating, error } = useIncrementalData(
-    pageCacheKey || `page:${pageUri}`,
+    pageCacheKey || `page:${pageUri}:protected-${protectedPageRevision}`,
     loadPage || (() => getPageByUri(pageUri)),
   );
   const contentLanguageCode = resolveConfiguredContentLanguage(
@@ -80,9 +153,11 @@ export function CmsPageContent({
   const initialMarkup = homePath ? getInitialCmsPageMarkup() : "";
 
   useEffect(() => {
-    if (contentRef.current && page?.headlessContent) return mountCmsBehaviors(contentRef.current);
+    if (contentRef.current && page?.headlessContent) {
+      return mountCmsBehaviors(contentRef.current, showCodeControls);
+    }
     return undefined;
-  }, [page?.headlessContent]);
+  }, [page?.headlessContent, showCodeControls]);
 
   useLayoutEffect(() => {
     if ((!isLoading && !error) || !snapshotRef.current) return undefined;
@@ -129,6 +204,15 @@ export function CmsPageContent({
   }
 
   if (error) {
+    if (error instanceof ProtectedPageError) {
+      return (
+        <ProtectedPageGate
+          error={error}
+          pageUri={pageUri}
+          onUnlocked={() => setProtectedPageRevision((revision) => revision + 1)}
+        />
+      );
+    }
     if (fallback !== undefined) return fallback;
     return <PageStatus title={t("error.page_unavailable")} message={error.message} />;
   }

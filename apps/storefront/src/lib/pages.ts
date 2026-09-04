@@ -25,6 +25,7 @@ import {
   createLanguageCompatiblePageQuery,
   createProfilePageQuery,
 } from "./profileGraphqlCompatibility.ts";
+import { getProtectedPageByUri } from "./protectedPages.ts";
 
 export type CmsPageScript = {
   id: string;
@@ -82,6 +83,7 @@ export type CmsThemeStyles = {
 };
 
 export type CmsPage = {
+  cachePrivate?: boolean;
   id: string;
   databaseId: number;
   slug: string | null;
@@ -374,7 +376,7 @@ export async function getPageByUri(uri: string): Promise<CmsPage | null> {
   if (page) return page;
 
   const slug = normalizedUri.split("/").filter(Boolean).at(-1);
-  if (!slug) return null;
+  if (!slug) return getProtectedPageByUri(normalizedUri);
 
   const { data, errors } = await requestGraphqlWithCompatibility<PageByNameResult>(
     graphqlRequest,
@@ -397,7 +399,7 @@ export async function getPageByUri(uri: string): Promise<CmsPage | null> {
     slug,
     requireExactUri,
   );
-  if (!candidate) return null;
+  if (!candidate) return getProtectedPageByUri(normalizedUri);
 
   const resolvedPage = await getPage(candidate.databaseId, "DATABASE_ID");
   return resolvedPage && !resolvedPage.uri

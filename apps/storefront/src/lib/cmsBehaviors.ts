@@ -436,7 +436,7 @@ function isCmsGeometryWrapper(element: Element): boolean {
     || element.classList.contains("container");
 }
 
-export function mountCmsBehaviors(container: HTMLElement): Cleanup {
+export function mountCmsBehaviors(container: HTMLElement, showCodeControls = true): Cleanup {
   const cleanups: Cleanup[] = [mountCmsAutoplayVideos(container), mountCmsImageFallbacks(container)];
 
   // Lazy-load prismjs only when the container has code blocks — keeps it out of the initial bundle.
@@ -445,7 +445,7 @@ export function mountCmsBehaviors(container: HTMLElement): Cleanup {
     let pendingCleanup: Cleanup | null = null;
     void import("./codeHighlighting.ts").then(({ mountCmsCodeHighlighting }) => {
       if (disposed) return;
-      pendingCleanup = mountCmsCodeHighlighting(container);
+      pendingCleanup = mountCmsCodeHighlighting(container, showCodeControls);
     });
     cleanups.push(() => {
       disposed = true;

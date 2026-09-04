@@ -82,6 +82,8 @@ function PromotedProductCard({
         imageUrl: resolvedImageUrl,
         priceLabel: resolvedPriceLabel,
         priceAmount: resolvedPriceAmount,
+        stockQuantity: selectedVariation?.stockQuantity ?? product.stockQuantity,
+        backordersAllowed: selectedVariation?.backordersAllowed ?? product.backordersAllowed,
       },
       quantity,
     );

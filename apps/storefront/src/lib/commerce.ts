@@ -57,6 +57,7 @@ export type CmsProductCard = ProductCardData & {
   commerceProductType: CommerceProductType;
   stockStatus: string | null;
   stockQuantity: number | null;
+  backordersAllowed?: boolean;
   inStock: boolean | null;
   engagementRating: PublicEngagementRatingSummary;
 };
@@ -154,6 +155,7 @@ export type CmsProductArchive = {
   products: CmsProductCard[];
   hasMoreProducts: boolean;
   siblings: CmsProductTerm[];
+  children: CmsProductTerm[];
   seo: CmsPageSeo;
 };
 
@@ -176,6 +178,7 @@ type RawVariation = {
   salePrice: string | null;
   stockStatus: string | null;
   stockQuantity: number | null;
+  backordersAllowed?: boolean | null;
   image: RawImage | null;
   attributes: {
     nodes: { id: string; name: string | null; label: string | null; value: string | null }[];
@@ -204,6 +207,7 @@ export type RawProductCard = {
   salePrice?: string | null;
   stockStatus?: string | null;
   stockQuantity?: number | null;
+  backordersAllowed?: boolean | null;
   externalUrl?: string | null;
   variations?: { nodes: RawVariation[] } | null;
 };
@@ -298,6 +302,7 @@ type RawTaxonomySeo = Omit<RawCmsSeo, "schema"> & { schema: { raw: string | null
 type ArchiveResult = {
   archive: (RawTerm & {
     products?: { nodes: RawProductCard[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
+    children?: { nodes: RawTerm[] } | null;
     seo?: RawTaxonomySeo | null;
   }) | null;
   siblings: { nodes: RawTerm[] } | null;
@@ -311,6 +316,7 @@ const PRODUCT_CONCRETE_FIELDS = /* GraphQL */ `
     salePrice
     stockStatus
     stockQuantity
+    backordersAllowed
   }
   ... on VariableProduct {
     price
@@ -318,6 +324,7 @@ const PRODUCT_CONCRETE_FIELDS = /* GraphQL */ `
     salePrice
     stockStatus
     stockQuantity
+    backordersAllowed
     variations(first: 50) {
       nodes {
         id
@@ -328,6 +335,7 @@ const PRODUCT_CONCRETE_FIELDS = /* GraphQL */ `
         salePrice
         stockStatus
         stockQuantity
+        backordersAllowed
         image {
           id
           sourceUrl
@@ -515,6 +523,7 @@ export const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
     salePrice
     stockStatus
     stockQuantity
+    backordersAllowed
   }
   ... on VariableProduct {
     price
@@ -530,6 +539,7 @@ export const PRODUCT_LIST_CARD_FIELDS = /* GraphQL */ `
         salePrice
         stockStatus
         stockQuantity
+        backordersAllowed
         image {
           id
           sourceUrl
@@ -930,6 +940,9 @@ export function archiveQuery(taxonomy: CommerceTaxonomy): string {
       archive: ${field}(id: $id, idType: $idType) {
         ${LOCALIZED_TERM_FIELDS}
         ${image}
+        ${taxonomy === "category" ? `children(first: 50, where: { hideEmpty: true }) {
+          nodes { ${LOCALIZED_TERM_FIELDS} ${image} }
+        }` : ""}
         seo { ${TAXONOMY_SEO_FIELDS} }
       }
       localizedProducts: products(first: $first, after: $after, where: { ${productFilter}: $taxonomySlug, language: $language }) {
@@ -956,6 +969,9 @@ export function compatibleArchiveQuery(taxonomy: CommerceTaxonomy): string {
       archive: ${field}(id: $id, idType: $idType) {
         ${TERM_FIELDS}
         ${image}
+        ${taxonomy === "category" ? `children(first: 50, where: { hideEmpty: true }) {
+          nodes { ${TERM_FIELDS} ${image} }
+        }` : ""}
         products(first: $first, after: $after) {
           nodes { ...StorefrontProductListCard }
           pageInfo { hasNextPage endCursor }
@@ -1313,10 +1329,12 @@ export async function getProductArchive(
     : taxonomy === "brand"
       ? [archiveQuery(taxonomy), scopedQueryWithoutBrands, compatibleLocalizedBrandArchiveQuery(), compatibleQuery]
       : [archiveQuery(taxonomy), scopedQueryWithoutBrands, compatibleQuery];
+  const normalizedIdentifier = normalizeProductTaxonomyIdentifier(identifier);
   const identifiers = idType === "URI"
     ? [
-        { id: identifier, idType },
-        { id: productSlugFromIdentifier(identifier), idType: "SLUG" as const },
+        { id: normalizedIdentifier.uri, idType },
+        { id: normalizedIdentifier.slug, idType: "SLUG" as const },
+        { id: normalizedIdentifier.hierarchicalSlug, idType: "SLUG" as const },
       ]
     : [{ id: identifier, idType }];
   let data: ArchiveResult | null = null;
@@ -1412,6 +1430,7 @@ export async function getProductArchive(
     products: products.map(mapProductCard),
     hasMoreProducts: hasMore,
     siblings: mapTerms(initialData.siblings?.nodes, archiveLanguageCode || languageCode.trim().toLowerCase()),
+    children: mapTerms(archive.children?.nodes, archiveLanguageCode || languageCode.trim().toLowerCase()),
     seo: mapTaxonomySeo(archive.seo || null),
   };
 }
@@ -1527,15 +1546,18 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
               imageUrl: variation.image?.sourceUrl || undefined,
               sku: variation.sku || undefined,
               inStock:
+                variation.backordersAllowed === true ||
                 variation.stockStatus === "IN_STOCK" ||
                 (variation.stockQuantity !== null && variation.stockQuantity > 0),
               stockQuantity: variation.stockQuantity,
+              backordersAllowed: variation.backordersAllowed === true,
             };
           })
         : undefined,
     commerceProductType,
     stockStatus,
     stockQuantity,
+    backordersAllowed: product.backordersAllowed === true,
     inStock:
       stockStatus === null && stockQuantity === null
         ? true
@@ -1549,7 +1571,9 @@ function deriveVariationStock(variations: RawVariation[]): {
 } {
   if (!variations.length) return { stockStatus: null, stockQuantity: null };
   const purchasable = variations.filter((variation) =>
-    variation.stockStatus === "IN_STOCK" || (variation.stockQuantity !== null && variation.stockQuantity > 0),
+    variation.backordersAllowed === true
+    || variation.stockStatus === "IN_STOCK"
+    || (variation.stockQuantity !== null && variation.stockQuantity > 0),
   );
   const quantities = variations.flatMap((variation) =>
     variation.stockQuantity === null ? [] : [variation.stockQuantity],
@@ -1645,6 +1669,7 @@ function mapVariationCombo(
       variation.stockStatus === "IN_STOCK" ||
       (variation.stockQuantity !== null && variation.stockQuantity > 0),
     stockQuantity: variation.stockQuantity,
+    backordersAllowed: variation.backordersAllowed === true,
   };
 }
 
@@ -1736,6 +1761,28 @@ function productSlugFromIdentifier(identifier: string): string {
   } catch {
     return value;
   }
+}
+
+export function normalizeProductTaxonomyIdentifier(identifier: string): {
+    uri: string;
+    hierarchicalSlug: string;
+    slug: string;
+  } {
+    const clean = identifier.trim().split(/[?#]/, 1)[0].replace(/^https?:\/\/[^/]+/i, "");
+    const decoded = clean.split("/").filter(Boolean).map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    });
+    const uri = `/${decoded.map(encodeURIComponent).join("/")}/`;
+    const slug = decoded[decoded.length - 1] || "";
+    const taxonomyBaseIndex = decoded.findIndex((part) =>
+      /^(?:product-category|pro-cat|product-tag|product-brand)$/i.test(part),
+    );
+    const hierarchy = taxonomyBaseIndex >= 0 ? decoded.slice(taxonomyBaseIndex + 1) : decoded;
+    return { uri, hierarchicalSlug: hierarchy.join("/"), slug };
 }
 
 function decodePrice(value: string): string {

@@ -66,6 +66,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
     productArchiveHeroLayout: heroVariant,
     shopProductCardVariant,
     showArchiveDescriptionInHero,
+    showProductArchiveSubcategories,
   } = useLayoutPreferences();
   const isFullBleed = heroVariant === "fullbleed";
   const shopPath = useStorefrontPath("shop", "/shop");
@@ -141,6 +142,21 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
               }`}
             >
               {archive.taxonomy === "tag" ? "#" : ""}{term.name}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
+      {archive.taxonomy === "category" && showProductArchiveSubcategories && archive.children.length ? (
+        <nav aria-label={`${title} subcategories`} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {archive.children.map((term) => (
+            <Link
+              key={term.id}
+              to={normalizeLanguagePath(term.uri, languageCode, configuredLanguageCodes)}
+              className="rounded-2xl border border-zinc-200 bg-white p-5 no-underline transition hover:border-brand-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <span className="font-display text-lg font-bold text-zinc-950 dark:text-zinc-50">{term.name}</span>
+              {term.count ? <span className="ml-2 text-sm text-zinc-500">({term.count})</span> : null}
             </Link>
           ))}
         </nav>

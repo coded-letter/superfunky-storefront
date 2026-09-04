@@ -21,11 +21,26 @@ import {
   CORE_FEATURED_PRODUCT_QUERY,
   FEATURED_PRODUCT_QUERY,
   PRODUCT_LIST_CARD_FIELDS,
+  archiveQuery,
   mapProductCard,
+  normalizeProductTaxonomyIdentifier,
   type RawProductCard,
 } from "./commerce.ts";
 
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+
+test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {
+  assert.deepEqual(
+    normalizeProductTaxonomyIdentifier("/pro-cat/automaty-vendingowe/napoje-zimne/"),
+    {
+      uri: "/pro-cat/automaty-vendingowe/napoje-zimne/",
+      hierarchicalSlug: "automaty-vendingowe/napoje-zimne",
+      slug: "napoje-zimne",
+    },
+  );
+  assert.match(archiveQuery("category"), /children\(first: 50, where: \{ hideEmpty: true \}\)/);
+  assert.match(archiveQuery("category"), /localizedProducts: products[\s\S]*category: \$taxonomySlug/);
+});
 
 test("catalog product cards request gallery images for the gallery variant", () => {
   assert.match(PRODUCT_LIST_CARD_FIELDS, /\bgalleryImages\s*\(\s*first:\s*12\s*\)/);

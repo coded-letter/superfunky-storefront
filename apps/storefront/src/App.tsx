@@ -27,7 +27,7 @@ import { useSyncCartToBackend } from "./lib/backendCart";
 import { readingListRemote, wishlistRemote } from "./lib/savedLists";
 import type { StorefrontRouteKey } from "./lib/storefrontPaths";
 import { matchesStorefrontFallbackPath } from "./lib/routePathMatching";
-import { useResolvedStorefrontLanguageRoute, useResolvedStorefrontPath } from "./lib/storefrontPaths";
+import { useResolvedStorefrontLanguageRoute, useResolvedStorefrontPath, useStorefrontPath } from "./lib/storefrontPaths";
 import { applyLayoutConfiguration, useLayoutPreferencesFromBackendConfig } from "./lib/layoutPreferencesSync";
 import { CreatorContentProvider } from "./state/creatorContent";
 import { BlogDataProvider } from "./state/blogData";
@@ -92,6 +92,12 @@ function ConnectedStorefrontChrome() {
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
   const { formatBaseAmount } = useCurrency();
   const { path: checkoutPath } = useResolvedStorefrontPath("checkout", "/checkout", languageCode);
+  const shopPath = useStorefrontPath("shop", "/shop");
+  const accountPath = useStorefrontPath("account", "/account");
+  const wishlistPath = useStorefrontPath("wishlist", "/wishlist");
+  const cartPath = useStorefrontPath("cart", "/cart");
+  const privacyPolicyPath = useStorefrontPath("privacy-policy", "/privacy-policy");
+  const termsPath = useStorefrontPath("terms", "/terms");
   const t = useT();
   const { showToast } = useToast();
   const { viewer, refresh: refreshCommunity } = useCommunityData();
@@ -230,6 +236,15 @@ function ConnectedStorefrontChrome() {
         search={search}
         onNewsletterSubscribe={isBackendConfigured ? subscribeToNewsletter : undefined}
         homePath={homePath}
+        specialPagePaths={{
+          shop: shopPath,
+          account: accountPath,
+          wishlist: wishlistPath,
+          cart: cartPath,
+          checkout: checkoutPath,
+          privacyPolicy: privacyPolicyPath,
+          terms: termsPath,
+        }}
         storefrontConfig={data?.storefrontConfig}
         onPushToggle={pushEnabled ? togglePush : undefined}
         pushSubscribed={pushSubscribed}

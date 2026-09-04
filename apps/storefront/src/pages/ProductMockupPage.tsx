@@ -91,7 +91,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     return formatBaseAmount(manualPrice !== undefined ? convertSelectedToBase(manualPrice) : baseAmount);
   };
 
-  const { addItem, openDrawer } = useCart();
+  const { addItem, items, openDrawer } = useCart();
   const { has, toggle } = useWishlist();
   const wishlistId = savedListEntityId(product.card);
   const [quantity, setQuantity] = useState(1);
@@ -109,6 +109,12 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
   const isExternal = product.card.commerceProductType === "external";
   const isGrouped = product.card.commerceProductType === "grouped";
   const canPurchase = isVariable ? Boolean(selectedVariation?.inStock) : Boolean(product.card.inStock);
+  const stockQuantity = selectedVariation?.stockQuantity ?? product.card.stockQuantity;
+  const backordersAllowed = selectedVariation?.backordersAllowed ?? product.card.backordersAllowed;
+  const quantityInCart = items.find((item) => item.id === (selectedVariation?.id || product.id))?.quantity ?? 0;
+  const remainingStock = backordersAllowed || stockQuantity == null
+    ? undefined
+    : Math.max(0, stockQuantity - quantityInCart);
   const priceAmount = selectedVariation?.priceAmount ?? product.card.priceAmount;
   const price = formatProductPrice(priceAmount) ?? selectedVariation?.priceLabel ?? product.card.priceLabel;
   // External and grouped products always resolve their own price/link presentation,
@@ -185,6 +191,8 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
         imageUrl: selectedVariation?.imageUrl || product.card.imageUrl,
         priceLabel: price,
         priceAmount,
+        stockQuantity,
+        backordersAllowed,
       },
       quantity,
     );
@@ -347,9 +355,13 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
                 <input
                   type="number"
                   min={1}
-                  max={selectedVariation?.stockQuantity || product.card.stockQuantity || undefined}
+                  max={remainingStock}
                   value={quantity}
-                  onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
+                  onChange={(event) => setQuantity(Math.min(
+                    remainingStock ?? Number.POSITIVE_INFINITY,
+                    Math.max(1, Number(event.target.value) || 1),
+                  ))}
+                  disabled={remainingStock === 0}
                   className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base font-medium text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 />
               </label>
@@ -376,7 +388,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             ) : (
               <button
                 type="button"
-                disabled={!canPurchase || isGrouped}
+                disabled={!canPurchase || isGrouped || remainingStock === 0}
                 onClick={addToCart}
                 className="self-end rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
