@@ -51,6 +51,9 @@ export async function fetchArchiveNodesInBatches<TNode>(
       return { nodes, hasMore: true };
     }
     if (!pageInfo.endCursor) {
+      if (pageNodes.length === 0) {
+        return { nodes, hasMore: false };
+      }
       throw new Error("The archive query returned an incomplete pagination cursor");
     }
     after = pageInfo.endCursor;

@@ -70,6 +70,15 @@ test("archive batching rejects incomplete cursors", async () => {
   );
 });
 
+test("archive batching accepts an empty terminal page from filtered WPGraphQL connections", async () => {
+  const result = await fetchArchiveNodesInBatches(10, async () => ({
+    nodes: [],
+    pageInfo: { hasNextPage: true, endCursor: null },
+  }));
+
+  assert.deepEqual(result, { nodes: [], hasMore: false });
+});
+
 test("taxonomy archives batch backend pagination and remain publicly indexable", () => {
   assert.match(postArchiveSource, /posts\(first:\s*\$first,\s*after:\s*\$after\)/);
   assert.match(postArchiveSource, /pageInfo\s*\{\s*hasNextPage\s*endCursor\s*\}/);
