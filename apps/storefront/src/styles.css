@@ -1459,11 +1459,6 @@ a[href="#waitlist"][class*="bg-"] {
   color: #fff !important;
 }
 
-html:not(.dark) .text-zinc-400,
-html:not(.dark) .text-zinc-500 {
-  color: #52525b !important;
-}
-
 .dark .text-zinc-500 {
   color: #a1a1aa !important;
 }

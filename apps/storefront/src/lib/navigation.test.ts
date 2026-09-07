@@ -144,7 +144,10 @@ test("optional language discovery cannot invalidate layout configuration", () =>
   assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
   assert.match(navigationDataSource, /syncUiStrings\(languageCode, rawState\.data\?\.uiStrings \?\? \{\}\)/);
   assert.match(navigationDataSource, /lastResolvedData/);
-  assert.match(navigationDataSource, /canRenderChildren = !enabled \|\| Boolean\(state\.data\) \|\| !rawState\.isLoading/);
+  assert.match(navigationDataSource, /EMPTY_NAVIGATION_DATA/);
+  assert.doesNotMatch(navigationDataSource, /canRenderChildren/);
+  assert.doesNotMatch(navigationDataSource, /enabled && !rawState\.isLoading/);
+  assert.match(navigationDataSource, /<NavigationDataContext\.Provider value=\{state\}>\s*\{children\}/);
   assert.doesNotMatch(navigationDataSource, /useFastNavigationMenus|fastMenus/);
   assert.match(navigationSource, /query StorefrontAiAssistant\(\$language: String\)/);
   assert.match(navigationSource, /query StorefrontAiAssistantCompatible\(\$language: String\)/);

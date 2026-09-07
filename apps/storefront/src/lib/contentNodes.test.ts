@@ -71,7 +71,7 @@ test("content-node lookup preserves errors from the post fallback", async () => 
   await assert.rejects(getContentNodeInfo("/clean-post/", request), /Post lookup failed/);
 });
 
-test("free profiles probe root-level post and page schemas in priority order", async () => {
+test("free profiles probe root-level post and page schemas concurrently with post priority", async () => {
   const requestedQueries: string[] = [];
   const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
     requestedQueries.push(query);
@@ -81,8 +81,21 @@ test("free profiles probe root-level post and page schemas in priority order", a
   };
 
   assert.deepEqual(await getContentNodeInfo("/clean-post/", request, "blog"), { type: "Post" });
-  assert.equal(requestedQueries.length, 1);
+  assert.equal(requestedQueries.length, 2);
   assert.match(requestedQueries[0], /post\(id:\s*\$uri,\s*idType:\s*URI\)/);
+  assert.match(requestedQueries[1], /page\(id:\s*\$uri,\s*idType:\s*URI\)/);
+});
+
+test("a successful post probe wins when concurrent generic classification fails", async () => {
+  const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
+    if (query.includes("post(")) return { data: { post: { id: "post-1" } } as T };
+    return { data: null, errors: [{ message: "nodeByUri failed" }] };
+  };
+
+  assert.deepEqual(
+    await getContentNodeInfo("/clean-post/", request, "blog", { probePage: false }),
+    { type: "Post" },
+  );
 });
 
 test("free-profile post probe still classifies a root-level page", async () => {
@@ -100,7 +113,7 @@ test("free-profile post probe still classifies a root-level page", async () => {
   assert.match(requestedQueries[1], /page\(/);
 });
 
-test("concurrent page callers can skip the duplicate page probe", async () => {
+test("concurrent page callers run post and generic classification without a waterfall", async () => {
   const requestedQueries: string[] = [];
   const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {
     requestedQueries.push(query);
