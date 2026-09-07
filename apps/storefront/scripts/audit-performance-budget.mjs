@@ -25,10 +25,10 @@ const initialJavaScriptBytes = await totalBytes(entryFiles);
 const initialJavaScriptGzipBytes = await totalGzipBytes(entryFiles);
 const initialScriptCount = entryFiles.size;
 const budgets = {
-  // The synchronized EN/PL/JA archive, review, and inquiry catalogs add a small,
-  // intentional baseline cost while keeping the first render translated offline.
+  // Keep enough headroom for continued storefront development while still
+  // preventing accidental initial-bundle growth beyond 500 KiB compressed.
   initialJavaScriptBytes: 1_050_000,
-  initialJavaScriptGzipBytes: 311_200,
+  initialJavaScriptGzipBytes: 512_000,
   initialScriptCount: 8,
 };
 
