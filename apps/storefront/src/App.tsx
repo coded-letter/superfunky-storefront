@@ -87,7 +87,12 @@ const LayoutStudioMockupPage = lazy(() => import("./pages/LayoutStudioMockupPage
 const SitemapPage = lazy(() => import("./pages/SitemapPage").then((module) => ({ default: module.SitemapPage })));
 
 function ConnectedStorefrontChrome() {
-  const { data, isLoading: navigationLoading, error: navigationError } = useNavigationData();
+  const {
+    data,
+    isLoading: navigationLoading,
+    error: navigationError,
+    hasResolvedData: hasResolvedNavigationData,
+  } = useNavigationData();
   const location = useLocation();
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
   const { formatBaseAmount } = useCurrency();
@@ -115,7 +120,11 @@ function ConnectedStorefrontChrome() {
   const [isCommunityPublishOpen, setIsCommunityPublishOpen] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const navigationSettled = !navigationLoading && Boolean(data || navigationError || !isBackendConfigured);
+  const navigationSettled = !navigationLoading && (
+    hasResolvedNavigationData
+    || !isBackendConfigured
+    || (Boolean(navigationError) && !hasPrerenderedChromeFallback())
+  );
   const pushEnabled = !isBackendConfigured || data?.storefrontConfig.features.push === true;
   useLayoutEffect(() => {
     if (!navigationSettled) return;
@@ -295,15 +304,24 @@ function getStorefrontApplicationRoot(): HTMLElement | null {
   return document.getElementById("storefront-react-root") || document.getElementById("root");
 }
 
+function hasPrerenderedChromeFallback(): boolean {
+  return Boolean(document.querySelector("[data-prerendered-chrome]"));
+}
+
 function StorefrontVisibleReadySignal() {
   const {
     data: navigation,
     isLoading: navigationLoading,
     error: navigationError,
+    hasResolvedData: hasResolvedNavigationData,
   } = useNavigationData();
   const themeStylesReady = useWordPressThemeStylesReady();
   const navigationSettled = !navigationLoading
-    && Boolean(navigation || navigationError || !isBackendConfigured);
+    && (
+      hasResolvedNavigationData
+      || !isBackendConfigured
+      || (Boolean(navigationError) && !hasPrerenderedChromeFallback())
+    );
   useEffect(() => {
     const root = getStorefrontApplicationRoot();
     if (!root) return;

@@ -23,7 +23,11 @@ const COUNTRY_TO_CURRENCY: Record<string, string> = {
   ZA: "ZAR", AE: "AED", SA: "SAR", TR: "TRY",
 };
 
-const NavigationDataContext = createContext<IncrementalDataState<CmsNavigationData> | null>(null);
+type NavigationDataState = IncrementalDataState<CmsNavigationData> & {
+  hasResolvedData: boolean;
+};
+
+const NavigationDataContext = createContext<NavigationDataState | null>(null);
 
 /** Stable, referentially-identical placeholder used until the first real navigation
  *  response (cached or network) resolves and there is no last-known-good data to fall
@@ -60,10 +64,11 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   const lastResolvedData = useRef<CmsNavigationData | null>(null);
   if (rawState.data) lastResolvedData.current = rawState.data;
   const resolvedData = rawState.data || lastResolvedData.current;
-  const state = useMemo<IncrementalDataState<CmsNavigationData>>(() => {
+  const state = useMemo<NavigationDataState>(() => {
     const fallback = resolvedData || EMPTY_NAVIGATION_DATA;
     return {
       ...rawState,
+      hasResolvedData: Boolean(resolvedData),
       data: {
         header: Array.isArray(fallback.header) ? fallback.header : [],
         mobile: Array.isArray(fallback.mobile) ? fallback.mobile : [],
@@ -137,7 +142,7 @@ export function NavigationDataProvider({ children, enabled = true }: { children:
   );
 }
 
-export function useNavigationData(): IncrementalDataState<CmsNavigationData> {
+export function useNavigationData(): NavigationDataState {
   const context = useContext(NavigationDataContext);
   if (!context) throw new Error("useNavigationData must be used within NavigationDataProvider");
   return context;

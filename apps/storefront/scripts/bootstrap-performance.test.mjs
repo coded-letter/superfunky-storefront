@@ -161,7 +161,11 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(prerenderSource, /renderStaticFloatingControls\(route\)/);
   assert.match(prerenderSource, /data-storefront-control="assistant-fixed"/);
   assert.match(prerenderSource, /data-storefront-control="\$\{escapeAttribute\(role\)\}"/);
-  assert.match(prerenderSource, /synchronizeStaticAssistantWithHydrationSeed\(navigationResult\.value\)/);
+  assert.match(prerenderSource, /synchronizeStaticChromeWithHydrationSeed\(navigationResult\.value\)/);
+  assert.match(prerenderSource, /features: \{[\s\S]*\.\.\.staticChromeConfig\.headerControls\.features,[\s\S]*\.\.\.features/);
+  assert.match(prerenderSource, /layout: \{[\s\S]*\.\.\.staticChromeConfig\.headerControls\.layout,[\s\S]*\.\.\.layout/);
+  assert.match(prerenderSource, /showSearch && searchVariant === "full-width"/);
+  assert.match(prerenderSource, /\["expandable", "overlay"\]\.includes\(controls\.layout\.headerSearchVariant\)/);
   assert.match(prerenderSource, /configuration\?\.headerIcons\?\.assistant/);
   assert.match(prerenderSource, /data-static-cookie-banner/);
   assert.match(prerenderSource, /data-static-cookie-settings/);
