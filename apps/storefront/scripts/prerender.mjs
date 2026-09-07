@@ -1739,6 +1739,10 @@ function renderStaticChrome(route) {
       </span>`;
     })
     .join("");
+  const headerControls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const showSearch = headerControls.layout.showHeaderSearchIcon !== false
+    && headerControls.features.search !== false;
+  const searchVariant = headerControls.layout.headerSearchVariant || "full-width";
   const announcement = staticChromeConfig.showAnnouncementBar && staticChromeConfig.promoHtml
     ? `<div class="storefront-static-announcement"><div class="storefront-static-announcement-content">${staticChromeConfig.promoHtml}</div></div>`
     : "";
@@ -1756,7 +1760,9 @@ function renderStaticChrome(route) {
           ${logo}
           <span><strong class="funky-brand-heading">${escapeAttribute(staticChromeConfig.storeName)}</strong><small>${escapeAttribute(staticChromeConfig.tagline)}</small></span>
         </a>
-        <span class="storefront-static-search" aria-hidden="true">${searchIcon}<span>${searchPlaceholder}</span></span>
+        ${showSearch && searchVariant === "full-width"
+          ? `<span class="storefront-static-search" aria-hidden="true">${searchIcon}<span>${searchPlaceholder}</span></span>`
+          : ""}
         ${controls}
       </div>
       <div class="storefront-static-header-nav-row">
@@ -2053,6 +2059,12 @@ function renderStaticHeaderControls(route) {
   const languageFlag = { zh: "CN", ko: "KR", sv: "SE" }[languageCode] || languageCode.toUpperCase();
   const items = [];
 
+  if (
+    enabled(controls.layout.showHeaderSearchIcon, controls.features.search)
+    && ["expandable", "overlay"].includes(controls.layout.headerSearchVariant)
+  ) {
+    items.push(staticHeaderControl("search", controls.icons.search, controls.media.search, "search", true));
+  }
   if (
     configuredLanguageCodes.length > 1
     && enabled(controls.layout.showHeaderLanguageSwitcher, controls.features.languages)
@@ -2551,7 +2563,7 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
       .then((value) => ({ status: "fulfilled", value }))
       .catch((reason) => ({ status: "rejected", reason }));
     if (navigationResult.status === "fulfilled" && languageCode === defaultLanguage) {
-      synchronizeStaticAssistantWithHydrationSeed(navigationResult.value);
+      synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
     }
     const contentResults = await Promise.allSettled(
       contentTasks.map((task) => loadStaticHydrationSeed(task, languageCode)),
@@ -2578,14 +2590,40 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
   return assetsByLanguage;
 }
 
-function synchronizeStaticAssistantWithHydrationSeed({ assistant, navigation }) {
+function synchronizeStaticChromeWithHydrationSeed({ assistant, navigation }) {
   const configuration = navigation?.storefrontConfig;
+  const layout = configuration?.layout;
+  const features = configuration?.features;
+  const baseCurrency = typeof configuration?.baseCurrency === "string" && configuration.baseCurrency.trim()
+    ? configuration.baseCurrency.trim().toUpperCase()
+    : staticChromeConfig.headerControls.baseCurrency;
+  const selectedCurrency = Array.isArray(configuration?.currencies)
+    ? configuration.currencies.find((currency) => currency?.code?.toUpperCase() === baseCurrency)
+    : null;
   const assistantIcon = configuration?.headerIcons?.assistant;
   const assistantMedia = configuration?.headerIconMedia?.assistant;
   staticChromeConfig = {
     ...staticChromeConfig,
+    themeMaxWidthPx: Number.isInteger(layout?.themeMaxWidthPx)
+      ? layout.themeMaxWidthPx
+      : staticChromeConfig.themeMaxWidthPx,
+    headerArrangement: ["classic", "single-row", "centered", "island"].includes(layout?.headerArrangement)
+      ? layout.headerArrangement
+      : staticChromeConfig.headerArrangement,
     headerControls: {
       ...staticChromeConfig.headerControls,
+      baseCurrency,
+      currencySymbol: typeof selectedCurrency?.symbol === "string" && selectedCurrency.symbol.trim()
+        ? selectedCurrency.symbol.trim()
+        : baseCurrency,
+      features: {
+        ...staticChromeConfig.headerControls.features,
+        ...features,
+      },
+      layout: {
+        ...staticChromeConfig.headerControls.layout,
+        ...layout,
+      },
       assistant: {
         ...staticChromeConfig.headerControls.assistant,
         enabled: assistant?.enabled === true,
@@ -2594,12 +2632,14 @@ function synchronizeStaticAssistantWithHydrationSeed({ assistant, navigation }) 
       },
       icons: {
         ...staticChromeConfig.headerControls.icons,
+        ...configuration?.headerIcons,
         ...(typeof assistantIcon === "string" && assistantIcon.trim()
           ? { assistant: assistantIcon.trim() }
           : {}),
       },
       media: {
         ...staticChromeConfig.headerControls.media,
+        ...configuration?.headerIconMedia,
         assistant: typeof assistantMedia === "string" ? assistantMedia.trim() : "",
       },
     },

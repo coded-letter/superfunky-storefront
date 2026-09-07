@@ -145,10 +145,18 @@ test("optional language discovery cannot invalidate layout configuration", () =>
   assert.match(navigationDataSource, /syncUiStrings\(languageCode, rawState\.data\?\.uiStrings \?\? \{\}\)/);
   assert.match(navigationDataSource, /lastResolvedData/);
   assert.match(navigationDataSource, /EMPTY_NAVIGATION_DATA/);
+  assert.match(navigationDataSource, /hasResolvedData: Boolean\(resolvedData\)/);
   assert.doesNotMatch(navigationDataSource, /canRenderChildren/);
   assert.doesNotMatch(navigationDataSource, /enabled && !rawState\.isLoading/);
   assert.match(navigationDataSource, /<NavigationDataContext\.Provider value=\{state\}>\s*\{children\}/);
   assert.doesNotMatch(navigationDataSource, /useFastNavigationMenus|fastMenus/);
+});
+
+test("prerendered chrome remains authoritative until real navigation data is available", () => {
+  assert.match(appSource, /function hasPrerenderedChromeFallback\(\)/);
+  assert.match(appSource, /document\.querySelector\("\[data-prerendered-chrome\]"\)/);
+  assert.equal(appSource.match(/hasResolvedData: hasResolvedNavigationData/g)?.length, 2);
+  assert.equal(appSource.match(/Boolean\(navigationError\) && !hasPrerenderedChromeFallback\(\)/g)?.length, 2);
   assert.match(navigationSource, /query StorefrontAiAssistant\(\$language: String\)/);
   assert.match(navigationSource, /query StorefrontAiAssistantCompatible\(\$language: String\)/);
   assert.match(navigationSource, /hasOnlyMissingGraphqlFields\(response\.errors, \["showHeader", "showFooter", "showFixed"\]\)/);
