@@ -19,7 +19,9 @@ export function createProfilePageQuery(
   profile: StorefrontBackendProfile,
 ): string {
   if (shouldPreferCoreContentQueries(profile)) return createCorePageQuery(query);
-  return profile === "blog" ? createBlogContentQuery(query) : query;
+  return profile === "blog"
+    ? createBlogContentQuery(query)
+    : removeGraphqlFieldSelections(query, "themeStyles");
 }
 
 export function createProfilePostQuery(
@@ -29,7 +31,7 @@ export function createProfilePostQuery(
   if (shouldPreferCoreContentQueries(profile)) return createCorePostQuery(query);
   return profile === "blog"
     ? removeNestedGraphqlFieldSelections(createBlogContentQuery(query), "comments", "author")
-    : query;
+    : removeGraphqlFieldSelections(query, "themeStyles");
 }
 
 function createBlogContentQuery(query: string): string {

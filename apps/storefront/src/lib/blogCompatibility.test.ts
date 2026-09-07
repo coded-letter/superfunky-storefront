@@ -688,7 +688,8 @@ test("free blog content infers locales from translation URIs without broken lang
     assert.match(optimized, /translations\s*\{\s*id\s*\}/);
     assert.doesNotMatch(optimized, /\blanguage\s*\{|\bthemeStyles\b/);
   }
-  assert.match(createProfilePageQuery(query, "full"), /themeStyles/);
+  assert.doesNotMatch(createProfilePageQuery(query, "full"), /\bthemeStyles\b/);
+  assert.doesNotMatch(createProfilePostQuery(query, "full"), /\bthemeStyles\b/);
 });
 
 test("free blog compatibility fallback separates prefixed and default-language routes", () => {

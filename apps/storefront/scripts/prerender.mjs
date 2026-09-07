@@ -15,7 +15,7 @@ import { normalizeStaticShortcodes } from "../src/lib/staticShortcodeMarkup.mjs"
 import { addDefaultCmsIconDimensions } from "../src/lib/cmsIconSizing.mjs";
 import { localizeStaticFontAssets } from "./static-font-assets.mjs";
 import { stripBootstrapOverlay } from "./static-html.mjs";
-import { classifyPageRouteKeys } from "../src/lib/storefrontRouteClassification.ts";
+import { buildStaticRouteRegistryEntries, resolveStaticRouteRegistryPath } from "./static-route-registry.mjs";
 import { sanitizeCmsHtml, sanitizeCmsStyleAttribute } from "../src/lib/cmsBehaviors.ts";
 import { storefrontProxiedMediaUrl } from "../src/lib/storefrontMediaAssets.ts";
 import { mapMenuItems } from "../src/lib/menuMapping.ts";
@@ -79,6 +79,13 @@ const publicMediaProxyRoutes = new Map();
 let backendLanguageFieldsAvailable = true;
 let staticHydrationAssets = new Map();
 let staticRouteRegistryAsset = null;
+// Authoritative `{ key, uri, languageCode }` entries resolved from build-time
+// CMS pages (see `buildStaticRouteRegistryEntries`). Populated once, right
+// before per-route rendering starts, and consulted by the static header/mobile
+// navigation to link account/wishlist/reading-list to their real configured
+// page instead of guessing a slug — kept in lockstep with the React header,
+// which resolves the exact same entries at runtime via `useStorefrontPath`.
+let staticRouteRegistryEntries = [];
 let staticPageHydrationAssets = new Map();
 const STATIC_HYDRATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
@@ -1739,7 +1746,7 @@ function renderStaticChrome(route) {
   const parityAttribute = hasInteractiveStaticChrome ? " data-static-react-parity" : "";
   const searchIcon = hasInteractiveStaticChrome ? staticHeaderIcon("search", "", "search") : "";
   const mobileNavigation = hasInteractiveStaticChrome
-    ? renderStaticMobileNavigation(navigationItems, navigationLabel, route.path)
+    ? renderStaticMobileNavigation(navigationItems, navigationLabel, route.path, resolveStaticSpecialPageLinks(route))
     : "";
   return `<header class="storefront-static-header storefront-static-header--${staticChromeConfig.headerArrangement}" data-static-announcement-scroll="${staticChromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
     ${announcement}
@@ -1794,8 +1801,9 @@ function renderStaticSubmenuEntry(item, routePath, column) {
   </div>`;
 }
 
-function renderStaticMobileNavigation(items, navigationLabel, routePath) {
+function renderStaticMobileNavigation(items, navigationLabel, routePath, specialPageLinks = []) {
   const content = items.map((item) => renderStaticMobileNavigationItem(item, routePath, 0)).join("");
+  const actions = renderStaticMobileActionLinks(specialPageLinks);
   return `<div class="storefront-static-mobile-backdrop" data-static-mobile-backdrop hidden>
     <aside id="storefront-static-mobile-navigation" class="storefront-static-mobile-drawer" role="dialog" aria-modal="true" aria-label="${escapeAttribute(navigationLabel)}" tabindex="-1">
       <div class="storefront-static-mobile-heading">
@@ -1803,6 +1811,7 @@ function renderStaticMobileNavigation(items, navigationLabel, routePath) {
         <button type="button" class="storefront-static-mobile-close" data-static-mobile-close aria-label="Close menu">×</button>
       </div>
       <nav aria-label="${escapeAttribute(navigationLabel)}">${content}</nav>
+      ${actions}
     </aside>
   </div>`;
 }
@@ -1948,6 +1957,95 @@ const STATIC_HEADER_ICON_PATHS = {
   cookie: '<path d="M12 2a10 10 0 1 0 10 10c0-1.1-.9-2-2-2h-1a3 3 0 0 1-3-3V6a4 4 0 0 0-4-4Z"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/>',
 };
 
+// Same fallback slugs the React header falls back to (`specialPagePaths?.account
+// || "/account"`, etc.) when the route registry has no matching entry yet.
+const STATIC_SPECIAL_PAGE_FALLBACK_SLUGS = {
+  account: "/account",
+  "reading-list": "/reading-list",
+  wishlist: "/wishlist",
+};
+
+// Mirrors the `header.account` / `header.reading_list` / `header.wishlist`
+// translation keys in packages/ui/src/locale/{en,pl,ja}.json — the only
+// languages this static shell hardcodes strings for elsewhere (see
+// `homeLabel`/`navigationLabel` above); other languages fall back to English
+// exactly like those existing labels.
+const STATIC_SPECIAL_PAGE_LABELS = {
+  account: { en: "Account", pl: "Konto", ja: "アカウント" },
+  "reading-list": { en: "Reading list", pl: "Czytelnia", ja: "リーディングリスト" },
+  wishlist: { en: "Wishlist", pl: "Lista życzeń", ja: "ウィッシュリスト" },
+};
+
+function staticSpecialPageLabel(key, languageCode) {
+  const labels = STATIC_SPECIAL_PAGE_LABELS[key];
+  return labels[languageCode] || labels.en;
+}
+
+// Resolves the authoritative path for a configured special page (account,
+// reading list, wishlist, ...) from the build-time route registry entries —
+// the same entries (and the same resolution order: exact language, then
+// English, then any match, then fallback) the React header resolves at
+// runtime via `useStorefrontPath`/`resolveStorefrontPath`. Falls back to a
+// guessed slug only when the page truly isn't in the registry yet.
+function resolveStaticSpecialPagePath(key, languageCode) {
+  const fallback = normalizeLanguageRoutePath(
+    STATIC_SPECIAL_PAGE_FALLBACK_SLUGS[key],
+    languageCode,
+    configuredLanguageCodes,
+  );
+  return resolveStaticRouteRegistryPath(staticRouteRegistryEntries, key, languageCode, fallback);
+}
+
+// Builds the ordered list of special-page header links (account, reading
+// list, wishlist) shared by the desktop header controls and the mobile
+// drawer's action section, so both stay in lockstep with each other and with
+// the React header — same order, same enabled/disabled flags, same
+// authoritative paths. Deliberately excludes personalized state (reading
+// list/wishlist counts, sync-error indicators, auth-gated variants): those
+// only exist once React has hydrated with real user data.
+function resolveStaticSpecialPageLinks(route) {
+  const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
+  const links = [];
+  if (enabled(controls.layout.showHeaderAccountLink, controls.features.account)) {
+    links.push({
+      role: "account",
+      href: resolveStaticSpecialPagePath("account", route.lang),
+      icon: controls.icons.account,
+      media: controls.media.account,
+      fallbackIcon: "user",
+      label: staticSpecialPageLabel("account", route.lang),
+    });
+  }
+  if (enabled(controls.layout.showHeaderReadingListLink, controls.features.readingList)) {
+    links.push({
+      role: "reading-list",
+      href: resolveStaticSpecialPagePath("reading-list", route.lang),
+      icon: controls.icons.readingList,
+      media: controls.media.readingList,
+      fallbackIcon: "book-marked",
+      label: staticSpecialPageLabel("reading-list", route.lang),
+    });
+  }
+  if (enabled(controls.layout.showHeaderWishlistLink, controls.features.wishlist)) {
+    links.push({
+      role: "wishlist",
+      href: resolveStaticSpecialPagePath("wishlist", route.lang),
+      icon: controls.icons.wishlist,
+      media: controls.media.wishlist,
+      fallbackIcon: "heart",
+      label: staticSpecialPageLabel("wishlist", route.lang),
+    });
+  }
+  return links;
+}
+
+function renderStaticMobileActionLinks(specialPageLinks) {
+  if (!specialPageLinks.length) return "";
+  const items = specialPageLinks.map((link) => `<a class="storefront-static-mobile-action" data-static-control="${escapeAttribute(link.role)}" data-storefront-control="${escapeAttribute(link.role)}" href="${escapeAttribute(link.href)}">${staticHeaderIcon(link.icon, link.media, link.fallbackIcon)}<span>${escapeAttribute(link.label)}</span></a>`).join("");
+  return `<div class="storefront-static-mobile-actions">${items}</div>`;
+}
+
 function renderStaticHeaderControls(route) {
   const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
@@ -1987,14 +2085,8 @@ function renderStaticHeaderControls(route) {
   if (controls.features.push !== false) {
     items.push(staticHeaderControl("push", "bell", "", "bell", false, false, "", false));
   }
-  if (enabled(controls.layout.showHeaderAccountLink, controls.features.account)) {
-    items.push(staticHeaderControl("account", controls.icons.account, controls.media.account, "user", true, false, normalizeLanguageRoutePath("/account", route.lang, configuredLanguageCodes)));
-  }
-  if (enabled(controls.layout.showHeaderReadingListLink, controls.features.readingList)) {
-    items.push(staticHeaderControl("reading-list", controls.icons.readingList, controls.media.readingList, "book-marked", true, false, normalizeLanguageRoutePath("/reading-list", route.lang, configuredLanguageCodes)));
-  }
-  if (enabled(controls.layout.showHeaderWishlistLink, controls.features.wishlist)) {
-    items.push(staticHeaderControl("wishlist", controls.icons.wishlist, controls.media.wishlist, "heart", true, false, normalizeLanguageRoutePath("/wishlist", route.lang, configuredLanguageCodes)));
+  for (const link of resolveStaticSpecialPageLinks(route)) {
+    items.push(staticHeaderControl(link.role, link.icon, link.media, link.fallbackIcon, true, false, link.href));
   }
   if (enabled(controls.layout.showHeaderCartIcon, controls.features.cart)) {
     items.push(staticHeaderControl("cart", controls.icons.cart, controls.media.cart, "shopping-cart"));
@@ -2328,21 +2420,7 @@ async function buildStaticPageHydrationAssets(routes, generatedAt) {
   return assets;
 }
 
-async function writeStaticRouteRegistryAsset(routes, generatedAt) {
-  const entries = routes.flatMap((route) => {
-    if (!route.cmsPage) return [];
-    return classifyPageRouteKeys({
-      uri: route.cmsPage.uri,
-      slug: route.cmsPage.slug,
-      language: { code: route.cmsPage.languageCode },
-      isFrontPage: route.path === "/" || route.path === `/${route.lang}`,
-      headlessShortcodes: route.cmsPage.headlessShortcodes,
-    }).map((key) => ({
-      key,
-      uri: route.cmsPage.uri,
-      languageCode: route.cmsPage.languageCode,
-    }));
-  });
+async function writeStaticRouteRegistryAsset(entries, generatedAt) {
   return writeStaticHydrationAsset(
     "route-registry",
     [{
@@ -2896,9 +2974,10 @@ await stampServiceWorkerVersion(generatedAt);
 const hydrationLanguages = stableLanguageCodes.map((routeCode) =>
   configuredLanguages.find((language) => language.routeCode === routeCode)
   || { routeCode, backendCode: routeCode.toUpperCase() });
+staticRouteRegistryEntries = buildStaticRouteRegistryEntries(routes);
 try {
   staticHydrationAssets = await buildStaticHydrationAssets(hydrationLanguages, generatedAt);
-  staticRouteRegistryAsset = await writeStaticRouteRegistryAsset(routes, generatedAt);
+  staticRouteRegistryAsset = await writeStaticRouteRegistryAsset(staticRouteRegistryEntries, generatedAt);
   staticPageHydrationAssets = await buildStaticPageHydrationAssets(routes, generatedAt);
 } catch (error) {
   console.warn(

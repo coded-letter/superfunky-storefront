@@ -25,6 +25,7 @@ import { resolveContentLanguageFallback } from "../lib/contentLanguageFallback";
 import { resolveRouteLanguageSync } from "../lib/contentRouteLanguageSync";
 import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { shouldPreferCoreContentQueries } from "../lib/profileGraphqlCompatibility";
+import { markRouteDataReady, markRouteRequestStart } from "../lib/contentReadinessInstrumentation";
 
 export function ContentNodeRoute() {
   const { pathname } = useLocation();
@@ -120,6 +121,23 @@ export function ContentNodeRoute() {
     if (!shouldResolveLanguageFallback || !languageFallbackPath) return;
     navigate(languageFallbackPath, { replace: true });
   }, [languageFallbackPath, navigate, shouldResolveLanguageFallback]);
+
+  // Instrumentation: measure how long each routed content lookup takes, independent
+  // of navigation-shell readiness. `isRouteContentReady` mirrors the negation of every
+  // loading/fallback gate below — once true, the render below returns real content or
+  // a definitive not-found state rather than another loading placeholder.
+  const isRouteContentReady = Boolean(matchedRoute) || (
+    !isLoadingRouteRegistry
+    && !(isLoading && !page)
+    && !(isLoadingPage && !nodeInfo)
+    && !(shouldResolveLanguageFallback && (isLoadingLanguageFallback || languageFallbackPath))
+  );
+  useEffect(() => {
+    markRouteRequestStart();
+  }, [uri]);
+  useEffect(() => {
+    if (isRouteContentReady) markRouteDataReady();
+  }, [isRouteContentReady, uri]);
 
   // CMS route pages resolved from the ordinary Page registry take highest priority.
   if (matchedRoute) {

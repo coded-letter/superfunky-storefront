@@ -11,11 +11,16 @@ import {
   isMissingProductOptionalFieldSchemaError,
   isMissingProductRootSchemaError,
   requestCommerceWithFallback,
+  requestCommerceWithFallbackChain,
   requestCatalogWithFallback,
   requestCompatibleCatalog,
   requestOptionalCommerceRoot,
   type CommerceGraphqlRequester,
 } from "./commerceGraphqlCompatibility.ts";
+import {
+  getCompatibilityRetryCount,
+  resetCompatibilityRetryCountForTests,
+} from "./contentReadinessInstrumentation.ts";
 import {
   COMPATIBLE_FEATURED_PRODUCT_QUERY,
   CORE_FEATURED_PRODUCT_QUERY,
@@ -642,4 +647,96 @@ test("strict compatibility error handling preserves every GraphQL error message"
     ]),
     /First failure; Second failure/,
   );
+});
+
+test("each fallback advance in the compatibility query chain increments the retry counter", async () => {
+  resetCompatibilityRetryCountForTests();
+  const request: CommerceGraphqlRequester = async <T>(query: string) => {
+    if (query === "core") return { data: { archive: { products: ["core product"] } } as T };
+    return {
+      data: null,
+      errors: [{ message: 'Unknown type "LanguageCodeFilterEnum".' }],
+    };
+  };
+
+  const result = await requestCommerceWithFallbackChain<{ archive: { products: string[] } }>(
+    request,
+    ["localized", "core-ish", "core"],
+    {},
+    isMissingProductOptionalFieldSchemaError,
+  );
+
+  assert.deepEqual(result, { archive: { products: ["core product"] } });
+  // Two advances were needed: localized -> core-ish, then core-ish -> core.
+  assert.equal(getCompatibilityRetryCount(), 2);
+});
+
+test("a compatibility chain that succeeds on the first query never increments the retry counter", async () => {
+  resetCompatibilityRetryCountForTests();
+  const request: CommerceGraphqlRequester = async <T>() => ({ data: { archive: { products: [] } } as T });
+
+  await requestCommerceWithFallbackChain<{ archive: { products: string[] } }>(
+    request,
+    ["primary", "fallback"],
+    {},
+    isMissingProductOptionalFieldSchemaError,
+  );
+
+  assert.equal(getCompatibilityRetryCount(), 0);
+});
+
+test("a scoped catalog compatibility retry increments the counter once", async () => {
+  resetCompatibilityRetryCountForTests();
+  type Catalog = { products: { nodes: string[] } | null };
+  const request: CommerceGraphqlRequester = async <T>(query: string) => {
+    if (query === "localized with brands") {
+      return { data: null, errors: [{ message: 'Cannot query field "productBrands" on type "Product".' }] };
+    }
+    return { data: { products: { nodes: ["English product"] } } as T };
+  };
+
+  const result = await requestCatalogWithFallback<Catalog>(
+    request,
+    "localized with brands",
+    {},
+    [{ field: "products", query: "unscoped products" }],
+    isMissingProductOptionalFieldSchemaError,
+    false,
+    "localized without brands",
+  );
+
+  assert.equal(result.usesCompatibilityFallback, false);
+  assert.equal(getCompatibilityRetryCount(), 1);
+});
+
+test("falling all the way back to the compatible catalog increments the retry counter once more", async () => {
+  resetCompatibilityRetryCountForTests();
+  type Catalog = { products: { nodes: string[] } | null; productCategories: { nodes: string[] } | null };
+  const request: CommerceGraphqlRequester = async <T>(query: string) => {
+    if (query === "primary") {
+      return {
+        data: null,
+        errors: [
+          { message: 'Unknown type "LanguageCodeFilterEnum".' },
+          { message: 'Field "language" is not defined by type "RootQueryToProductConnectionWhereArgs".' },
+        ],
+      };
+    }
+    const field = query as keyof Catalog;
+    return { data: { [field]: { nodes: [query] } } as T };
+  };
+
+  const result = await requestCatalogWithFallback<Catalog>(
+    request,
+    "primary",
+    {},
+    [
+      { field: "products", query: "products" },
+      { field: "productCategories", query: "productCategories" },
+    ],
+    isMissingProductOptionalFieldSchemaError,
+  );
+
+  assert.equal(result.usesCompatibilityFallback, true);
+  assert.equal(getCompatibilityRetryCount(), 1);
 });

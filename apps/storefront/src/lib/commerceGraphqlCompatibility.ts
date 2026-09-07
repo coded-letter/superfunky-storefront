@@ -1,5 +1,6 @@
 import { hasOnlyMissingGraphqlFields } from "@funky/sdk";
 import { removeGraphqlFieldSelections } from "./graphqlFieldFallback.ts";
+import { recordCompatibilityRetry } from "./contentReadinessInstrumentation.ts";
 
 export type CommerceGraphqlResponse<T> = {
   data: T | null;
@@ -213,6 +214,7 @@ export async function requestCommerceWithFallbackChain<T>(
     response = await request<T>(query, variables);
     if (isMissingProductRootSchemaError(response.errors)) return null;
     if (!shouldRetry(response.errors) || index === queries.length - 1) break;
+    if (!(import.meta.env?.PROD ?? false)) recordCompatibilityRetry();
   }
 
   assertNoCommerceGraphqlErrors(response?.errors);
@@ -269,9 +271,11 @@ export async function requestCatalogWithFallback<T extends Record<string, unknow
   }
   let response = await request<T>(primaryQuery, variables);
   if (scopedCompatibleQuery && shouldRetry(response.errors)) {
+    if (!(import.meta.env?.PROD ?? false)) recordCompatibilityRetry();
     response = await request<T>(scopedCompatibleQuery, variables);
   }
   if (isMissingProductRootSchemaError(response.errors) || shouldRetry(response.errors)) {
+    if (!(import.meta.env?.PROD ?? false)) recordCompatibilityRetry();
     return {
       data: await requestCompatibleCatalog<T>(request, compatibleOperations),
       usesCompatibilityFallback: true,

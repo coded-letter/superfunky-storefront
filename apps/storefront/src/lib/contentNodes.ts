@@ -60,14 +60,27 @@ export async function getContentNodeInfo(
   options: ContentNodeLookupOptions = {},
 ): Promise<ContentNodeInfo | null> {
   if (shouldPreferCoreGraphqlQueries(profile) && isRootLevelUri(uri)) {
-    const postInfo = await getPostNodeInfo(uri, request);
-    if (postInfo) return postInfo;
-    if (options.probePage !== false) {
-      const pageInfo = await getPageNodeInfo(uri, request);
-      if (pageInfo) return pageInfo;
-    }
+    const [postResult, secondaryResult] = await Promise.allSettled([
+      getPostNodeInfo(uri, request),
+      options.probePage === false
+        ? getGenericNodeInfo(uri, request, profile)
+        : getPageNodeInfo(uri, request),
+    ]);
+    if (postResult.status === "fulfilled" && postResult.value) return postResult.value;
+    if (secondaryResult.status === "fulfilled" && secondaryResult.value) return secondaryResult.value;
+    if (postResult.status === "rejected") throw postResult.reason;
+    if (secondaryResult.status === "rejected") throw secondaryResult.reason;
+    if (options.probePage === false) return null;
   }
 
+  return getGenericNodeInfo(uri, request, profile);
+}
+
+async function getGenericNodeInfo(
+  uri: string,
+  request: GraphqlFieldFallbackRequester,
+  profile: StorefrontBackendProfile,
+): Promise<ContentNodeInfo | null> {
   const { data, errors } = await request<ContentNodeTypeResult>(CONTENT_NODE_TYPE_QUERY, { uri });
 
   // A resolved node (e.g. a category/taxonomy archive with zero assigned posts or
