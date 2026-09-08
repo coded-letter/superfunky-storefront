@@ -62,6 +62,11 @@ test("inline static navigation does not retain the classic row offset", () => {
 });
 
 test("custom and preset icons keep the same stable 18px slot through handoff", () => {
+  assert.match(prerenderSource, /assistant: "sparkles"/);
+  assert.match(
+    prerenderSource,
+    /staticHeaderControl\("assistant", controls\.icons\.assistant, controls\.media\.assistant, "sparkles"\)/,
+  );
   assert.match(
     prerenderSource,
     /sparkles: '<path d="M11\.017 2\.814[\s\S]*<circle cx="4" cy="20" r="2"\/>'/,

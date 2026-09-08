@@ -4,6 +4,13 @@ import {
   buildStaticRouteRegistryEntries,
   resolveStaticRouteRegistryPath,
 } from "./static-route-registry.mjs";
+import { readFileSync } from "node:fs";
+
+const prerenderSource = readFileSync(new URL("./prerender.mjs", import.meta.url), "utf8");
+const storefrontPathsSource = readFileSync(
+  new URL("../src/lib/storefrontPaths.ts", import.meta.url),
+  "utf8",
+);
 
 function cmsRoute(path, lang, overrides = {}) {
   return {
@@ -24,6 +31,8 @@ test("buildStaticRouteRegistryEntries classifies configured special pages from b
     cmsRoute("/en/moje-konto", "en", { headlessShortcodes: ["[account]"] }),
     cmsRoute("/pl/moje-konto", "pl", { headlessShortcodes: ["[account]"] }),
     cmsRoute("/en/wishlist", "en", { headlessShortcodes: ["[wishlist]"] }),
+    cmsRoute("/pl/polityka-prywatnosci", "pl", { isPrivacyPolicyPage: true }),
+    cmsRoute("/pl/regulamin", "pl", { isTermsPage: true }),
     // Non-page routes (no cmsPage, e.g. product/community routes) are ignored.
     { path: "/en/product/widget", lang: "en" },
   ];
@@ -37,6 +46,14 @@ test("buildStaticRouteRegistryEntries classifies configured special pages from b
   assert.deepEqual(
     entries.filter((entry) => entry.key === "wishlist").map((entry) => [entry.languageCode, entry.uri]),
     [["en", "/en/wishlist/"]],
+  );
+  assert.deepEqual(
+    entries.filter((entry) => entry.key === "privacy-policy").map((entry) => [entry.languageCode, entry.uri]),
+    [["pl", "/pl/polityka-prywatnosci/"]],
+  );
+  assert.deepEqual(
+    entries.filter((entry) => entry.key === "terms").map((entry) => [entry.languageCode, entry.uri]),
+    [["pl", "/pl/regulamin/"]],
   );
 });
 
@@ -69,4 +86,10 @@ test("resolveStaticRouteRegistryPath falls back to English, then any match, then
     resolveStaticRouteRegistryPath([], "wishlist", "ja", "/ja/wishlist/"),
     "/ja/wishlist/",
   );
+});
+
+test("prerender and runtime share the legal-page route registry cache key", () => {
+  const runtimeKey = storefrontPathsSource.match(/ROUTE_REGISTRY_CACHE_KEY = "([^"]+)"/)?.[1];
+  assert.ok(runtimeKey);
+  assert.match(prerenderSource, new RegExp(`cacheKey: \`${runtimeKey}:`));
 });

@@ -494,7 +494,7 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     wishlist: "heart",
     cart: "shopping-cart",
     menu: "menu",
-    assistant: "message-circle",
+    assistant: "sparkles",
   },
   headerIconMedia: {},
   aiAssistant: {

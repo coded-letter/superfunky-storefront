@@ -123,6 +123,22 @@ test("a WordPress posts page without a URI falls back to its canonical slug", ()
 });
 
 test("legal special pages are included in the shared route registry", () => {
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
+      slug: "polityka-prywatnosci",
+      uri: "/polityka-prywatnosci/",
+      isPrivacyPolicyPage: true,
+    })),
+    ["privacy-policy"],
+  );
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
+      slug: "regulamin",
+      uri: "/regulamin/",
+      isTermsPage: true,
+    })),
+    ["terms"],
+  );
   assert.deepEqual(classifyPageRouteKeys(page({ slug: "privacy-policy", uri: "/polityka-prywatnosci/" })), ["privacy-policy"]);
   assert.deepEqual(classifyPageRouteKeys(page({ slug: "terms-and-conditions", uri: "/warunki/" })), ["terms"]);
 });

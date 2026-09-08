@@ -25,6 +25,8 @@ export type RoutePageNode = {
   language: { code: string | null } | null;
   isFrontPage?: boolean | null;
   isShopPage?: boolean | null;
+  isPrivacyPolicyPage?: boolean | null;
+  isTermsPage?: boolean | null;
   headlessShortcodes?: (string | null)[] | null;
 };
 
@@ -79,6 +81,9 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
   if (page.isShopPage) return ["shop"];
 
   const keys = new Set<StorefrontRouteKey>();
+  if (page.isPrivacyPolicyPage) keys.add("privacy-policy");
+  if (page.isTermsPage) keys.add("terms");
+  if (keys.size) return [...keys];
   const slug = page.slug?.toLowerCase();
   if (slug === "privacy-policy" || slug === "privacy") keys.add("privacy-policy");
   if (slug === "terms" || slug === "terms-and-conditions") keys.add("terms");

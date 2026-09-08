@@ -136,7 +136,14 @@ test("prerender preserves canonical multilingual CMS URIs", () => {
     "/en/cart",
   );
   const pageRoute = cmsRouteFromNode(
-    { __typename: "Page", title: "Koszyk", uri: "/koszyk/", language: { code: "PL" } },
+    {
+      __typename: "Page",
+      title: "Koszyk",
+      uri: "/koszyk/",
+      language: { code: "PL" },
+      isPrivacyPolicyPage: true,
+      isTermsPage: false,
+    },
     "contentNodes",
     "en",
     ["en", "pl"],
@@ -150,6 +157,8 @@ test("prerender preserves canonical multilingual CMS URIs", () => {
       source: pageRoute?.source,
       type: pageRoute?.type,
       indexable: pageRoute?.indexable,
+      isPrivacyPolicyPage: pageRoute?.cmsPage?.isPrivacyPolicyPage,
+      isTermsPage: pageRoute?.cmsPage?.isTermsPage,
     },
     {
       path: "/koszyk",
@@ -159,6 +168,8 @@ test("prerender preserves canonical multilingual CMS URIs", () => {
       source: "cms",
       type: "Page",
       indexable: true,
+      isPrivacyPolicyPage: true,
+      isTermsPage: false,
     },
   );
 });

@@ -133,6 +133,17 @@ const PUBLIC_ROBOTS_SUPPORT_QUERY = `
   }
 `;
 
+const SPECIAL_PAGE_SUPPORT_QUERY = `
+  query StorefrontSpecialPageSupport {
+    pages(first: 1) {
+      nodes {
+        isPrivacyPolicyPage
+        isTermsPage
+      }
+    }
+  }
+`;
+
 const LANGUAGES_QUERY = `
   query StorefrontLanguages {
     languages { code slug }
@@ -416,7 +427,7 @@ const DEFAULT_STATIC_HEADER_CONTROLS = {
     wishlist: "heart",
     cart: "shopping-cart",
     menu: "menu",
-    assistant: "message-circle",
+    assistant: "sparkles",
   },
   media: {},
 };
@@ -1129,7 +1140,7 @@ const CORE_ROUTE_CONNECTIONS = [
   { responseName: "users", cursorName: "userAfter", routeConnectionName: "users" },
 ];
 
-async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, translations, seo }) {
+async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, specialPages, translations, seo }) {
   const discoveredNodes = [];
   let readingSettings;
   for (const connection of CORE_ROUTE_CONNECTIONS) {
@@ -1138,6 +1149,7 @@ async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, 
         connections: [connection.responseName],
         multilingual,
         publicRobots,
+        specialPages,
         translations,
         seo,
       }),
@@ -1150,7 +1162,22 @@ async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, 
   return { discoveredNodes, readingSettings };
 }
 
-async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported = false } = {}) {
+async function discoverSpecialPageSupport() {
+  if (!graphqlEndpoint) return false;
+  const payload = await requestGraphql(
+    SPECIAL_PAGE_SUPPORT_QUERY,
+    {},
+    "Storefront special page support",
+    { optionalField: { fieldName: "isPrivacyPolicyPage", typeName: "Page" }, attempts: 1 },
+  );
+  return Boolean(payload.data?.pages);
+}
+
+async function discoverCmsRoutes({
+  publicRobotsSupported = false,
+  seoSupported = false,
+  specialPagesSupported = false,
+} = {}) {
   if (!graphqlEndpoint) return [];
 
   const multilingual = backendLanguageFieldsAvailable && configuredLanguageCodes.length > 0;
@@ -1166,6 +1193,7 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
         commerce: commerceRoutesAvailable,
         multilingual,
         publicRobots: publicRobotsSupported,
+        specialPages: specialPagesSupported,
         translations: configuredLanguageCodes.length > 1,
         seo: seoSupported,
       }),
@@ -1196,6 +1224,7 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
           commerce: false,
           multilingual,
           publicRobots: publicRobotsSupported,
+          specialPages: specialPagesSupported,
           translations: configuredLanguageCodes.length > 1,
           seo: seoSupported,
         }),
@@ -1216,6 +1245,7 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
           buildCoreRoutesQuery({
             multilingual,
             publicRobots: publicRobotsSupported,
+            specialPages: specialPagesSupported,
             translations: configuredLanguageCodes.length > 1,
             seo: seoSupported,
           }),
@@ -1235,6 +1265,7 @@ async function discoverCmsRoutes({ publicRobotsSupported = false, seoSupported =
         discovery = await discoverCoreRouteNodesIndividually({
           multilingual,
           publicRobots: publicRobotsSupported,
+          specialPages: specialPagesSupported,
           translations: configuredLanguageCodes.length > 1,
           seo: seoSupported,
         });
@@ -2065,7 +2096,9 @@ const STATIC_HEADER_ICON_PATHS = {
 const STATIC_SPECIAL_PAGE_FALLBACK_SLUGS = {
   account: "/account",
   checkout: "/checkout",
+  "privacy-policy": "/privacy-policy",
   "reading-list": "/reading-list",
+  terms: "/terms",
   wishlist: "/wishlist",
 };
 
@@ -2199,7 +2232,7 @@ function renderStaticHeaderControls(route, chromeConfig = staticChromeConfig, hi
   }
 
   if (controls.assistant?.enabled === true && controls.assistant.showHeader === true) {
-    items.push(staticHeaderControl("assistant", controls.icons.assistant, controls.media.assistant, "message-circle"));
+    items.push(staticHeaderControl("assistant", controls.icons.assistant, controls.media.assistant, "sparkles"));
   }
   items.push('<span class="storefront-static-control-divider storefront-static-desktop-control"></span>');
   if (controls.layout.showHeaderDarkModeToggle !== false) {
@@ -2232,7 +2265,7 @@ function renderStaticFloatingControls(route, chromeConfig = staticChromeConfigur
         </button>
       </aside>`
     : "";
-  const privacyPath = normalizeLanguageRoutePath("/privacy-policy", route.lang, configuredLanguageCodes);
+  const privacyPath = resolveStaticSpecialPagePath("privacy-policy", route.lang);
   const cookieBanner = `<div data-static-cookie-banner role="region" aria-label="Cookie consent" class="sf-cookie-consent funky-cookie-consent-banner fixed inset-x-4 bottom-4 z-40 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white/95 p-5 shadow-soft-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-sm">
       <div class="flex items-start gap-3">
         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-gradient text-white shadow-soft">${staticHeaderIcon("cookie", "", "cookie")}</span>
@@ -2656,7 +2689,7 @@ async function writeStaticRouteRegistryAsset(entries, generatedAt) {
   return writeStaticHydrationAsset(
     "route-registry",
     [{
-      cacheKey: `storefront-route-registry:v6:${configuredLanguageCodes[0] || defaultLanguage}`,
+      cacheKey: `storefront-route-registry:v10:${configuredLanguageCodes[0] || defaultLanguage}`,
       value: entries,
       dependencies: ["route:/", "translation:global"],
     }],
@@ -3173,11 +3206,21 @@ try {
   );
 }
 
+let specialPagesSupported = false;
+try {
+  specialPagesSupported = await discoverSpecialPageSupport();
+} catch (error) {
+  console.warn(
+    `Optional special-page discovery unavailable; using conventional legal-page slugs: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
 let cmsRoutes = [];
 try {
   cmsRoutes = await discoverCmsRoutes({
     publicRobotsSupported,
     seoSupported: routeSeoSupported,
+    specialPagesSupported,
   });
 } catch (error) {
   throw new Error(

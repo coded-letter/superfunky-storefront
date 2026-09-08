@@ -167,7 +167,7 @@ test("prerendered chrome remains authoritative until real navigation data is ava
   assert.match(navigationSource, /throw new Error\(\s*`AI assistant configuration was unavailable:/);
   assert.match(navigationSource, /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)/);
   assert.match(navigationDataSource, /navigation-assistant:v2/);
-  assert.match(navigationSource, /assistant: "message-circle"/);
+  assert.match(navigationSource, /assistant: "sparkles"/);
 });
 
 before(() => {
