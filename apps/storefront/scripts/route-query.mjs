@@ -110,7 +110,8 @@ export function buildRoutesQuery({
           databaseId
           slug
           isFrontPage
-          ${specialPages ? "isPrivacyPolicyPage\n          isTermsPage" : ""}
+          isPrivacyPage
+          ${specialPages ? "isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent
           headlessShortcodes
@@ -240,7 +241,8 @@ export function buildCoreRoutesQuery({
           databaseId
           slug
           isFrontPage
-          ${specialPages ? "isPrivacyPolicyPage\n          isTermsPage" : ""}
+          isPrivacyPage
+          ${specialPages ? "isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent
           headlessShortcodes

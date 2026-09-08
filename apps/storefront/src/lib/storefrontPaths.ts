@@ -62,7 +62,7 @@ const ROUTE_REGISTRY_QUERY = /* GraphQL */ `
         slug
         isFrontPage
         isShopPage
-        isPrivacyPolicyPage
+        isPrivacyPage
         isTermsPage
         language {
           code
@@ -86,7 +86,6 @@ const ROUTE_REGISTRY_COMPATIBILITY_RULES = [
   PAGE_STATUS_COMPATIBILITY_RULE,
   missingGraphqlFieldRule("language"),
   missingGraphqlFieldRule("isShopPage"),
-  missingGraphqlFieldRule("isPrivacyPolicyPage"),
   missingGraphqlFieldRule("isTermsPage"),
 ] as const;
 

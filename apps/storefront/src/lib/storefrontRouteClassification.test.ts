@@ -127,7 +127,7 @@ test("legal special pages are included in the shared route registry", () => {
     classifyPageRouteKeys(page({
       slug: "polityka-prywatnosci",
       uri: "/polityka-prywatnosci/",
-      isPrivacyPolicyPage: true,
+      isPrivacyPage: true,
     })),
     ["privacy-policy"],
   );
