@@ -161,7 +161,7 @@ export function useAiShoppingAssistantSurfaces(
 
   const title = runtime.theme.title;
   const subtitle = runtime.theme.subtitle;
-  const assistantIconName = storefrontConfig?.headerIcons?.assistant;
+  const assistantIconName = storefrontConfig?.headerIcons?.assistant || "sparkles";
   const assistantHeaderIconUrl = typeof window === "undefined"
     ? null
     : validateAssistantAssetUrl(storefrontConfig?.headerIconMedia?.assistant, window.location.origin);
