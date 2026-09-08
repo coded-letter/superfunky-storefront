@@ -14,3 +14,15 @@ test("commerce taxonomy prefetch bypasses generic and protected page lookup", ()
     "taxonomy routing must return before generic page prefetch",
   );
 });
+
+test("public author and post taxonomy archives bypass protected page lookup", () => {
+  assert.match(source, /if \(prefix === "author" && slug\)/);
+  assert.match(source, /prefix === "blog" && \["category", "tag"\]\.includes\(routeSegments\[1\]\)/);
+  assert.match(source, /\["c", "t"\]\.includes\(prefix\)/);
+  assert.match(source, /getAuthorArchive\(/);
+  assert.match(source, /getPostTaxonomyArchive\(/);
+  assert.ok(
+    source.indexOf("if (publicArchive?.type") < source.indexOf("getPageByUri(uri)"),
+    "public archive routing must return before generic page prefetch",
+  );
+});

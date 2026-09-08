@@ -87,6 +87,23 @@ test("author archive compatibility filters language-less results by localized UR
   assert.match(authorPageSource, /getAuthorArchive\([\s\S]*requestedLanguage,[\s\S]*configuredLanguageCodes/);
 });
 
+test("author archive header uses localized UI strings", () => {
+  for (const key of [
+    "author.all_authors",
+    "author.read_all_articles",
+    "author.articles_by",
+    "author.subtitle",
+    "author.articles",
+  ]) {
+    assert.match(authorPageSource, new RegExp(`t\\("${key.replaceAll(".", "\\.")}"`));
+  }
+  assert.doesNotMatch(authorPageSource, />\s*All authors\s*</);
+  assert.doesNotMatch(authorPageSource, />\s*Read all articles\s*</);
+  assert.doesNotMatch(authorPageSource, /title=\{`Articles by/);
+  assert.doesNotMatch(authorPageSource, /subtitle=\{`Author/);
+  assert.doesNotMatch(authorPageSource, /label="Articles"/);
+});
+
 test("community profile products and articles request and apply Polylang language scoping", () => {
   // The backend resolves a profile's marketplace products/blog articles via
   // get_posts()/wc_post loaders that suppress Polylang's automatic language
