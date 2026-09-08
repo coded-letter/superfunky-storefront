@@ -81,6 +81,7 @@ export function buildRoutesQuery({
   commerce = false,
   multilingual = false,
   publicRobots = false,
+  specialPages = false,
   translations = multilingual,
   seo = false,
 } = {}) {
@@ -109,6 +110,7 @@ export function buildRoutesQuery({
           databaseId
           slug
           isFrontPage
+          ${specialPages ? "isPrivacyPolicyPage\n          isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent
           headlessShortcodes
@@ -200,6 +202,7 @@ export function buildCoreRoutesQuery({
   connections = ["pages", "posts", "categories", "tags", "users"],
   multilingual = false,
   publicRobots = false,
+  specialPages = false,
   translations = multilingual,
   seo = false,
 } = {}) {
@@ -237,6 +240,7 @@ export function buildCoreRoutesQuery({
           databaseId
           slug
           isFrontPage
+          ${specialPages ? "isPrivacyPolicyPage\n          isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent
           headlessShortcodes

@@ -65,6 +65,8 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
   const authLoginPath = useStorefrontPath("auth-login", "/auth");
   const authRegisterPath = useStorefrontPath("auth-register", "/auth/register");
   const authForgotPath = useStorefrontPath("auth-forgot-password", "/auth/forgot-password");
+  const privacyPolicyPath = useStorefrontPath("privacy-policy", "/privacy-policy");
+  const termsPath = useStorefrontPath("terms", "/terms");
   const [searchParams] = useSearchParams();
   const authRef = parseStorefrontAuthRef(searchParams.get("ref"));
   const config = useApplicationShortcode(["funkycommerce_auth"], { mode });
@@ -114,7 +116,14 @@ export function AuthMockupPage({ mode }: { mode: AuthShortcodeMode }) {
       {activeMode === "login" || activeMode === "register" ? <AuthProviders authRef={authRef} /> : null}
 
       {activeMode === "login" ? <LoginFormMock destination={authRef || accountPath} authForgotPath={withStorefrontAuthRef(authForgotPath, authRef)} /> : null}
-      {activeMode === "register" ? <RegisterFormMock destination={authRef || accountPath} authLoginPath={withStorefrontAuthRef(authLoginPath, authRef)} /> : null}
+      {activeMode === "register" ? (
+        <RegisterFormMock
+          destination={authRef || accountPath}
+          authLoginPath={withStorefrontAuthRef(authLoginPath, authRef)}
+          privacyPolicyPath={privacyPolicyPath}
+          termsPath={termsPath}
+        />
+      ) : null}
       {activeMode === "forgot-password" ? <ForgotPasswordFormMock authLoginPath={withStorefrontAuthRef(authLoginPath, authRef)} /> : null}
     </div>
   );
@@ -328,7 +337,17 @@ function LoginFormMock({ destination, authForgotPath }: { destination: string; a
   );
 }
 
-function RegisterFormMock({ destination, authLoginPath }: { destination: string; authLoginPath: string }) {
+function RegisterFormMock({
+  destination,
+  authLoginPath,
+  privacyPolicyPath,
+  termsPath,
+}: {
+  destination: string;
+  authLoginPath: string;
+  privacyPolicyPath: string;
+  termsPath: string;
+}) {
   const t = useT();
   const navigate = useNavigate();
   const [values, setValues] = useState({ firstName: "", lastName: "", username: "", email: "", password: "", confirmPassword: "" });
@@ -443,6 +462,16 @@ function RegisterFormMock({ destination, authLoginPath }: { destination: string;
         />
         <span>{t("auth.register.newsletter")}</span>
       </label>
+      <p className="m-0 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+        <Link to={termsPath} className="font-medium text-brand-600 underline dark:text-brand-400">
+          {t("auth.register.legal_terms")}
+        </Link>{" "}
+        {t("auth.register.legal_terms_suffix")}{" "}
+        <Link to={privacyPolicyPath} className="font-medium text-brand-600 underline dark:text-brand-400">
+          {t("auth.register.legal_privacy")}
+        </Link>{" "}
+        {t("auth.register.legal_privacy_suffix")}
+      </p>
       {submitError ? <p role="alert" className="m-0 text-sm font-medium text-rose-600 dark:text-rose-400">{submitError}</p> : null}
       <button type="submit" disabled={isSubmitting} className={`${primaryActionButtonClass} disabled:cursor-not-allowed disabled:opacity-60`}>
         {isSubmitting ? t("auth.register.cta_loading") : t("auth.register.cta")}

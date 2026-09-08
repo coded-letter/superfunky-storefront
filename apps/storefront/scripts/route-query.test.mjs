@@ -29,18 +29,20 @@ test("full sitemap discovery retains multilingual and SEO metadata", () => {
     commerce: true,
     multilingual: true,
     publicRobots: true,
+    specialPages: true,
     seo: true,
   });
 
   assert.match(query, /PostTypeSEO/);
   assert.match(query, /TaxonomySEO/);
   assert.match(query, /funkycommercePublicRobots \{ noindex nofollow \}/);
+  assert.match(query, /isPrivacyPolicyPage\s+isTermsPage/);
   assert.match(query, /translations \{ databaseId uri language \{ code \} \}/);
   assert.match(query, /\.\.\. on VariableProduct \{ language \{ code \} \}/);
 });
 
 test("core fallback paginates standard routes without the generic connections", () => {
-  const query = buildCoreRoutesQuery({ publicRobots: true, seo: true });
+  const query = buildCoreRoutesQuery({ publicRobots: true, specialPages: true, seo: true });
 
   for (const connection of ["pages", "posts", "categories", "tags", "users"]) {
     assert.match(query, new RegExp(`${connection}\\(first: 100`));
@@ -48,6 +50,7 @@ test("core fallback paginates standard routes without the generic connections", 
   assert.match(query, /pages\(first: 100[\s\S]*databaseId\s+slug\s+isFrontPage/);
   assert.doesNotMatch(query, /contentNodes|terms\(/);
   assert.match(query, /PostTypeSEO|TaxonomySEO/);
+  assert.match(query, /isPrivacyPolicyPage\s+isTermsPage/);
   assert.equal(query.match(/funkycommercePublicRobots/g)?.length, 2);
 });
 
