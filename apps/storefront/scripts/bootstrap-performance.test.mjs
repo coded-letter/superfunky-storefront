@@ -172,8 +172,8 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(prerenderSource, /storefront-static-header-row/);
   assert.match(prerenderSource, /storefront-static-header-nav-row/);
   assert.match(prerenderSource, /promoHtml: sanitizeCmsHtml/);
-  assert.match(prerenderSource, /storefront-static-announcement.*staticChromeConfig\.promoHtml/);
-  assert.match(prerenderSource, /staticChromeConfig\.iconUrl[\s\S]*?<link rel="icon"/);
+  assert.match(prerenderSource, /storefront-static-announcement.*chromeConfig\.promoHtml/);
+  assert.match(prerenderSource, /routeChromeConfig\.iconUrl[\s\S]*?<link rel="icon"/);
   assert.match(prerenderSource, /decorationBranding\?\.iconUrl/);
   assert.match(prerenderSource, /storefront-static-announcement-content/);
   assert.match(prerenderSource, /renderStaticBreadcrumbs/);
