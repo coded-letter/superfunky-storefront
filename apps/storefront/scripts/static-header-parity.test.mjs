@@ -13,6 +13,10 @@ const chromeSource = await readFile(
   new URL("../../../packages/ui/src/layout/StorefrontChromeMockup.tsx", import.meta.url),
   "utf8",
 );
+const assistantSource = await readFile(
+  new URL("../src/components/AiShoppingAssistant.tsx", import.meta.url),
+  "utf8",
+);
 
 test("static navigation never marks fragment-only links as the active page", () => {
   assert.equal(staticNavHrefMatchesRoute("#details", "/"), false);
@@ -93,6 +97,8 @@ test("custom and preset icons keep the same stable 18px slot through handoff", (
   assert.match(prerenderSource, /class="storefront-static-icon-media"/);
   assert.match(prerenderSource, /data-static-icon-media/);
   assert.match(indexSource, /\.storefront-static-icon-media \{[\s\S]*height: 18px;[\s\S]*width: 18px;/);
+  assert.equal(assistantSource.match(/h-\[18px\] w-\[18px\]/g)?.length, 3);
+  assert.doesNotMatch(assistantSource, /h-\[1\.15rem\] w-\[1\.15rem\]/);
   assert.match(headerSource, /useState\(\(\) => Boolean\(mediaUrl\)\)/);
   assert.match(chromeSource, /"account" \| "readingList"/);
 });
