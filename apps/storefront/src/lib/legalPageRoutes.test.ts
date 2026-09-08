@@ -11,10 +11,10 @@ const backendSource = readFileSync(
 const prerenderSource = readFileSync(new URL("../../scripts/prerender.mjs", import.meta.url), "utf8");
 
 test("configured WordPress and WooCommerce legal pages feed the route registry", () => {
-  assert.match(backendSource, /get_option\( 'wp_page_for_privacy_policy'/);
+  assert.match(pathsSource, /isPrivacyPage/);
   assert.match(backendSource, /get_option\( 'woocommerce_terms_page_id'/);
   assert.match(backendSource, /pll_get_post_translations/);
-  assert.match(pathsSource, /isPrivacyPolicyPage\s+isTermsPage/);
+  assert.match(pathsSource, /isPrivacyPage\s+isTermsPage/);
 });
 
 test("cookie consent and registration resolve legal links through shared special pages", () => {

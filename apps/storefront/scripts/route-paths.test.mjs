@@ -141,7 +141,7 @@ test("prerender preserves canonical multilingual CMS URIs", () => {
       title: "Koszyk",
       uri: "/koszyk/",
       language: { code: "PL" },
-      isPrivacyPolicyPage: true,
+      isPrivacyPage: true,
       isTermsPage: false,
     },
     "contentNodes",

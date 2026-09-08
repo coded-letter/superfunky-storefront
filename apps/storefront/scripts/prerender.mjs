@@ -19,7 +19,10 @@ import { buildStaticRouteRegistryEntries, resolveStaticRouteRegistryPath } from 
 import { sanitizeCmsHtml, sanitizeCmsStyleAttribute } from "../src/lib/cmsBehaviors.ts";
 import { storefrontProxiedMediaUrl } from "../src/lib/storefrontMediaAssets.ts";
 import { mapMenuItems } from "../src/lib/menuMapping.ts";
-import { getMegaMenuConfiguration } from "../../../packages/ui/src/layout/menuClasses.ts";
+import {
+  getMegaMenuConfiguration,
+  isMenuInitiallyExpanded,
+} from "../../../packages/ui/src/layout/menuClasses.ts";
 import {
   canUseHomepageBlogSummary,
   canUseHomepageCommunityFeed,
@@ -137,7 +140,7 @@ const SPECIAL_PAGE_SUPPORT_QUERY = `
   query StorefrontSpecialPageSupport {
     pages(first: 1) {
       nodes {
-        isPrivacyPolicyPage
+        isPrivacyPage
         isTermsPage
       }
     }
@@ -1168,7 +1171,7 @@ async function discoverSpecialPageSupport() {
     SPECIAL_PAGE_SUPPORT_QUERY,
     {},
     "Storefront special page support",
-    { optionalField: { fieldName: "isPrivacyPolicyPage", typeName: "Page" }, attempts: 1 },
+    { optionalField: { fieldName: "isTermsPage", typeName: "Page" }, attempts: 1 },
   );
   return Boolean(payload.data?.pages);
 }
