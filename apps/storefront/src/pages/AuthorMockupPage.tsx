@@ -56,7 +56,7 @@ export function AuthorMockupPage() {
       className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-zinc-500 no-underline transition hover:text-brand-600 dark:text-zinc-400 dark:hover:text-brand-400"
     >
       <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-      All authors
+      {t("author.all_authors")}
     </Link>
   );
 
@@ -65,7 +65,7 @@ export function AuthorMockupPage() {
       href="#author-articles"
       className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5"
     >
-      Read all articles
+      {t("author.read_all_articles")}
       <ArrowRight className="h-4 w-4" aria-hidden="true" />
     </a>
   ) : null;
@@ -93,10 +93,10 @@ export function AuthorMockupPage() {
         avatarColor={stringToHSL(author.name)}
         avatarUrl={author.avatarUrl}
         coverUrl={author.coverUrl}
-        subtitle={`Author · ${author.languageCode.toUpperCase()}`}
+        subtitle={t("author.subtitle", { language: author.languageCode.toUpperCase() })}
         bio={author.bio}
         actions={actionsNode}
-        stats={<ProfileStat value={author.posts.length} label="Articles" />}
+        stats={<ProfileStat value={author.posts.length} label={t("author.articles")} />}
         backLink={backLinkNode}
       />
 
@@ -107,7 +107,7 @@ export function AuthorMockupPage() {
       ) : (
         <div id="author-articles" className="scroll-mt-28">
           <PaginablePostGrid
-            title={`Articles by ${author.name}`}
+            title={t("author.articles_by", { name: author.name })}
             posts={author.posts}
             pageSize={6}
             cardVariant="default"
