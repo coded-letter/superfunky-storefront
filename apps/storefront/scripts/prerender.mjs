@@ -45,6 +45,7 @@ import {
 } from "./artifact-publish.mjs";
 import { stableRouteIsAvailable } from "./route-availability.mjs";
 import { navigationDataCacheKey } from "../src/lib/navigationCacheKey.mjs";
+import { staticNavHrefMatchesRoute as matchesStaticNavigationRoute } from "./static-navigation-route.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -78,6 +79,7 @@ let artifactDelivery = null;
 const publicMediaProxyRoutes = new Map();
 let backendLanguageFieldsAvailable = true;
 let staticHydrationAssets = new Map();
+let staticHydrationNavigationByLanguage = new Map();
 let staticRouteRegistryAsset = null;
 // Authoritative `{ key, uri, languageCode }` entries resolved from build-time
 // CMS pages (see `buildStaticRouteRegistryEntries`). Populated once, right
@@ -297,7 +299,11 @@ const STATIC_LAYOUT_VARIANTS_QUERY = `
   query StorefrontStaticLayoutVariants($language: String) {
     storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
       layout {
+        themeRadiusPx
+        headerSticky
+        headerLogoVariant
         headerArrangement
+        showHeaderLogo
         footerColumnsLayout
       }
     }
@@ -405,6 +411,7 @@ const DEFAULT_STATIC_HEADER_CONTROLS = {
     search: "search",
     theme: "moon",
     account: "user",
+    push: "bell",
     readingList: "book-marked",
     wishlist: "heart",
     cart: "shopping-cart",
@@ -428,7 +435,11 @@ const DEFAULT_STATIC_CHROME = {
   brandPalette: "violet",
   brandGradientStyle: "gradient",
   themeMaxWidthPx: 1280,
+  themeRadiusPx: 16,
+  headerSticky: true,
+  headerLogoVariant: "text-image",
   headerArrangement: "classic",
+  showHeaderLogo: true,
   footerColumnsLayout: "grid-4",
   customCss: "",
   fontFaceStyles: "",
@@ -878,9 +889,17 @@ async function discoverStaticChrome() {
       && layout.themeMaxWidthPx <= 1920
       ? layout.themeMaxWidthPx
       : DEFAULT_STATIC_CHROME.themeMaxWidthPx,
+    themeRadiusPx: Number.isInteger(layoutVariantConfig?.themeRadiusPx)
+      ? layoutVariantConfig.themeRadiusPx
+      : DEFAULT_STATIC_CHROME.themeRadiusPx,
+    headerSticky: layoutVariantConfig?.headerSticky !== false,
+    headerLogoVariant: ["text", "image", "text-image"].includes(layoutVariantConfig?.headerLogoVariant)
+      ? layoutVariantConfig.headerLogoVariant
+      : DEFAULT_STATIC_CHROME.headerLogoVariant,
     headerArrangement: ["classic", "single-row", "centered", "island"].includes(layoutVariantConfig?.headerArrangement)
       ? layoutVariantConfig.headerArrangement
       : DEFAULT_STATIC_CHROME.headerArrangement,
+    showHeaderLogo: layoutVariantConfig?.showHeaderLogo !== false,
     footerColumnsLayout: ["grid-1", "grid-2-wide", "grid-3", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"].includes(layoutVariantConfig?.footerColumnsLayout)
       ? layoutVariantConfig.footerColumnsLayout
       : DEFAULT_STATIC_CHROME.footerColumnsLayout,
@@ -1558,6 +1577,7 @@ async function discoverCommunityRoutes() {
 }
 
 async function renderRoute(route) {
+  const routeChromeConfig = staticChromeConfigurationForRoute(route);
   const completeCmsSnapshot = route.type === "Page" && route.cmsContent
     ? await optimizeStaticCmsHtml(route.cmsContent, { placeholders: true })
     : "";
@@ -1591,10 +1611,11 @@ async function renderRoute(route) {
     : "";
   const seoHead = renderSeoHead(route);
   const staticTheme = renderStaticThemeVariables(
-    staticChromeConfig.colors,
-    staticChromeConfig.brandPalette,
-    staticChromeConfig.brandGradientStyle,
-    staticChromeConfig.themeMaxWidthPx,
+    routeChromeConfig.colors,
+    routeChromeConfig.brandPalette,
+    routeChromeConfig.brandGradientStyle,
+    routeChromeConfig.themeMaxWidthPx,
+    routeChromeConfig.themeRadiusPx,
   );
   const hydrationAssetUrls = [
     ...staticHydrationUrlsForRoute(route, routeSnapshot),
@@ -1627,19 +1648,19 @@ async function renderRoute(route) {
       ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.href)}" data-wordpress-static-style-source="${escapeAttribute(staticStyleAsset.sourceHash)}" />`
       : "",
     staticTheme ? `<style data-storefront-static-theme>${staticTheme}</style>` : "",
-    `<script type="application/json" id="storefront-static-layout">${serializeStaticLayoutSeed(staticChromeConfig)}</script>`,
-    staticChromeConfig.paymentGatewayCache.gateways.length
-      ? `<script type="application/json" id="storefront-payment-gateway-cache">${serializePaymentGatewaySeed(staticChromeConfig.paymentGatewayCache)}</script>`
+    `<script type="application/json" id="storefront-static-layout">${serializeStaticLayoutSeed(routeChromeConfig)}</script>`,
+    routeChromeConfig.paymentGatewayCache.gateways.length
+      ? `<script type="application/json" id="storefront-payment-gateway-cache">${serializePaymentGatewaySeed(routeChromeConfig.paymentGatewayCache)}</script>`
       : "",
     hydrationAssetUrls.length
       ? `<script type="application/json" id="storefront-static-hydration-assets">${JSON.stringify(hydrationAssetUrls).replaceAll("<", "\\u003c")}</script>`
       : "",
   ].filter(Boolean);
-  if (staticChromeConfig.iconUrl) {
+  if (routeChromeConfig.iconUrl) {
     rendered = rendered.replace(/\s*<link\b[^>]*\brel=(["'])(?:icon|shortcut icon|apple-touch-icon)\1[^>]*>/gi, "");
     staticHead.push(
-      `<link rel="icon" href="${escapeAttribute(staticChromeConfig.iconUrl)}">`,
-      `<link rel="apple-touch-icon" href="${escapeAttribute(staticChromeConfig.iconUrl)}">`,
+      `<link rel="icon" href="${escapeAttribute(routeChromeConfig.iconUrl)}">`,
+      `<link rel="apple-touch-icon" href="${escapeAttribute(routeChromeConfig.iconUrl)}">`,
     );
   }
   if (staticHead.length) {
@@ -1656,7 +1677,7 @@ async function renderRoute(route) {
       : normalizeLanguageRoutePath("/", route.lang, configuredLanguageCodes);
     const homeLabel = route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home";
     const staticBreadcrumbs = renderStaticBreadcrumbs(route, homePath, homeLabel);
-    const staticHeaderLayout = staticChromeConfig.showAnnouncementBar && staticChromeConfig.promoHtml
+    const staticHeaderLayout = routeChromeConfig.showAnnouncementBar && routeChromeConfig.promoHtml
       ? "announcement"
       : "standard";
     const prerenderActivationMode = routeSnapshot.includes('data-prerender-video-poster="false"')
@@ -1665,7 +1686,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${staticChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${staticChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${staticChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${staticChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${staticChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -1691,15 +1712,29 @@ async function renderRoute(route) {
   return injectBuildScripts(rendered);
 }
 
-function renderStaticChrome(route) {
+function renderStaticChrome(route, chromeConfig = staticChromeConfigurationForRoute(route)) {
   const homePath = route.lang === defaultLanguage
     ? "/"
     : normalizeLanguageRoutePath("/", route.lang, configuredLanguageCodes);
-  const logo = staticChromeConfig.logoUrl
-    ? `<img src="${escapeAttribute(staticChromeConfig.logoUrl)}" alt="" width="40" height="40" />`
-    : staticChromeConfig.iconUrl
-      ? `<span class="storefront-static-brand-mark" aria-hidden="true"><img src="${escapeAttribute(staticChromeConfig.iconUrl)}" alt="" width="40" height="40" /></span>`
-      : '<span class="storefront-static-brand-mark" aria-hidden="true"></span>';
+  const logoVariant = ["text", "image", "text-image"].includes(chromeConfig.headerLogoVariant)
+    ? chromeConfig.headerLogoVariant
+    : "text-image";
+  const hasBrandText = logoVariant !== "image";
+  const logoMedia = logoVariant === "text"
+    ? ""
+    : chromeConfig.logoUrl
+      ? `<img class="storefront-static-brand-logo" src="${escapeAttribute(staticResponsiveImageUrl(chromeConfig.logoUrl))}" alt="${hasBrandText ? "" : escapeAttribute(chromeConfig.storeName)}" decoding="sync" fetchpriority="high" />`
+      : `<span class="storefront-static-brand-mark" aria-hidden="true">${
+          chromeConfig.iconUrl
+            ? `<img src="${escapeAttribute(staticResponsiveImageUrl(chromeConfig.iconUrl))}" alt="" width="40" height="40" decoding="sync" fetchpriority="high" />`
+            : staticHeaderIcon("sparkles", "", "sparkles")
+        }</span>`;
+  const logoText = hasBrandText
+    ? `<span><strong class="funky-brand-heading">${escapeAttribute(chromeConfig.storeName)}</strong><small>${escapeAttribute(chromeConfig.tagline)}</small></span>`
+    : "";
+  const brand = chromeConfig.showHeaderLogo
+    ? `<a class="storefront-static-brand" href="${escapeAttribute(homePath)}"${!hasBrandText && !chromeConfig.logoUrl ? ` aria-label="${escapeAttribute(chromeConfig.storeName)}"` : ""}>${logoMedia}${logoText}</a>`
+    : '<span class="storefront-static-brand-placeholder" aria-hidden="true"></span>';
   const homeLabel = route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home";
   const searchPlaceholder = route.lang === "pl"
     ? "Szukaj produktów, artykułów, osób i tagów…"
@@ -1711,13 +1746,21 @@ function renderStaticChrome(route) {
     : route.lang === "ja"
       ? "メインナビゲーション"
       : "Primary navigation";
-  const routeMenu = staticHeaderMenu(staticChromeConfig.navigationMenus, route.lang);
+  const hydrationNavigation = staticHydrationNavigationByLanguage.get(route.lang.toLowerCase())?.navigation;
+  const routeMenu = staticHeaderMenu(chromeConfig.navigationMenus, route.lang);
   const routeNavigationItems = staticNavigationItems(routeMenu?.menuItems?.nodes);
-  const navigationItems = routeNavigationItems.length
-    ? routeNavigationItems
-    : staticChromeConfig.navigationItems.length
-      ? staticChromeConfig.navigationItems
-    : [{ label: homeLabel, href: homePath }];
+  const navigationItems = chromeConfig.hideNavigation
+    ? []
+    : hydrationNavigation?.header?.length
+      ? hydrationNavigation.header
+      : routeNavigationItems.length
+        ? routeNavigationItems
+        : chromeConfig.navigationItems.length
+          ? chromeConfig.navigationItems
+          : [{ label: homeLabel, href: homePath }];
+  const mobileNavigationItems = hydrationNavigation?.mobile?.length
+    ? hydrationNavigation.mobile
+    : navigationItems;
   const navigation = navigationItems
     .map((item, index) => {
       const { label, href, children = [] } = item;
@@ -1739,37 +1782,42 @@ function renderStaticChrome(route) {
       </span>`;
     })
     .join("");
-  const headerControls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const headerControls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const showSearch = headerControls.layout.showHeaderSearchIcon !== false
     && headerControls.features.search !== false;
   const searchVariant = headerControls.layout.headerSearchVariant || "full-width";
-  const announcement = staticChromeConfig.showAnnouncementBar && staticChromeConfig.promoHtml
-    ? `<div class="storefront-static-announcement"><div class="storefront-static-announcement-content">${staticChromeConfig.promoHtml}</div></div>`
+  const announcement = chromeConfig.showAnnouncementBar && chromeConfig.promoHtml
+    ? `<div class="storefront-static-announcement"><div class="storefront-static-announcement-content">${chromeConfig.promoHtml}</div></div>`
     : "";
-  const controls = renderStaticHeaderControls(route);
+  const controls = renderStaticHeaderControls(route, chromeConfig, chromeConfig.hideNavigation);
   const parityAttribute = hasInteractiveStaticChrome ? " data-static-react-parity" : "";
   const searchIcon = hasInteractiveStaticChrome ? staticHeaderIcon("search", "", "search") : "";
-  const mobileNavigation = hasInteractiveStaticChrome
-    ? renderStaticMobileNavigation(navigationItems, navigationLabel, route.path, resolveStaticSpecialPageLinks(route))
+  const mobileNavigation = hasInteractiveStaticChrome && !chromeConfig.hideNavigation
+    ? renderStaticMobileNavigation(
+        mobileNavigationItems,
+        navigationLabel,
+        route.path,
+        resolveStaticSpecialPageLinks(route, chromeConfig),
+        chromeConfig,
+        searchPlaceholder,
+      )
     : "";
-  return `<header class="storefront-static-header storefront-static-header--${staticChromeConfig.headerArrangement}" data-static-announcement-scroll="${staticChromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
+  const flowClass = chromeConfig.headerSticky ? "" : " storefront-static-header--flow";
+  return `<header class="storefront-static-header storefront-static-header--${chromeConfig.headerArrangement}${flowClass}" data-static-announcement-scroll="${chromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
     ${announcement}
     <div class="storefront-static-header-main">
       <div class="storefront-static-header-row">
-        <a class="storefront-static-brand" href="${escapeAttribute(homePath)}">
-          ${logo}
-          <span><strong class="funky-brand-heading">${escapeAttribute(staticChromeConfig.storeName)}</strong><small>${escapeAttribute(staticChromeConfig.tagline)}</small></span>
-        </a>
+        ${brand}
         ${showSearch && searchVariant === "full-width"
           ? `<span class="storefront-static-search" aria-hidden="true">${searchIcon}<span>${searchPlaceholder}</span></span>`
           : ""}
         ${controls}
       </div>
-      <div class="storefront-static-header-nav-row">
+      ${chromeConfig.hideNavigation ? "" : `<div class="storefront-static-header-nav-row">
         <nav aria-label="${navigationLabel}">${navigation}</nav>
-      </div>
+      </div>`}
     </div>
-  </header><div class="storefront-static-header-spacer" data-static-header-spacer aria-hidden="true"></div>${mobileNavigation}<script data-static-navigation-runtime>${staticNavigationRuntimeSource}</script>`;
+  </header><div class="storefront-static-header-spacer${chromeConfig.headerSticky ? "" : " storefront-static-header-spacer--flow"}" data-static-header-spacer aria-hidden="true"></div>${mobileNavigation}<script data-static-navigation-runtime>${staticNavigationRuntimeSource}</script>`;
 }
 
 function renderStaticSubmenu(item, submenuId, routePath) {
@@ -1807,34 +1855,81 @@ function renderStaticSubmenuEntry(item, routePath, column) {
   </div>`;
 }
 
-function renderStaticMobileNavigation(items, navigationLabel, routePath, specialPageLinks = []) {
+function renderStaticMobileNavigation(
+  items,
+  navigationLabel,
+  routePath,
+  specialPageLinks = [],
+  chromeConfig = staticChromeConfig,
+  searchPlaceholder = "Search products, stories, people, and tags…",
+) {
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
+  const width = ["standard", "wide", "full"].includes(controls.layout.mobileMenuWidth)
+    ? controls.layout.mobileMenuWidth
+    : "standard";
+  const height = controls.layout.mobileMenuHeight === "content" ? "content" : "full";
   const content = items.map((item) => renderStaticMobileNavigationItem(item, routePath, 0)).join("");
-  const actions = renderStaticMobileActionLinks(specialPageLinks);
+  const languageCode = routeLanguageCode(routePath);
+  const actions = renderStaticMobileActionLinks(specialPageLinks, chromeConfig, languageCode);
+  const mobileSearch = enabled(controls.layout.showHeaderSearchIcon, controls.features.search)
+    ? `<span class="storefront-static-mobile-search" aria-hidden="true">${staticHeaderIcon("search", "", "search")}<span>${searchPlaceholder}</span></span>`
+    : "";
+  const mobileSwitchers = renderStaticMobileSwitchers(languageCode, chromeConfig);
   return `<div class="storefront-static-mobile-backdrop" data-static-mobile-backdrop hidden>
-    <aside id="storefront-static-mobile-navigation" class="storefront-static-mobile-drawer" role="dialog" aria-modal="true" aria-label="${escapeAttribute(navigationLabel)}" tabindex="-1">
+    <aside id="storefront-static-mobile-navigation" class="storefront-static-mobile-drawer storefront-static-mobile-drawer--${width} storefront-static-mobile-drawer--${height}" role="dialog" aria-modal="true" aria-label="${escapeAttribute(navigationLabel)}" tabindex="-1">
       <div class="storefront-static-mobile-heading">
         <strong>${escapeAttribute(navigationLabel)}</strong>
-        <button type="button" class="storefront-static-mobile-close" data-static-mobile-close aria-label="Close menu">×</button>
+        <button type="button" class="storefront-static-mobile-close" data-static-mobile-close aria-label="Close menu">${staticHeaderIcon("x", "", "x")}</button>
       </div>
-      <nav aria-label="${escapeAttribute(navigationLabel)}">${content}</nav>
-      ${actions}
+      <div class="storefront-static-mobile-content">
+        ${mobileSearch}
+        ${mobileSwitchers}
+        <nav aria-label="${escapeAttribute(navigationLabel)}">${content}</nav>
+        ${actions}
+      </div>
     </aside>
   </div>`;
+}
+
+function renderStaticMobileSwitchers(languageCode, chromeConfig) {
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
+  const languageFlag = { zh: "CN", ko: "KR", sv: "SE" }[languageCode] || languageCode.toUpperCase();
+  const language = configuredLanguageCodes.length > 1
+    && enabled(controls.layout.showHeaderLanguageSwitcher, controls.features.languages)
+    ? `<button type="button" class="storefront-static-mobile-switcher storefront-static-switcher--language" aria-label="Language"><img src="/icons/flags/${escapeAttribute(languageFlag)}.svg" alt="" width="20" height="14" /><b>${escapeAttribute(languageCode.toUpperCase())}</b>${staticHeaderIcon("chevron-down", "", "chevron")}</button>`
+    : "";
+  const currency = enabled(controls.layout.showHeaderCurrencySwitcher, controls.features.currencies)
+    ? `<button type="button" class="storefront-static-mobile-switcher" data-static-control="currency" data-storefront-activate aria-label="Currency"><span>${escapeAttribute(controls.currencySymbol)}</span><b>${escapeAttribute(controls.baseCurrency)}</b>${staticHeaderIcon("chevron-down", "", "chevron")}</button>`
+    : "";
+  return language || currency
+    ? `<div class="storefront-static-mobile-switchers">${language}${currency}</div>`
+    : "";
+}
+
+function routeLanguageCode(routePath) {
+  const firstSegment = String(routePath).split("/").filter(Boolean)[0]?.toLowerCase();
+  return configuredLanguageCodes.includes(firstSegment) ? firstSegment : defaultLanguage;
 }
 
 function renderStaticMobileNavigationItem(item, routePath, depth) {
   const children = item.children || [];
   const itemId = `storefront-static-mobile-${String(item.id || item.databaseId || item.label).replace(/[^a-z0-9_-]+/gi, "-")}`;
+  const initiallyExpanded = isMenuInitiallyExpanded(item.cssClasses);
   const toggle = children.length
-    ? `<button type="button" class="storefront-static-mobile-expand" data-static-mobile-expand aria-expanded="false" aria-controls="${escapeAttribute(itemId)}" aria-label="Show ${escapeAttribute(item.label)} links">${staticHeaderIcon("chevron-down", "", "chevron")}</button>`
+    ? `<button type="button" class="storefront-static-mobile-expand" data-static-mobile-expand aria-expanded="${initiallyExpanded ? "true" : "false"}" aria-controls="${escapeAttribute(itemId)}" aria-label="Show ${escapeAttribute(item.label)} links">${staticHeaderIcon("chevron-down", "", "chevron")}</button>`
+    : "";
+  const description = item.description
+    ? `<div class="storefront-static-mobile-description">${sanitizeCmsHtml(item.description)}</div>`
     : "";
   const nested = children.length
-    ? `<div id="${escapeAttribute(itemId)}" class="storefront-static-mobile-children" hidden>${children
+    ? `<div id="${escapeAttribute(itemId)}" class="storefront-static-mobile-children"${initiallyExpanded ? "" : " hidden"}>${children
          .map((child) => renderStaticMobileNavigationItem(child, routePath, depth + 1))
          .join("")}</div>`
     : "";
-  return `<div class="storefront-static-mobile-item" style="--storefront-static-menu-depth:${depth}">
-    <span><a ${staticMenuLinkAttributes(item, routePath)}>${escapeAttribute(item.label)}</a>${toggle}</span>
+  return `<div class="storefront-static-mobile-item${depth === 0 ? " storefront-static-mobile-item--root" : ""}">
+    <span><span class="storefront-static-mobile-link"><a ${staticMenuLinkAttributes(item, routePath)}><span>${escapeAttribute(item.label)}</span></a>${description}</span>${toggle}</span>
     ${nested}
   </div>`;
 }
@@ -1892,13 +1987,13 @@ function renderStaticBreadcrumbs(route, homePath, homeLabel) {
   </nav>`;
 }
 
-function renderStaticFooter(route) {
+function renderStaticFooter(route, chromeConfig = staticChromeConfigurationForRoute(route)) {
   if (!hasInteractiveStaticChrome) return "";
-  const routeMenu = staticFooterMenu(staticChromeConfig.navigationMenus, route.lang);
+  const routeMenu = staticFooterMenu(chromeConfig.navigationMenus, route.lang);
   const routeFooterItems = staticFooterItems(routeMenu?.menuItems?.nodes);
   const footerItems = routeFooterItems.length
     ? routeFooterItems
-    : staticChromeConfig.navigationItems.slice(0, 4);
+    : chromeConfig.navigationItems.slice(0, 4);
   if (!footerItems.length) {
     footerItems.push({
       id: "home",
@@ -1915,10 +2010,10 @@ function renderStaticFooter(route) {
     </div>`;
   }).join("");
   return `<footer class="storefront-static-footer" aria-label="Footer links">
-    <div class="storefront-static-footer-inner storefront-static-footer-inner--${staticChromeConfig.footerColumnsLayout}">${columns}</div>
-    <div class="storefront-static-footer-meta">© ${new Date().getFullYear()} ${escapeAttribute(staticChromeConfig.storeName)}</div>
-    ${staticChromeConfig.showThemeCredit && staticChromeConfig.themeCredit
-      ? `<div class="storefront-static-footer-meta">${staticChromeConfig.themeCredit}</div>`
+    <div class="storefront-static-footer-inner storefront-static-footer-inner--${chromeConfig.footerColumnsLayout}">${columns}</div>
+    <div class="storefront-static-footer-meta">© ${new Date().getFullYear()} ${escapeAttribute(chromeConfig.storeName)}</div>
+    ${chromeConfig.showThemeCredit && chromeConfig.themeCredit
+      ? `<div class="storefront-static-footer-meta">${chromeConfig.themeCredit}</div>`
       : ""}
   </footer>`;
 }
@@ -1932,34 +2027,36 @@ function renderStaticFooterLinkItem(item, routePath) {
 }
 
 function staticNavHrefMatchesRoute(href, routePath) {
-  try {
-    const resolved = new URL(href, effectiveSiteUrl || "https://storefront.invalid");
-    if (
-      /^[a-z][a-z\d+.-]*:/i.test(href)
-      && effectiveSiteUrl
-      && resolved.origin !== new URL(effectiveSiteUrl).origin
-    ) return false;
-    const normalize = (value) => {
-      const path = new URL(value, "https://storefront.invalid").pathname.replace(/\/+$/, "");
-      return path || "/";
-    };
-    return normalize(resolved.href) === normalize(routePath);
-  } catch {
-    return false;
-  }
+  return matchesStaticNavigationRoute(href, routePath, effectiveSiteUrl);
 }
 
 const STATIC_HEADER_ICON_PATHS = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  "scan-search": '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12Z"/>',
+  "sun-moon": '<path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
   bell: '<path d="M10.3 21a2 2 0 0 0 3.4 0"/><path d="M3.3 15.3A1 1 0 0 0 4 17h16a1 1 0 0 0 .7-1.7C19.4 14 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.4 6-2.7 7.3"/>',
+  "bell-ring": '<path d="M10.3 21a2 2 0 0 0 3.4 0M4 2C2.8 3.7 2 5.7 2 8M20 2c1.2 1.7 2 3.7 2 6"/><path d="M3.3 15.3A1 1 0 0 0 4 17h16a1 1 0 0 0 .7-1.7C19.4 14 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.4 6-2.7 7.3"/>',
   user: '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>',
+  "circle-user": '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.7c.9-2.8 2.6-4.2 5-4.2s4.1 1.4 5 4.2"/>',
+  "user-check": '<path d="m16 11 2 2 4-4M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
   "book-marked": '<path d="M10 2v8l3-3 3 3V2"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+  bookmark: '<path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+  library: '<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
   heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>',
+  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1Z"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 1 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 1 1 0 5"/>',
   "shopping-cart": '<circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.7 11.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/>',
+  "shopping-bag": '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>',
+  "shopping-basket": '<path d="m15 11-1 9M19 11l-4-7M2 11h20M3.5 11l1.6 7.4A2 2 0 0 0 7 20h10a2 2 0 0 0 1.9-1.6l1.6-7.4M5 11l4-7M9 11l1 9"/>',
   menu: '<path d="M4 12h16M4 6h16M4 18h16"/>',
+  "align-justify": '<path d="M3 12h18M3 18h18M3 6h18"/>',
+  "panels-top-left": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/>',
   command: '<path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12Z"/>',
   "message-circle": '<path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/>',
+  sparkles: '<path d="m12 3-1.9 5.1L5 10l5.1 1.9L12 17l1.9-5.1L19 10l-5.1-1.9ZM5 3v4M3 5h4M19 17v4M17 19h4"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
   cookie: '<path d="M12 2a10 10 0 1 0 10 10c0-1.1-.9-2-2-2h-1a3 3 0 0 1-3-3V6a4 4 0 0 0-4-4Z"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/>',
 };
 
@@ -1967,6 +2064,7 @@ const STATIC_HEADER_ICON_PATHS = {
 // || "/account"`, etc.) when the route registry has no matching entry yet.
 const STATIC_SPECIAL_PAGE_FALLBACK_SLUGS = {
   account: "/account",
+  checkout: "/checkout",
   "reading-list": "/reading-list",
   wishlist: "/wishlist",
 };
@@ -2009,8 +2107,8 @@ function resolveStaticSpecialPagePath(key, languageCode) {
 // authoritative paths. Deliberately excludes personalized state (reading
 // list/wishlist counts, sync-error indicators, auth-gated variants): those
 // only exist once React has hydrated with real user data.
-function resolveStaticSpecialPageLinks(route) {
-  const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+function resolveStaticSpecialPageLinks(route, chromeConfig = staticChromeConfig) {
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
   const links = [];
   if (enabled(controls.layout.showHeaderAccountLink, controls.features.account)) {
@@ -2046,14 +2144,27 @@ function resolveStaticSpecialPageLinks(route) {
   return links;
 }
 
-function renderStaticMobileActionLinks(specialPageLinks) {
-  if (!specialPageLinks.length) return "";
-  const items = specialPageLinks.map((link) => `<a class="storefront-static-mobile-action" data-static-control="${escapeAttribute(link.role)}" data-storefront-control="${escapeAttribute(link.role)}" href="${escapeAttribute(link.href)}">${staticHeaderIcon(link.icon, link.media, link.fallbackIcon)}<span>${escapeAttribute(link.label)}</span></a>`).join("");
+function renderStaticMobileActionLinks(specialPageLinks, chromeConfig = staticChromeConfig, languageCode = defaultLanguage) {
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const links = [...specialPageLinks];
+  if (controls.layout.showHeaderCartIcon !== false && controls.features.cart !== false) {
+    links.push({
+      role: "cart",
+      icon: controls.icons.cart,
+      media: controls.media.cart,
+      fallbackIcon: "shopping-cart",
+      label: { pl: "Koszyk", ja: "カート" }[languageCode] || "Cart",
+    });
+  }
+  if (!links.length) return "";
+  const items = links.map((link) => link.href
+    ? `<a class="storefront-static-mobile-action" data-static-control="${escapeAttribute(link.role)}" data-storefront-control="${escapeAttribute(link.role)}" href="${escapeAttribute(link.href)}">${staticHeaderIcon(link.icon, link.media, link.fallbackIcon)}<span>${escapeAttribute(link.label)}</span></a>`
+    : `<button type="button" class="storefront-static-mobile-action" data-static-control="${escapeAttribute(link.role)}" data-storefront-control="${escapeAttribute(link.role)}" data-storefront-activate>${staticHeaderIcon(link.icon, link.media, link.fallbackIcon)}<span>${escapeAttribute(link.label)}</span></button>`).join("");
   return `<div class="storefront-static-mobile-actions">${items}</div>`;
 }
 
-function renderStaticHeaderControls(route) {
-  const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+function renderStaticHeaderControls(route, chromeConfig = staticChromeConfig, hideNavigation = false) {
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const enabled = (layoutValue, featureValue = true) => layoutValue !== false && featureValue !== false;
   const languageCode = route.lang.toLowerCase();
   const languageFlag = { zh: "CN", ko: "KR", sv: "SE" }[languageCode] || languageCode.toUpperCase();
@@ -2097,21 +2208,23 @@ function renderStaticHeaderControls(route) {
   if (controls.features.push !== false) {
     items.push(staticHeaderControl("push", "bell", "", "bell", false, false, "", false));
   }
-  for (const link of resolveStaticSpecialPageLinks(route)) {
+  for (const link of resolveStaticSpecialPageLinks(route, chromeConfig)) {
     items.push(staticHeaderControl(link.role, link.icon, link.media, link.fallbackIcon, true, false, link.href));
   }
   if (enabled(controls.layout.showHeaderCartIcon, controls.features.cart)) {
     items.push(staticHeaderControl("cart", controls.icons.cart, controls.media.cart, "shopping-cart"));
   }
-  items.push(staticHeaderControl("menu", controls.icons.menu, controls.media.menu, "menu", false, true));
+  if (!hideNavigation) {
+    items.push(staticHeaderControl("menu", controls.icons.menu, controls.media.menu, "menu", false, true));
+  }
 
   const hidden = hasInteractiveStaticChrome ? "" : ' aria-hidden="true"';
   return `<span class="storefront-static-controls"${hidden}>${items.join("")}</span>`;
 }
 
-function renderStaticFloatingControls(route) {
+function renderStaticFloatingControls(route, chromeConfig = staticChromeConfigurationForRoute(route)) {
   if (!hasInteractiveStaticChrome) return "";
-  const controls = staticChromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
+  const controls = chromeConfig.headerControls || DEFAULT_STATIC_HEADER_CONTROLS;
   const assistant = controls.assistant?.enabled === true && controls.assistant.showFixed === true
     ? `<aside class="sf-ai-assistant-launcher fixed bottom-5 right-5 z-[70] flex max-w-[calc(100vw-1rem)] flex-col items-end gap-3">
         <button type="button" class="inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-brand-gradient text-white shadow-glow transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-soft-lg pointer-events-auto translate-y-0 scale-100 opacity-100" data-static-control="assistant-fixed" data-storefront-control="assistant-fixed" data-storefront-activate aria-label="${escapeAttribute(controls.assistant.launcherLabel)}">
@@ -2125,7 +2238,7 @@ function renderStaticFloatingControls(route) {
         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-gradient text-white shadow-soft">${staticHeaderIcon("cookie", "", "cookie")}</span>
         <div class="grid gap-1">
           <strong class="font-display text-base text-zinc-900 dark:text-zinc-100">Cookie consent</strong>
-          <p class="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">${escapeAttribute(staticChromeConfig.storeName)} uses cookies for site functionality, analytics, and advertising. Learn more in our <a href="${escapeAttribute(privacyPath)}#cookies" class="font-medium text-brand-600 underline dark:text-brand-400">Cookies Policy</a>.</p>
+          <p class="m-0 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">${escapeAttribute(chromeConfig.storeName)} uses cookies for site functionality, analytics, and advertising. Learn more in our <a href="${escapeAttribute(privacyPath)}#cookies" class="font-medium text-brand-600 underline dark:text-brand-400">Cookies Policy</a>.</p>
         </div>
       </div>
       <div class="flex flex-wrap items-center justify-end gap-2">
@@ -2165,8 +2278,13 @@ function staticHeaderControl(role, iconName, mediaUrl, fallback, desktopOnly = f
 function staticHeaderIcon(iconName, mediaUrl, fallback) {
   const safeMediaUrl = safeStaticMediaUrl(mediaUrl);
   if (safeMediaUrl) {
-    return `<img src="${escapeAttribute(safeMediaUrl)}" alt="" width="18" height="18" decoding="async" fetchpriority="high" />`;
+    const fallbackIcon = staticHeaderSvg(iconName, fallback);
+    return `<span class="storefront-static-icon-media">${fallbackIcon}<img data-static-icon-media src="${escapeAttribute(safeMediaUrl)}" alt="" width="18" height="18" decoding="sync" fetchpriority="high" /></span>`;
   }
+  return staticHeaderSvg(iconName, fallback);
+}
+
+function staticHeaderSvg(iconName, fallback) {
   const icon = STATIC_HEADER_ICON_PATHS[iconName] || STATIC_HEADER_ICON_PATHS[fallback];
   if (fallback === "chevron") {
     return '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
@@ -2284,10 +2402,111 @@ function safeStaticMediaUrl(value) {
   if (typeof value !== "string" || !value.trim()) return "";
   try {
     const url = new URL(value);
+    if (url.protocol === "http:" && /(?:^|\.)superfunky\.pro$/i.test(url.hostname)) {
+      url.protocol = "https:";
+    }
     return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
   } catch {
     return "";
   }
+}
+
+function staticResponsiveImageUrl(value) {
+  const source = safeStaticMediaUrl(value);
+  if (!source || !effectiveSiteUrl) return source;
+  const storefrontHostname = new URL(effectiveSiteUrl).hostname;
+  if (!/(?:^|\.)superfunky\.pro$|\.netlify\.app$/i.test(storefrontHostname)) return source;
+  const mediaUrl = new URL(source);
+  if (
+    !/^(?:v[0-9]+|dev|blog|shop|sample)\.superfunky\.pro$/i.test(mediaUrl.hostname)
+    || !mediaUrl.pathname.startsWith("/wp-content/uploads/")
+    || !/\.(?:avif|jpe?g|png|webp)$/i.test(mediaUrl.pathname)
+  ) return mediaUrl.toString();
+  const parameters = new URLSearchParams({ url: mediaUrl.toString(), w: "1280", q: "75" });
+  return `/.netlify/images?${parameters.toString()}`;
+}
+
+function staticChromeConfigurationForRoute(route) {
+  const seed = staticHydrationNavigationByLanguage.get(route.lang.toLowerCase());
+  const navigation = seed?.navigation;
+  const configuration = navigation?.storefrontConfig;
+  if (!configuration) return staticChromeConfig;
+
+  const layout = configuration.layout || {};
+  const features = configuration.features || {};
+  const branding = configuration.branding || {};
+  const assistant = seed.assistant || {};
+  const baseCurrency = typeof configuration.baseCurrency === "string" && configuration.baseCurrency.trim()
+    ? configuration.baseCurrency.trim().toUpperCase()
+    : staticChromeConfig.headerControls.baseCurrency;
+  const selectedCurrency = Array.isArray(configuration.currencies)
+    ? configuration.currencies.find((currency) => currency?.code?.toUpperCase() === baseCurrency)
+    : null;
+  return {
+    ...staticChromeConfig,
+    storeName: typeof branding.storeName === "string" && branding.storeName.trim()
+      ? branding.storeName.trim()
+      : staticChromeConfig.storeName,
+    tagline: typeof branding.tagline === "string" && branding.tagline.trim()
+      ? branding.tagline.trim()
+      : staticChromeConfig.tagline,
+    logoUrl: safeStaticMediaUrl(branding.logoUrl),
+    iconUrl: safeStaticMediaUrl(branding.iconUrl),
+    promoHtml: typeof branding.promoHtml === "string"
+      ? sanitizeCmsHtml(branding.promoHtml)
+      : staticChromeConfig.promoHtml,
+    showAnnouncementBar: layout.showAnnouncementBar !== false && features.promo !== false,
+    announcementBarScrollEffect: layout.announcementBarScrollEffect !== false,
+    themeMaxWidthPx: Number.isInteger(layout.themeMaxWidthPx)
+      ? layout.themeMaxWidthPx
+      : staticChromeConfig.themeMaxWidthPx,
+    themeRadiusPx: Number.isInteger(layout.themeRadiusPx)
+      ? layout.themeRadiusPx
+      : staticChromeConfig.themeRadiusPx,
+    headerSticky: layout.headerSticky !== false,
+    headerLogoVariant: ["text", "image", "text-image"].includes(layout.headerLogoVariant)
+      ? layout.headerLogoVariant
+      : staticChromeConfig.headerLogoVariant,
+    headerArrangement: ["classic", "single-row", "centered", "island"].includes(layout.headerArrangement)
+      ? layout.headerArrangement
+      : staticChromeConfig.headerArrangement,
+    showHeaderLogo: layout.showHeaderLogo !== false,
+    hideNavigation: configuration.checkout?.distractionFree === true
+      && staticNavHrefMatchesRoute(resolveStaticSpecialPagePath("checkout", route.lang), route.path),
+    navigationItems: navigation.header?.length ? navigation.header : staticChromeConfig.navigationItems,
+    headerControls: {
+      ...staticChromeConfig.headerControls,
+      baseCurrency,
+      currencySymbol: typeof selectedCurrency?.symbol === "string" && selectedCurrency.symbol.trim()
+        ? selectedCurrency.symbol.trim()
+        : baseCurrency,
+      features: {
+        ...staticChromeConfig.headerControls.features,
+        ...features,
+      },
+      layout: {
+        ...staticChromeConfig.headerControls.layout,
+        ...layout,
+      },
+      assistant: {
+        ...staticChromeConfig.headerControls.assistant,
+        enabled: assistant.enabled === true,
+        showHeader: assistant.showHeader === true || assistant.placement === "header",
+        showFixed: assistant.showFixed === true || assistant.placement === "fixed",
+        launcherLabel: typeof assistant.launcherLabel === "string" && assistant.launcherLabel.trim()
+          ? assistant.launcherLabel.trim()
+          : staticChromeConfig.headerControls.assistant.launcherLabel,
+      },
+      icons: {
+        ...staticChromeConfig.headerControls.icons,
+        ...configuration.headerIcons,
+      },
+      media: {
+        ...staticChromeConfig.headerControls.media,
+        ...configuration.headerIconMedia,
+      },
+    },
+  };
 }
 
 function boundedStaticCss(value, label, maxLength) {
@@ -2304,6 +2523,7 @@ function serializeStaticLayoutSeed(config) {
     brandPalette: config.brandPalette,
     brandGradientStyle: config.brandGradientStyle,
     themeMaxWidthPx: config.themeMaxWidthPx,
+    themeRadiusPx: config.themeRadiusPx,
   }).replaceAll("<", "\\u003c");
 }
 
@@ -2562,8 +2782,11 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
     const navigationResult = await loadStaticHydrationSeed(navigationTask, languageCode)
       .then((value) => ({ status: "fulfilled", value }))
       .catch((reason) => ({ status: "rejected", reason }));
-    if (navigationResult.status === "fulfilled" && languageCode === defaultLanguage) {
-      synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
+    if (navigationResult.status === "fulfilled") {
+      staticHydrationNavigationByLanguage.set(languageCode, navigationResult.value);
+      if (languageCode === defaultLanguage) {
+        synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
+      }
     }
     const contentResults = await Promise.allSettled(
       contentTasks.map((task) => loadStaticHydrationSeed(task, languageCode)),
@@ -2607,9 +2830,20 @@ function synchronizeStaticChromeWithHydrationSeed({ assistant, navigation }) {
     themeMaxWidthPx: Number.isInteger(layout?.themeMaxWidthPx)
       ? layout.themeMaxWidthPx
       : staticChromeConfig.themeMaxWidthPx,
+    themeRadiusPx: Number.isInteger(layout?.themeRadiusPx)
+      ? layout.themeRadiusPx
+      : staticChromeConfig.themeRadiusPx,
+    headerSticky: layout?.headerSticky !== false,
+    headerLogoVariant: ["text", "image", "text-image"].includes(layout?.headerLogoVariant)
+      ? layout.headerLogoVariant
+      : staticChromeConfig.headerLogoVariant,
     headerArrangement: ["classic", "single-row", "centered", "island"].includes(layout?.headerArrangement)
       ? layout.headerArrangement
       : staticChromeConfig.headerArrangement,
+    showHeaderLogo: layout?.showHeaderLogo !== false,
+    navigationItems: navigation?.header?.length
+      ? navigation.header
+      : staticChromeConfig.navigationItems,
     headerControls: {
       ...staticChromeConfig.headerControls,
       baseCurrency,
@@ -2713,12 +2947,13 @@ function rewriteStaticStylesheetUrls(css, stylesheetUrl) {
   });
 }
 
-function renderStaticThemeVariables(colors, brandPalette, brandGradientStyle, themeMaxWidthPx) {
+function renderStaticThemeVariables(colors, brandPalette, brandGradientStyle, themeMaxWidthPx, themeRadiusPx) {
   const findColor = (...slugs) => colors.find(({ slug }) => slugs.includes(slug))?.color;
   const background = parseStaticHexColor(findColor("background"));
   const foreground = parseStaticHexColor(findColor("foreground"));
   const declarations = brandPaletteCssVariables(brandPalette, brandGradientStyle);
   declarations.push(`--storefront-static-max-width:${themeMaxWidthPx}px`);
+  declarations.push(`--theme-radius:${themeRadiusPx}px`);
   if (background) declarations.push(`--theme-background:${background.join(" ")}`);
   if (foreground) declarations.push(`--theme-foreground:${foreground.join(" ")}`);
   return declarations.length ? `:root{${declarations.join(";")}}` : "";

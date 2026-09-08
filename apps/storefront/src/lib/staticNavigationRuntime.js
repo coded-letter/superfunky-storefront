@@ -6,6 +6,16 @@
   container.dataset.staticNavigationReady = "true";
   const cleanups = [];
 
+  container.querySelectorAll("[data-static-icon-media]").forEach((image) => {
+    if (!(image instanceof HTMLImageElement)) return;
+    const wrapper = image.closest(".storefront-static-icon-media");
+    if (!(wrapper instanceof HTMLElement)) return;
+    const markFailed = () => wrapper.classList.add("is-failed");
+    image.addEventListener("error", markFailed);
+    if (image.complete && image.naturalWidth === 0) markFailed();
+    cleanups.push(() => image.removeEventListener("error", markFailed));
+  });
+
   const header = container.querySelector(".storefront-static-header");
   const spacer = container.querySelector("[data-static-header-spacer]");
   if (header instanceof HTMLElement && spacer instanceof HTMLElement) {
@@ -102,7 +112,7 @@
       if (mobileBackdrop.hidden) return;
       mobileBackdrop.classList.remove("is-open");
       mobileToggle.setAttribute("aria-expanded", "false");
-      closeTimer = window.setTimeout(() => finishClose(restore), 220);
+      closeTimer = window.setTimeout(() => finishClose(restore), 300);
     };
     const handleToggle = (event) => {
       event.preventDefault();

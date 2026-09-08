@@ -534,13 +534,14 @@ export function HeaderMockup({
           {showLogo ? (
             <Link
               to={homePath}
+              aria-label={logoVariant === "image" && !logoUrl ? projectName : undefined}
               className={`group inline-flex items-center gap-2.5 text-inherit no-underline ${
                 arrangement === "centered" ? "col-start-2 row-start-1 justify-center text-center" : ""
               }`}
             >
               {logoVariant !== "text" ? (
                 logoUrl ? (
-                  <ResponsiveImage src={logoUrl} alt={projectName} priority sizes="12rem" className="h-10 w-auto max-w-48 object-contain" />
+                  <ResponsiveImage src={logoUrl} alt={logoVariant === "image" ? projectName : ""} priority sizes="12rem" className="h-10 w-auto max-w-48 object-contain" />
                 ) : (
                   <span className="inline-grid h-10 w-10 place-items-center overflow-hidden rounded-2xl bg-brand-gradient text-white shadow-glow transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
                     {iconUrl ? <ResponsiveImage src={iconUrl} alt="" priority sizes="2.5rem" className="h-full w-full object-cover" /> : <Sparkles className="h-5 w-5" aria-hidden="true" />}
@@ -1479,10 +1480,10 @@ const HEADER_ACTION_ICONS: Record<string, LucideIcon> = {
 
 function HeaderActionIcon({ name, mediaUrl, fallback: Fallback }: { name?: string; mediaUrl?: string | null; fallback: LucideIcon }) {
   const [mediaFailed, setMediaFailed] = useState(false);
-  const [mediaReady, setMediaReady] = useState(() => Boolean(mediaUrl && loadedHeaderIconUrls.has(mediaUrl)));
+  const [mediaReady, setMediaReady] = useState(() => Boolean(mediaUrl));
   useEffect(() => {
     setMediaFailed(false);
-    setMediaReady(Boolean(mediaUrl && loadedHeaderIconUrls.has(mediaUrl)));
+    setMediaReady(Boolean(mediaUrl));
   }, [mediaUrl]);
   const Icon = resolveHeaderActionIcon(name, Fallback);
   if (mediaUrl) {

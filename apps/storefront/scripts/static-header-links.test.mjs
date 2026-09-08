@@ -35,7 +35,7 @@ test("the static route registry is populated before per-route rendering starts",
 
 test("the static desktop header resolves account/reading-list/wishlist links from the authoritative route registry, not a guessed slug", () => {
   const controls = extractFunctionSource(prerenderSource, "renderStaticHeaderControls");
-  assert.match(controls, /resolveStaticSpecialPageLinks\(route\)/);
+  assert.match(controls, /resolveStaticSpecialPageLinks\(route, chromeConfig\)/);
   assert.doesNotMatch(controls, /normalizeLanguageRoutePath\("\/account"/);
   assert.doesNotMatch(controls, /normalizeLanguageRoutePath\("\/reading-list"/);
   assert.doesNotMatch(controls, /normalizeLanguageRoutePath\("\/wishlist"/);
@@ -63,13 +63,13 @@ test("resolveStaticSpecialPageLinks excludes personalized state and mirrors the 
 test("the static mobile drawer renders the same authoritative special-page links as the desktop header", () => {
   assert.match(
     prerenderSource,
-    /function renderStaticMobileNavigation\(items, navigationLabel, routePath, specialPageLinks = \[\]\) \{/,
+    /function renderStaticMobileNavigation\([\s\S]*?specialPageLinks = \[\],[\s\S]*?\) \{/,
   );
   const chrome = extractFunctionSource(prerenderSource, "renderStaticChrome");
   assert.match(
     chrome,
-    /renderStaticMobileNavigation\(navigationItems, navigationLabel, route\.path, resolveStaticSpecialPageLinks\(route\)\)/,
+    /renderStaticMobileNavigation\([\s\S]*?mobileNavigationItems,[\s\S]*?resolveStaticSpecialPageLinks\(route, chromeConfig\)/,
   );
   const mobileNavigation = extractFunctionSource(prerenderSource, "renderStaticMobileNavigation");
-  assert.match(mobileNavigation, /renderStaticMobileActionLinks\(specialPageLinks\)/);
+  assert.match(mobileNavigation, /renderStaticMobileActionLinks\(specialPageLinks, chromeConfig, languageCode\)/);
 });
