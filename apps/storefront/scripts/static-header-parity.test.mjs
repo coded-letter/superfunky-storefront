@@ -99,6 +99,7 @@ test("custom and preset icons keep the same stable 18px slot through handoff", (
   assert.match(indexSource, /\.storefront-static-icon-media \{[\s\S]*height: 18px;[\s\S]*width: 18px;/);
   assert.equal(assistantSource.match(/h-\[18px\] w-\[18px\]/g)?.length, 3);
   assert.doesNotMatch(assistantSource, /h-\[1\.15rem\] w-\[1\.15rem\]/);
+  assert.match(assistantSource, /headerIcons\?\.assistant \|\| "sparkles"/);
   assert.match(headerSource, /useState\(\(\) => Boolean\(mediaUrl\)\)/);
   assert.match(chromeSource, /"account" \| "readingList"/);
 });
