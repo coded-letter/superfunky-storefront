@@ -627,7 +627,7 @@ function AssistantLauncherVisual({
     );
   }
   const Icon = resolveLauncherIcon(appearance.iconPreset, iconName);
-  const iconClassName = size === "header-action" ? "h-[1.15rem] w-[1.15rem]" : "h-5 w-5";
+  const iconClassName = size === "header-action" ? "h-[18px] w-[18px]" : "h-5 w-5";
   return <Icon className={iconClassName} aria-hidden="true" />;
 }
 
@@ -649,7 +649,7 @@ function AssistantIconImage({
     setReady(loadedAssistantIconUrls.has(src));
   }, [src]);
   const Fallback = resolveLauncherIcon(fallbackPreset, iconName);
-  const fallbackClassName = size === "header-action" ? "h-[1.15rem] w-[1.15rem]" : "h-5 w-5";
+  const fallbackClassName = size === "header-action" ? "h-[18px] w-[18px]" : "h-5 w-5";
   const pixels = size === "header-action" ? 18 : size === "chat-header" ? 36 : 28;
   return (
     <span className="relative inline-grid h-full w-full place-items-center">
@@ -666,7 +666,7 @@ function AssistantIconImage({
           fetchPriority={size === "header-action" ? "high" : "auto"}
           height={pixels}
           width={pixels}
-          className={`absolute ${size === "header-action" ? "h-[1.15rem] w-[1.15rem]" : size === "chat-header" ? "h-9 w-9" : "h-7 w-7"} rounded-full object-cover transition-opacity duration-150 ${ready ? "opacity-100" : "opacity-0"}`}
+          className={`absolute ${size === "header-action" ? "h-[18px] w-[18px]" : size === "chat-header" ? "h-9 w-9" : "h-7 w-7"} rounded-full object-cover transition-opacity duration-150 ${ready ? "opacity-100" : "opacity-0"}`}
           onLoad={() => {
             loadedAssistantIconUrls.add(src);
             setReady(true);
