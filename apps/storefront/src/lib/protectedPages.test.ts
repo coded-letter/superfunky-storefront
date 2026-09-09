@@ -29,6 +29,17 @@ test("CMS behaviors follow the global code-controls preference after protected-p
   assert.match(content, /protectedPageRevision/);
 });
 
+test("known special pages do not probe the protected-page endpoint", () => {
+  const contentNodeRoute = source("../pages/ContentNodeRoute.tsx");
+  const app = source("../App.tsx");
+
+  assert.match(contentNodeRoute, /const matchedRoute = useRouteRegistry[\s\S]*matchStorefrontRoute/);
+  assert.match(contentNodeRoute, /const shouldLookupGenericContent = !useRouteRegistry[\s\S]*!isLoadingRouteRegistry && !matchedRoute/);
+  assert.match(contentNodeRoute, /getPageByUri\(uri\),\s*shouldLookupGenericContent/);
+  assert.match(contentNodeRoute, /getContentNodeInfo\(uri,[\s\S]*\),\s*shouldLookupGenericContent/);
+  assert.match(app, /if \(!isLoading && resolvedPath !== currentPath\) \{\s*return null/);
+});
+
 test("WordPress verifies native post passwords and never publicly caches protected responses", () => {
   const backend = source("../../../../../backend/wordpress/themes/free/funkycommerce-headless/inc/protected-content.php");
 

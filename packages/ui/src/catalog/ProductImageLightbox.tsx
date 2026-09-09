@@ -35,6 +35,7 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
   const touchRef = useRef({ x: 0, y: 0, time: 0, pinchStart: 0, zoomStart: 1 });
 
   const current = images[currentIndex];
+  const isVectorImage = /\.svg(?:[?#]|$)/i.test(current?.src || "");
 
   const resetTransform = () => {
     setZoom(1);
@@ -208,7 +209,9 @@ export function ProductImageLightbox({ images, startIndex, onClose, onIndexChang
                 priority
                 sizes="(min-width: 768px) 48rem, 100vw"
                 draggable={false}
-                className="block h-auto max-h-[75vh] w-auto max-w-full object-contain"
+                className={isVectorImage
+                  ? "block h-[75vh] w-full max-w-full object-contain"
+                  : "block h-auto max-h-[75vh] w-auto max-w-full object-contain"}
               />
             ) : (
               <span className="px-4 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">{current.label}</span>

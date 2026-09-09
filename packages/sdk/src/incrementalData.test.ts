@@ -3,10 +3,44 @@ import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import {
   preloadIncrementalData,
+  prefetchIncrementalData,
   seedIncrementalData,
   seedStorefrontHydration,
   useIncrementalData,
 } from "./incrementalData.ts";
+
+test("route-specific static hydration accepts every public content cache family", async () => {
+  const suffix = Date.now();
+  const keys = [
+    `product:/product/example-${suffix}/`,
+    `post:/example-${suffix}/`,
+    `product-category:v2:URI:/pro-category/example-${suffix}/:en`,
+    `product-tag:v2:URI:/pro-tag/example-${suffix}/:en`,
+    `product-brand:v2:URI:/brand/example-${suffix}/:en`,
+    `post-category-archive:URI:/category/example-${suffix}/:en`,
+    `post-tag-archive:URI:/tag/example-${suffix}/:en`,
+    `author:v2:author-${suffix}:en:EN:en`,
+  ];
+  const value = { seeded: true };
+
+  assert.ok(seedStorefrontHydration({
+    schemaVersion: 1,
+    shellVersion: "static-route-test",
+    contentRevision: 0,
+    generatedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    entries: keys.map((cacheKey) => ({ cacheKey, value, dependencies: ["route:/"] })),
+  }));
+
+  for (const key of keys) {
+    assert.deepEqual(
+      await prefetchIncrementalData(key, async () => {
+        throw new Error(`Unexpected fetch for ${key}`);
+      }),
+      value,
+    );
+  }
+});
 
 test("private responses are never persisted in the incremental cache", async () => {
   const dom = new JSDOM("", { url: "https://storefront.test/" });
@@ -82,7 +116,7 @@ test("a revisionless static hydration seed remains trusted until its bounded exp
 
   const React = await import("react");
   const { createRoot } = await import("react-dom/client");
-  const key = `revisionless-hydration-test:${Date.now()}`;
+  const key = `page:/revisionless-hydration-test-${Date.now()}/`;
   let fetchCount = 0;
 
   assert.ok(seedStorefrontHydration({

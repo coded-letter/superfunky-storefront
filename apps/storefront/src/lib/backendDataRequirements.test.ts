@@ -104,6 +104,8 @@ test("generated homepages use lean data only for compatible collection shortcode
 test("route and shortcode requirements preserve posts on shops without enabling Woo on blogs", () => {
   assert.equal(resolveBackendDataRequirements("shop", "/blog/example", "").blog, true);
   assert.equal(resolveBackendDataRequirements("blog", "/shop", "").commerce, false);
+  assert.equal(resolveBackendDataRequirements("full", "/pro-category/software", "").commerce, true);
+  assert.equal(resolveBackendDataRequirements("full", "/pro-tag/tactics-and-strategy", "").commerce, true);
   assert.equal(
     resolveBackendDataRequirements(
       "shop",

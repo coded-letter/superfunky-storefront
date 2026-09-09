@@ -1,12 +1,11 @@
 import "./styles.css";
 import { activatePrerenderImages } from "./lib/prerenderImages";
 import { captureInitialCmsPageMarkup } from "./lib/prerenderSnapshot";
-import { installStaticDocumentWarmup, rememberStorefrontMain } from "./lib/storefrontDocumentWarmup";
+import { installStaticDocumentWarmup } from "./lib/storefrontDocumentWarmup";
 import { startRecentOrdersNotifier } from "./lib/recentOrders";
 
 let hasMounted = false;
 const initialRoot = document.getElementById("root")!;
-rememberStorefrontMain(location.pathname, initialRoot.querySelector("main"));
 const bootstrapOverlay = document.getElementById("storefront-bootstrap");
 const bootstrapStartedAt = performance.now();
 const hasPrerenderedContent = Boolean(initialRoot.querySelector("#prerendered-storefront"));
@@ -57,6 +56,8 @@ const isManagedStorefront = (() => {
       || location.hostname.endsWith(".superfunky.pro");
   }
 })();
+const hydrateFlagshipImmediately = isFlagshipStorefront
+  && import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
 let root = initialRoot;
 let bootstrapFinished = false;
 let overlayFinished = false;
@@ -921,7 +922,7 @@ if (prerenderRoot) {
     };
   }
 }
-if (hasPrerenderedChrome) {
+if (hasPrerenderedChrome && !hydrateFlagshipImmediately) {
   dismissBootstrapOverlay();
 }
 window.addEventListener("funky:storefront-visible-ready", () => {
@@ -941,11 +942,9 @@ const mountApplication = async () => {
   hasMounted = true;
   if (!prerenderRoot) failOpenTimer = window.setTimeout(finishBootstrap, 2_800);
   try {
-    const { React, ReactDOM, App } = await prepareApplication();
+    const { ReactDOM, App } = await prepareApplication();
     ReactDOM.createRoot(root).render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>,
+      <App />,
     );
     performance.mark("storefront:application-render-requested");
     void import("./lib/push").then(({ registerServiceWorker }) => registerServiceWorker());
@@ -975,12 +974,15 @@ let applicationPreparation: ReturnType<typeof loadApplication> | null = null;
 function loadApplication() {
   const hydrationPayloads = loadStaticHydrationPayloads();
   return Promise.all([
-    import("react"),
     import("react-dom/client"),
     import("./App"),
     import("@funky/sdk/react"),
     hydrationPayloads,
-  ]).then(([{ default: React }, ReactDOM, { App }, incrementalData, payloads]) => {
+  ]).then(([ReactDOM, { App }, incrementalData, payloads]) => {
+    window.__funkyStorefrontHydrationSeed = incrementalData.seedStorefrontHydration;
+    for (const payload of window.__funkyStorefrontPendingHydration?.splice(0) || []) {
+      incrementalData.seedStorefrontHydration(payload);
+    }
     for (const payload of payloads) incrementalData.seedStorefrontHydration(payload);
     const artifactPayload = document.getElementById("storefront-route-payload")?.textContent;
     if (artifactPayload) {
@@ -996,7 +998,7 @@ function loadApplication() {
     } catch {
       // Storage may be unavailable in private or restricted browsing contexts.
     }
-    return { React, ReactDOM, App };
+    return { ReactDOM, App };
   });
 }
 const prepareApplication = () => {
@@ -1045,6 +1047,9 @@ function requestReactPreparation(event: Event) {
 
 if (!prerenderRoot) {
   void mountApplication();
+} else if (hydrateFlagshipImmediately) {
+  document.documentElement.classList.add("storefront-instant-handoff");
+  requestReactActivation();
 } else if (prerenderActivationMode === "interaction") {
   // The complete static page remains authoritative until a visitor requests an
   // interactive control. Pointer/focus preparation above keeps activation fast.

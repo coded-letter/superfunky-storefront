@@ -5,6 +5,7 @@ import { normalizeProductPageLayout } from "../../../../packages/ui/src/state/pr
 
 const productPage = readFileSync(new URL("../pages/ProductMockupPage.tsx", import.meta.url), "utf8");
 const productGallery = readFileSync(new URL("../../../../packages/ui/src/catalog/ProductGallery.tsx", import.meta.url), "utf8");
+const productLightbox = readFileSync(new URL("../../../../packages/ui/src/catalog/ProductImageLightbox.tsx", import.meta.url), "utf8");
 const quickView = readFileSync(new URL("../../../../packages/ui/src/catalog/ProductQuickViewModal.tsx", import.meta.url), "utf8");
 const preferenceSync = readFileSync(new URL("layoutPreferencesSync.ts", import.meta.url), "utf8");
 
@@ -27,6 +28,11 @@ test("product media stays top-aligned with thumbnails immediately after the main
   assert.match(productPage, /layout === "classic"[\s\S]*?lg:items-start/);
   assert.match(productGallery, /grid content-start gap-4 self-start/);
   assert.match(productGallery, /<\/button>[\s\S]*?images\.length > 1[\s\S]*?scrollbar-thin flex gap-3/);
+});
+
+test("SVG lightbox images receive an explicit viewport-sized rendering box", () => {
+  assert.match(productLightbox, /const isVectorImage = \/\\\.svg/);
+  assert.match(productLightbox, /h-\[75vh\] w-full max-w-full object-contain/);
 });
 
 test("studio layout places only the configured secondary description below its actions", () => {

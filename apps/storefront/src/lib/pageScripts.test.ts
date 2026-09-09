@@ -130,13 +130,11 @@ test("mountCmsScripts contains inline execution errors and reports them", () => 
   }
 });
 
-test("service worker caches a clone before returning the network response", () => {
-  assert.match(serviceWorkerSource, /await cache\.put\(request, response\.clone\(\)\)/);
-  assert.equal(serviceWorkerSource.match(/event\.respondWith\(/g)?.length, 2);
-  assert.match(serviceWorkerSource, /const safeNetwork = network\.catch\(\(\) => null\)/);
-  assert.match(serviceWorkerSource, /event\.waitUntil\(safeNetwork\.then/);
-  assert.match(serviceWorkerSource, /cached \?\? await safeNetwork \?\? Response\.error\(\)/);
-  assert.doesNotMatch(serviceWorkerSource, /cache\.put\(request, response\.clone\(\)\)\.catch/);
+test("service worker leaves navigation and assets to the static host", () => {
+  assert.doesNotMatch(serviceWorkerSource, /addEventListener\("fetch"/);
+  assert.doesNotMatch(serviceWorkerSource, /event\.respondWith\(/);
+  assert.match(serviceWorkerSource, /addEventListener\("push"/);
+  assert.match(serviceWorkerSource, /addEventListener\("notificationclick"/);
 });
 
 test("mountEnqueuedScripts accepts reviewed bundled behaviors and warns once for unknown scripts", () => {

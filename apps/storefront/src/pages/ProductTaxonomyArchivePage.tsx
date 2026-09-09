@@ -3,7 +3,6 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { normalizeLanguagePath, PaginableProductGrid, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, seoBreadcrumbsToItems } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
-import { ArtifactRouteLoadingState } from "../components/ArtifactRouteLoadingState";
 import { HeroMock } from "../components/HeroMock";
 import { useIncrementalData } from "@funky/sdk/react";
 import { useStorefrontPath } from "../lib/storefrontPaths";
@@ -46,7 +45,7 @@ export function ProductTaxonomyArchivePage({ taxonomy }: { taxonomy: CommerceTax
     archive?.uri || lastResolvedArchive.current?.uri,
   );
 
-  if (isLoading) return <ArtifactRouteLoadingState label={t("loading.product_archive")} />;
+  if (isLoading) return <ContentLoadingState label={t("loading.product_archive")} />;
   if (error) return <ArchiveStatus title={t("error.archive_unavailable")} message={t("archive.collection_unavailable")} />;
   if (!archive) {
     return (

@@ -1,9 +1,21 @@
-import { seedStorefrontHydration } from "@funky/sdk/react";
-
 const warmedDocuments = new Map<string, Promise<void>>();
 const warmedAssets = new Map<string, Promise<void>>();
-const warmedMainMarkup = new Map<string, { className: string; html: string }>();
 export const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+
+declare global {
+  interface Window {
+    __funkyStorefrontHydrationSeed?: (payload: unknown) => unknown;
+    __funkyStorefrontPendingHydration?: unknown[];
+  }
+}
+
+function queueStorefrontHydration(payload: unknown): void {
+  if (window.__funkyStorefrontHydrationSeed) {
+    window.__funkyStorefrontHydrationSeed(payload);
+    return;
+  }
+  (window.__funkyStorefrontPendingHydration ??= []).push(payload);
+}
 
 function storefrontDocumentUrl(to: string): URL | null {
   try {
@@ -33,14 +45,13 @@ export function warmStorefrontDocument(to: string): Promise<void> {
     if (!response.ok) return;
     const html = await response.text();
     const parsed = new DOMParser().parseFromString(html, "text/html");
-    rememberStorefrontMain(url.pathname, parsed.querySelector<HTMLElement>("main"));
     if (artifactRouteHydrationEnabled) {
       const routePayload = parsed.querySelector<HTMLScriptElement>(
         "#storefront-route-payload",
       )?.textContent;
       if (routePayload) {
         try {
-          seedStorefrontHydration(JSON.parse(routePayload));
+          queueStorefrontHydration(JSON.parse(routePayload));
         } catch (error) {
           console.warn("Artifact hydration failed.", error);
         }
@@ -53,7 +64,7 @@ export function warmStorefrontDocument(to: string): Promise<void> {
       try {
         const hydrationAssets = JSON.parse(hydrationManifest) as unknown;
         if (Array.isArray(hydrationAssets)) {
-          await Promise.all(hydrationAssets.slice(0, 12).map(async (asset) => {
+          const loadHydrationAsset = async (asset: unknown) => {
             if (typeof asset !== "string" || !asset.startsWith("/assets/")) return;
             const assetUrl = new URL(asset, url);
             if (assetUrl.origin !== window.location.origin) return;
@@ -63,11 +74,18 @@ export function warmStorefrontDocument(to: string): Promise<void> {
                 signal: AbortSignal.timeout(2_000),
               });
               if (!hydrationResponse.ok) return;
-              seedStorefrontHydration(await hydrationResponse.json());
+              queueStorefrontHydration(await hydrationResponse.json());
             } catch (error) {
               console.warn(`Target-route hydration asset could not be loaded: ${assetUrl.pathname}`, error);
             }
-          }));
+          };
+          const boundedAssets = hydrationAssets.slice(0, 12);
+          const routeAssets = boundedAssets.filter(
+            (asset) => typeof asset === "string" && asset.includes("/storefront-hydration-route-"),
+          );
+          const supportingAssets = boundedAssets.filter((asset) => !routeAssets.includes(asset));
+          await Promise.all(routeAssets.map(loadHydrationAsset));
+          void Promise.all(supportingAssets.map(loadHydrationAsset));
         }
       } catch (error) {
         console.warn("Target-route hydration manifest could not be parsed.", error);
@@ -100,22 +118,6 @@ export function warmStorefrontDocument(to: string): Promise<void> {
 
   warmedDocuments.set(key, warmup);
   return warmup;
-}
-
-export function rememberStorefrontMain(pathname: string, main: HTMLElement | null): void {
-  if (!artifactRouteHydrationEnabled || !main) return;
-  warmedMainMarkup.set(normalizePath(pathname), {
-    className: main.className,
-    html: main.innerHTML,
-  });
-}
-
-export function warmedStorefrontMain(pathname: string) {
-  return artifactRouteHydrationEnabled ? warmedMainMarkup.get(normalizePath(pathname)) || null : null;
-}
-
-function normalizePath(pathname: string): string {
-  return pathname === "/" ? pathname : pathname.replace(/\/+$/, "");
 }
 
 function internalDocumentLink(target: EventTarget | null): HTMLAnchorElement | null {

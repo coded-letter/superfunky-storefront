@@ -36,6 +36,10 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /hasPreparedApplicationVisit = localStorage\.getItem\(RETURNING_PREPARATION_KEY\) === "1"/);
   assert.match(mainSource, /if \(hasPreparedApplicationVisit\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
   assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS = 2_500/);
+  assert.match(mainSource, /const hydrateFlagshipImmediately = isFlagshipStorefront/);
+  assert.match(mainSource, /else if \(hydrateFlagshipImmediately\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
+  assert.match(mainSource, /window\.__funkyStorefrontHydrationSeed = incrementalData\.seedStorefrontHydration/);
+  assert.doesNotMatch(documentWarmupSource, /from "@funky\/sdk\/react"/);
   assert.match(mainSource, /if \(window\.matchMedia\("\(max-width: 767px\)"\)\.matches\) return/);
   assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS - \(performance\.now\(\) - bootstrapStartedAt\)/);
   assert.match(mainSource, /\[data-static-mobile-backdrop\]\.is-open, \.storefront-static-nav-item\.is-open/);
@@ -108,6 +112,20 @@ test("client landing pages retain idle hydration except for posterless video pai
   assert.match(mainSource, /replayClick: !control\.hasAttribute\("data-storefront-activate-only"\)/);
   assert.match(mainSource, /waitsForReducedMotionPlay[\s\S]*requestAnimationFrame\(\(\) => replayControlActivation\(attempt \+ 1\)\)/);
   assert.match(mainSource, /pending\.replayClick \|\| targetAriaLabel === pending\.ariaLabel/);
+});
+
+test("flagship static-first builds emit route-specific hydration for public content types", () => {
+  assert.match(prerenderSource, /buildStaticContentHydrationAssets/);
+  assert.match(prerenderSource, /getProductByUriOrSlug/);
+  assert.match(prerenderSource, /getProductArchive/);
+  assert.match(prerenderSource, /getPostByUri/);
+  assert.match(prerenderSource, /getPostTaxonomyArchive/);
+  assert.match(prerenderSource, /getAuthorArchive/);
+  assert.match(prerenderSource, /globalThis\.DOMParser = new JSDOM\(""\)\.window\.DOMParser/);
+  assert.match(prerenderSource, /staticContentHydrationAssets\.get\(route\.path\)/);
+  assert.match(prerenderSource, /artifactConfig\.delivery !== "static-first"/);
+  assert.match(prerenderSource, /artifactConfig\.delivery === "static-first"[\s\S]*24 \* 60 \* 60 \* 1_000/);
+  assert.match(prerenderSource, /update\(`\$\{process\.env\.COMMIT_REF \|\| ""\}:\$\{process\.env\.DEPLOY_ID \|\| ""\}:\$\{generatedAt\}`\)/);
 });
 
 test("route loading covers the viewport while application styles settle", () => {
@@ -280,9 +298,8 @@ test("intent prefetch warms documents while navigations prefer current deploys",
   assert.match(documentWarmupSource, /addEventListener\("pointerdown", warmFromIntent/);
   assert.match(documentWarmupSource, /addEventListener\("touchstart", warmFromIntent/);
   assert.match(serviceWorkerSource, /navigationPreload\?\.enable\(\)/);
-  assert.match(serviceWorkerSource, /Promise\.resolve\(event\.preloadResponse\)/);
-  assert.match(serviceWorkerSource, /caches\.match\(request, \{ ignoreVary: true \}\)/);
-  assert.match(serviceWorkerSource, /network\.catch\(async \(\) =>/);
+  assert.doesNotMatch(serviceWorkerSource, /addEventListener\("fetch"/);
+  assert.doesNotMatch(serviceWorkerSource, /event\.respondWith\(/);
   assert.doesNotMatch(serviceWorkerSource, /if \(!cached\) return network;/);
   assert.match(serviceWorkerSource, /__FUNKYCOMMERCE_BUILD_VERSION__/);
   assert.match(prerenderSource, /process\.env\.NETLIFY === "true"/);
@@ -300,6 +317,10 @@ test("generated static HTML omits the loader and keeps styles render-blocking", 
   assert.match(prerenderSource, /<link rel="preload" as="style"/);
   assert.match(prerenderSource, /const heroSrcSet = decodeAttributeEntities/);
   assert.doesNotMatch(prerenderSource, /staticStyleAsset\?\.inlineCss/);
+});
+
+test("legacy login paths redirect before the application router", () => {
+  assert.match(prerenderSource, /"\/login  \/auth  301"/);
 });
 
 test("flagship theme state and React-parity chrome apply before first paint", () => {

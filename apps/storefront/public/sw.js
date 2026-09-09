@@ -55,34 +55,6 @@ async function cacheSuccessfulResponse(request, response) {
   return response;
 }
 
-// Navigations prefer the CDN response so a newly deployed hydration policy cannot be
-// hidden by an older cached document. Navigation preload starts that request while the
-// worker wakes; the last complete SSG document remains an offline fallback. Hashed assets
-// below stay cache-first, keeping repeat-visit application startup effectively immediate.
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
-
-  if (request.mode === "navigate") {
-    const network = Promise.resolve(event.preloadResponse)
-      .then((preloaded) => preloaded || fetch(request))
-      .then((response) => cacheSuccessfulResponse(request, response));
-    event.respondWith(
-      network.catch(async () =>
-        (await caches.match(request, { ignoreVary: true })) ?? Response.error()
-      )
-    );
-    return;
-  }
-
-  const network = fetch(request).then((response) => cacheSuccessfulResponse(request, response));
-  const safeNetwork = network.catch(() => null);
-  event.waitUntil(safeNetwork.then(() => undefined));
-  event.respondWith(
-    caches.match(request).then(async (cached) => cached ?? await safeNetwork ?? Response.error())
-  );
-});
-
 // --- Push notifications -----------------------------------------------------------
 // The WP backend (e.g. via a Web Push library alongside its VAPID keypair) sends the
 // actual push payload; this handler only renders it. Payload shape is up to the

@@ -943,6 +943,10 @@ export function archiveQuery(taxonomy: CommerceTaxonomy): string {
         ${taxonomy === "category" ? `children(first: 50, where: { hideEmpty: true }) {
           nodes { ${LOCALIZED_TERM_FIELDS} ${image} }
         }` : ""}
+        products(first: $first, after: $after) {
+          nodes { ...StorefrontProductListCard }
+          pageInfo { hasNextPage endCursor }
+        }
         seo { ${TAXONOMY_SEO_FIELDS} }
       }
       localizedProducts: products(first: $first, after: $after, where: { ${productFilter}: $taxonomySlug, language: $language }) {
@@ -1398,7 +1402,10 @@ export async function getProductArchive(
       firstPageData = null;
       // The archive connection is already scoped to the resolved taxonomy term and
       // avoids walking unrelated products to fill a language-filtered page.
-      const archiveProducts = pageData.archive?.products || pageData.localizedProducts;
+      const localizedProducts = pageData.localizedProducts;
+      const archiveProducts = localizedProducts?.nodes.length
+        ? localizedProducts
+        : pageData.archive?.products || localizedProducts;
       return {
         nodes: archiveProducts?.nodes || [],
         pageInfo: archiveProducts?.pageInfo || { hasNextPage: false },
