@@ -5,6 +5,8 @@ import { BACKEND_ORIGIN } from "@funky/sdk";
 import { mountHashAnchorScroll, mountSmartLinkNavigation } from "../lib/internalLinks";
 import { prefetchStorefrontRoute } from "../lib/routePrefetch";
 
+const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+
 export function SmartLinkNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +26,8 @@ export function SmartLinkNavigation() {
       languageBackendCode,
       configuredLanguageCodes,
     ),
+    eagerPrefetchSelector: artifactRouteHydrationEnabled ? "#sf-header a[href]" : undefined,
+    eagerPrefetchLimit: 6,
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {

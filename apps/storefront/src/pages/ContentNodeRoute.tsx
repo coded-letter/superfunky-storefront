@@ -27,6 +27,8 @@ import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { shouldPreferCoreContentQueries } from "../lib/profileGraphqlCompatibility";
 import { markRouteDataReady, markRouteRequestStart } from "../lib/contentReadinessInstrumentation";
 
+const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+
 export function ContentNodeRoute() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -127,7 +129,7 @@ export function ContentNodeRoute() {
   // loading/fallback gate below — once true, the render below returns real content or
   // a definitive not-found state rather than another loading placeholder.
   const isRouteContentReady = Boolean(matchedRoute) || (
-    !isLoadingRouteRegistry
+    (!isLoadingRouteRegistry || (artifactRouteHydrationEnabled && Boolean(page || nodeInfo)))
     && !(isLoading && !page)
     && !(isLoadingPage && !nodeInfo)
     && !(shouldResolveLanguageFallback && (isLoadingLanguageFallback || languageFallbackPath))
@@ -150,7 +152,9 @@ export function ContentNodeRoute() {
 
   // Render whichever authoritative lookup resolves first. The remaining lookup
   // may still refine the route type without holding a known page or post off-screen.
-  if (isLoadingRouteRegistry || (isLoading && !page) || (isLoadingPage && !nodeInfo)) {
+  const routeRegistryBlocksKnownContent = isLoadingRouteRegistry
+    && (!artifactRouteHydrationEnabled || (!page && !nodeInfo));
+  if (routeRegistryBlocksKnownContent || (isLoading && !page) || (isLoadingPage && !nodeInfo)) {
     return <ContentLoadingState label="Resolving content" />;
   }
   const fatalPageError = nodeInfo ? null : pageError;
