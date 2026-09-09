@@ -318,49 +318,19 @@ test("prefetches same-site new-tab links without intercepting their navigation",
   cleanup();
 });
 
-test("eagerly prefetches a bounded set of unique matching links", async () => {
-  dom.window.document.body.innerHTML = `
-    <header id="sf-header">
-      <nav aria-label="Main navigation">
-        <a href="/one/">One</a>
-        <a href="/two/">Two</a>
-      </nav>
-    </header>
-  `;
-  const prefetched: string[] = [];
+test("supports authoritative static-document navigation without waiting for prefetch", () => {
+  const nativeNavigations: string[] = [];
   const cleanup = mountSmartLinkNavigation({
     document: dom.window.document,
     window: dom.window as unknown as Window,
-    navigate: () => undefined,
-    prefetch: (to) => prefetched.push(to),
-    eager: true,
+    navigate: (to) => nativeNavigations.push(to),
+    prefetch: () => new Promise(() => undefined),
   });
-
-  await new Promise((resolve) => dom.window.setTimeout(resolve, 300));
-  assert.deepEqual(prefetched, ["/one/", "/two/"]);
-  cleanup();
-});
-
-test("keeps current content visible until navigation prefetch settles", async () => {
-  let finishPrefetch: (() => void) | undefined;
-  const navigations: string[] = [];
-  const cleanup = mountSmartLinkNavigation({
-    document: dom.window.document,
-    window: dom.window as unknown as Window,
-    navigate: (to) => navigations.push(to),
-    prefetch: () => new Promise<void>((resolve) => {
-      finishPrefetch = resolve;
-    }),
-    waitForPrefetch: true,
-  });
-  dom.window.document.querySelector("#root")!.innerHTML = '<a id="awaited" href="/awaited">Awaited</a>';
-  dom.window.document.querySelector("#awaited")!
+  dom.window.document.querySelector("#root")!.innerHTML = '<a id="native" href="/static-route/">Static route</a>';
+  dom.window.document.querySelector("#native")!
     .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
 
-  assert.deepEqual(navigations, []);
-  finishPrefetch?.();
-  await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
-  assert.deepEqual(navigations, ["/awaited"]);
+  assert.deepEqual(nativeNavigations, ["/static-route/"]);
   cleanup();
 });
 

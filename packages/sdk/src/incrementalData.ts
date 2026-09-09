@@ -35,6 +35,32 @@ export type IncrementalDataState<T> = {
 const memoryCache = new Map<string, unknown>();
 const inFlightRequests = new Map<string, Promise<unknown>>();
 const artifactMetadata = new Map<string, ArtifactSeedMetadata>();
+const hydrationCachePrefixes = [
+  "artifact-route:v1:",
+  "artifact-navigation:v1:",
+  "navigation-data:v16:",
+  "navigation-assistant:v2:",
+  "storefront-route-registry:v6:",
+  "storefront-route-registry:v10:",
+  "commerce-data:v4:",
+  "blog-data:v4:",
+  "blog-data:summary:v1:",
+  "community:v11:",
+  "community:feed:v1:",
+  "author:v2:",
+  "post:/",
+  "post-category-archive:",
+  "post-tag-archive:",
+  "product:/",
+  "product-category:v2:",
+  "product-tag:v2:",
+  "product-brand:v2:",
+  "page:/",
+  "content-page-by-uri:v1:/",
+  "content-node:v2:/",
+  "content-node:v3:/",
+  "home-page:v1:",
+];
 let revisionRequest: Promise<ContentRevisionV1> | null = null;
 let revisionCheckedAt = 0;
 
@@ -181,23 +207,7 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
     return null;
   }
   for (const entry of result.value.entries) {
-    const compatible = entry.cacheKey.startsWith("artifact-route:v1:")
-      || entry.cacheKey.startsWith("artifact-navigation:v1:")
-      || entry.cacheKey.startsWith("navigation-data:v16:")
-      || entry.cacheKey.startsWith("navigation-assistant:v2:")
-      || entry.cacheKey.startsWith("storefront-route-registry:v6:")
-      || entry.cacheKey.startsWith("storefront-route-registry:v10:")
-      || entry.cacheKey.startsWith("commerce-data:v4:")
-      || entry.cacheKey.startsWith("blog-data:v4:")
-      || entry.cacheKey.startsWith("blog-data:summary:v1:")
-      || entry.cacheKey.startsWith("community:v11:")
-      || entry.cacheKey.startsWith("community:feed:v1:")
-      || entry.cacheKey.startsWith("author:v2:")
-      || entry.cacheKey.startsWith("page:/")
-      || entry.cacheKey.startsWith("content-page-by-uri:v1:/")
-      || entry.cacheKey.startsWith("content-node:v2:/")
-      || entry.cacheKey.startsWith("content-node:v3:/")
-      || entry.cacheKey.startsWith("home-page:v1:")
+    const compatible = hydrationCachePrefixes.some((prefix) => entry.cacheKey.startsWith(prefix))
       || entry.cacheKey === "wordpress-theme-styles:v5";
     if (!compatible) continue;
     const storageKey = storageKeyFor(entry.cacheKey);

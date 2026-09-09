@@ -207,8 +207,6 @@ type SmartLinkControllerOptions = {
   maxPrefetches?: number;
   maxConcurrency?: number;
   maxQueueSize?: number;
-  eager?: boolean;
-  waitForPrefetch?: boolean;
 };
 
 export function mountSmartLinkNavigation({
@@ -222,8 +220,6 @@ export function mountSmartLinkNavigation({
   maxPrefetches = 50,
   maxConcurrency = 2,
   maxQueueSize = 16,
-  eager = false,
-  waitForPrefetch = false,
 }: SmartLinkControllerOptions): () => void {
   const scheduled = new Map<string, number>();
   const prefetched = new Set<string>();
@@ -344,20 +340,7 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target);
     if (!link) return;
     event.preventDefault();
-    if (!waitForPrefetch) {
-      navigate(link.to);
-      return;
-    }
-
-    cancelScheduled(link);
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (!disposed) navigate(link.to);
-    };
-    void Promise.resolve(prefetch(link.to)).then(finish, finish);
-    window.setTimeout(finish, 1_500);
+    navigate(link.to);
   };
   const onPointerOver = (event: PointerEvent) => {
     const link = classifyEventTarget(event.target, true);
@@ -386,16 +369,6 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target, true);
     if (link) requestPrefetch(link, 0);
   };
-  if (eager) {
-    const targets = document.querySelectorAll<HTMLAnchorElement>(
-      '#sf-header nav[aria-label="Main navigation"] a[href]:not([href^="/auth"])',
-    );
-    for (const target of [...targets].slice(0, 10)) {
-      const link = classifyEventTarget(target, true);
-      if (link) requestPrefetch(link, 0);
-    }
-  }
-
   document.addEventListener("click", onClick, true);
   document.addEventListener("pointerover", onPointerOver);
   document.addEventListener("pointerout", onPointerOut);

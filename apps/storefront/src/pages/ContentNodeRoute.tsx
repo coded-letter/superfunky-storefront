@@ -47,6 +47,11 @@ export function ContentNodeRoute() {
     () => getStorefrontRouteRegistry(configuredLanguageCodes[0]),
     useRouteRegistry,
   );
+  const matchedRoute = useRouteRegistry
+    ? matchStorefrontRoute(routeRegistry || [], pathname)
+    : null;
+  const shouldLookupGenericContent = !useRouteRegistry
+    || (!isLoadingRouteRegistry && !matchedRoute);
   const {
     data: page,
     isLoading: isLoadingPage,
@@ -55,10 +60,8 @@ export function ContentNodeRoute() {
   } = useIncrementalData(
     pageLookupCacheKey,
     () => getPageByUri(uri),
+    shouldLookupGenericContent,
   );
-  const matchedRoute = useRouteRegistry
-    ? matchStorefrontRoute(routeRegistry || [], pathname)
-    : null;
   useCanonicalContentLanguage(
     page?.languageCode,
     page?.translations || [],
@@ -72,6 +75,7 @@ export function ContentNodeRoute() {
   const { data: nodeInfo, isLoading, error } = useIncrementalData(
     `content-node:v3:${uri}`,
     () => getContentNodeInfo(uri, undefined, undefined, { probePage: false }),
+    shouldLookupGenericContent,
   );
   const shouldResolveLanguageFallback = !isLoadingRouteRegistry
     && !isLoadingPage

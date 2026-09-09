@@ -34,6 +34,8 @@ import {
   normalizeLanguageRoutePath,
   prerenderRouteDirectoryPath,
 } from "./route-paths.mjs";
+import { backendPostUriFromStorefrontPath } from "../src/lib/postRoutePaths.mjs";
+import { resolveTaxonomyArchiveIdentifier } from "../src/lib/taxonomyRoutes.ts";
 import {
   hasOnlyMissingField,
   hasOnlyMissingRootField,
@@ -92,7 +94,10 @@ let staticRouteRegistryAsset = null;
 // which resolves the exact same entries at runtime via `useStorefrontPath`.
 let staticRouteRegistryEntries = [];
 let staticPageHydrationAssets = new Map();
-const STATIC_HYDRATION_TTL_MS = 15 * 60 * 1_000;
+let staticContentHydrationAssets = new Map();
+const STATIC_HYDRATION_TTL_MS = artifactConfig.delivery === "static-first"
+  ? 24 * 60 * 60 * 1_000
+  : 15 * 60 * 1_000;
 
 const stableRoutes = [
   { path: "/", lang: "en", title: "FunkyCommerce", description: "A modern storefront experience for shopping, stories, and community.", indexable: true },
@@ -2636,9 +2641,10 @@ async function stampServiceWorkerVersion(generatedAt) {
   if (!source.includes(token)) {
     throw new Error("Service worker build-version token is missing");
   }
-  const deploymentVersion = process.env.COMMIT_REF
-    || process.env.DEPLOY_ID
-    || createHash("sha256").update(generatedAt).digest("hex").slice(0, 16);
+  const deploymentVersion = createHash("sha256")
+    .update(`${process.env.COMMIT_REF || ""}:${process.env.DEPLOY_ID || ""}:${generatedAt}`)
+    .digest("hex")
+    .slice(0, 16);
   await writeFile(serviceWorkerPath, source.replaceAll(token, deploymentVersion));
 }
 
@@ -2685,6 +2691,104 @@ async function buildStaticPageHydrationAssets(routes, generatedAt) {
       assets.set(`id:${route.cmsPage.databaseId}`, asset);
     }
   }));
+  return assets;
+}
+
+async function buildStaticContentHydrationAssets(routes, languages, generatedAt) {
+  if (!graphqlEndpoint || artifactConfig.delivery !== "static-first") return new Map();
+  if (typeof globalThis.DOMParser === "undefined") {
+    const { JSDOM } = await import("jsdom");
+    globalThis.DOMParser = new JSDOM("").window.DOMParser;
+  }
+  const [
+    { getProductArchive, getProductByUriOrSlug },
+    { getPostByUri },
+    { getPostTaxonomyArchive },
+    { getAuthorArchive },
+  ] = await Promise.all([
+    import("../src/lib/commerce.ts"),
+    import("../src/lib/posts.ts"),
+    import("../src/lib/postArchives.ts"),
+    import("../src/lib/authors.ts"),
+  ]);
+  const productTypes = new Set(["Product", "SimpleProduct", "VariableProduct", "ExternalProduct", "GroupProduct"]);
+  const productTaxonomies = new Map([
+    ["ProductCategory", "category"],
+    ["ProductTag", "tag"],
+    ["ProductBrand", "brand"],
+  ]);
+  const postTaxonomies = new Map([
+    ["Category", "category"],
+    ["Tag", "tag"],
+  ]);
+  const languageMap = new Map(
+    languages.map(({ routeCode, backendCode }) => [routeCode.toLowerCase(), backendCode]),
+  );
+  const eligibleRoutes = routes.filter(({ source, type }) =>
+    source === "cms"
+    && (
+      type === "Post"
+      || type === "User"
+      || productTypes.has(type)
+      || productTaxonomies.has(type)
+      || postTaxonomies.has(type)
+    ));
+  const assets = new Map();
+
+  for (let offset = 0; offset < eligibleRoutes.length; offset += 6) {
+    await Promise.all(eligibleRoutes.slice(offset, offset + 6).map(async (route) => {
+      const languageCode = route.lang.toLowerCase();
+      const backendLanguageCode = languageMap.get(languageCode) || languageCode.toUpperCase();
+      const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
+      let cacheKey = "";
+      let value = null;
+      try {
+        if (productTypes.has(route.type)) {
+          cacheKey = `product:${routeUri}`;
+          value = await getProductByUriOrSlug(routeUri);
+        } else if (route.type === "Post") {
+          const postUri = backendPostUriFromStorefrontPath(route.path);
+          cacheKey = `post:${postUri}`;
+          value = await getPostByUri(postUri);
+        } else if (productTaxonomies.has(route.type)) {
+          const taxonomy = productTaxonomies.get(route.type);
+          const identifier = resolveTaxonomyArchiveIdentifier(route.path);
+          cacheKey = `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`;
+          value = await getProductArchive(
+            taxonomy,
+            identifier.identifier,
+            identifier.idType,
+            languageCode,
+            backendLanguageCode,
+          );
+        } else if (postTaxonomies.has(route.type)) {
+          const taxonomy = postTaxonomies.get(route.type);
+          cacheKey = `post-${taxonomy}-archive:URI:${routeUri}:${languageCode}`;
+          value = await getPostTaxonomyArchive(taxonomy, routeUri, "URI", languageCode);
+        } else if (route.type === "User") {
+          const slug = route.path.split("/").filter(Boolean).at(-1) || "";
+          cacheKey = `author:v2:${slug}:${languageCode}:${backendLanguageCode}:${configuredLanguageCodes.join(",")}`;
+          value = await getAuthorArchive(slug, backendLanguageCode, languageCode, configuredLanguageCodes);
+        }
+        if (!cacheKey || !value) return;
+        const routeHash = createHash("sha256").update(`${route.type}:${route.path}`).digest("hex").slice(0, 12);
+        const asset = await writeStaticHydrationAsset(
+          `route-${languageCode}-${routeHash}`,
+          [{
+            cacheKey,
+            value,
+            dependencies: [`route:${route.path}`, `translation:${languageCode}`],
+          }],
+          generatedAt,
+        );
+        if (asset) assets.set(route.path, asset);
+      } catch (error) {
+        console.warn(
+          `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }));
+  }
   return assets;
 }
 
@@ -2798,7 +2902,7 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         enabled: backendProfile === "full",
         load: () => getCommunityData(languageCode, backendLanguageCode),
         entries: (value) => [{
-          cacheKey: `community:v10:${languageCode}:${backendLanguageCode}:0:0`,
+          cacheKey: `community:v11:${languageCode}:${backendLanguageCode}:0:0`,
           value,
           dependencies: ["community:public", `translation:${languageCode}`],
         }],
@@ -2937,12 +3041,16 @@ function staticHydrationUrlsForRoute(route, renderedMarkup) {
 }
 
 function staticPageHydrationUrlsForRoute(route) {
-  if (!route.cmsPage) return [];
+  const routeAsset = staticContentHydrationAssets.get(route.path);
+  if (!route.cmsPage) return routeAsset ? [routeAsset] : [];
   const translatedPaths = route.cmsPage.translations.map(({ uri }) => normalizedRoutePath(uri));
   const translatedIds = route.cmsPage.translations.map(({ databaseId }) => `id:${databaseId}`);
   return [...new Set(
-    [route.path, ...translatedPaths, ...translatedIds]
-      .map((path) => staticPageHydrationAssets.get(path))
+    [
+      routeAsset,
+      ...[route.path, ...translatedPaths, ...translatedIds]
+        .map((path) => staticPageHydrationAssets.get(path)),
+    ]
       .filter(Boolean),
   )];
 }
@@ -3084,12 +3192,13 @@ function renderRedirects(appleMerchantFileEnabled) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([publicPath, target]) => `${publicPath}  ${target}  200!`);
   return [
+    "/login  /auth  301",
     "/product.feed.xml  /product-feed.xml  301",
     ...redirectRules,
     ...cmsRouteRedirects,
     ...sitemapFallback,
     ...appleMerchantFallback,
-    ...(artifactDelivery?.mode === "artifact"
+    ...(artifactDelivery?.mode === "artifact" && artifactDelivery.delivery !== "static-first"
       ? artifactProxyRedirects(artifactDelivery.manifest, artifactDelivery.origin)
       : []),
     ...opaqueMediaProxy,
@@ -3300,6 +3409,7 @@ try {
   staticHydrationAssets = await buildStaticHydrationAssets(hydrationLanguages, generatedAt);
   staticRouteRegistryAsset = await writeStaticRouteRegistryAsset(staticRouteRegistryEntries, generatedAt);
   staticPageHydrationAssets = await buildStaticPageHydrationAssets(routes, generatedAt);
+  staticContentHydrationAssets = await buildStaticContentHydrationAssets(routes, hydrationLanguages, generatedAt);
 } catch (error) {
   console.warn(
     `[hydration] Static data assets unavailable; runtime loading remains enabled: ${error instanceof Error ? error.message : String(error)}`,
@@ -3334,6 +3444,7 @@ if (artifactConfig.mode !== "off") {
   }
   artifactDelivery = {
     mode: artifactConfig.mode,
+    delivery: artifactConfig.delivery,
     origin: artifactConfig.origin,
     manifest,
     registration: publication.registration,
@@ -3401,6 +3512,7 @@ await writeFile(
     sitemapRoutes: sitemapRoutes.length,
     cmsRoutes: routes.filter(({ source }) => source === "cms").length,
     artifactMode: artifactDelivery?.mode || "off",
+    artifactDelivery: artifactDelivery?.delivery || "proxy",
     artifactShellVersion: artifactDelivery?.manifest.shellVersion || null,
     artifactSeedRoutes: artifactDelivery?.manifest.seedRoutes.length || 0,
   }, null, 2)}\n`,

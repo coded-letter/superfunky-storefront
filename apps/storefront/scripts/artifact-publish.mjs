@@ -29,10 +29,14 @@ export function normalizeArtifactLocale(value) {
 
 export function artifactConfigFromEnvironment(environment = process.env) {
   const mode = (environment.STOREFRONT_ARTIFACT_MODE || "off").trim().toLowerCase();
+  const delivery = (environment.STOREFRONT_ARTIFACT_DELIVERY || "proxy").trim().toLowerCase();
   if (!["off", "shadow", "artifact"].includes(mode)) {
     throw new Error("STOREFRONT_ARTIFACT_MODE must be off, shadow, or artifact.");
   }
-  if (mode === "off") return { mode };
+  if (!["proxy", "static-first"].includes(delivery)) {
+    throw new Error("STOREFRONT_ARTIFACT_DELIVERY must be proxy or static-first.");
+  }
+  if (mode === "off") return { mode, delivery };
 
   const origin = requireHttpsUrl(environment.STOREFRONT_ARTIFACT_ORIGIN || "", "STOREFRONT_ARTIFACT_ORIGIN");
   const siteKey = (environment.STOREFRONT_ARTIFACT_SITE_KEY || "").trim();
@@ -45,6 +49,7 @@ export function artifactConfigFromEnvironment(environment = process.env) {
   }
   return {
     mode,
+    delivery,
     origin: origin.origin,
     siteKey,
     signingSecret,

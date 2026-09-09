@@ -18,16 +18,15 @@ export function SmartLinkNavigation() {
     window,
     backendOrigin: BACKEND_ORIGIN,
     normalizeTo: (to) => normalizeLanguagePath(to, languageCode, configuredLanguageCodes),
-    navigate,
+    navigate: artifactRouteHydrationEnabled
+      ? (to) => window.location.assign(to)
+      : navigate,
     prefetch: (to) => prefetchStorefrontRoute(
       to,
       languageCode,
       languageBackendCode,
       configuredLanguageCodes,
     ),
-    eager: artifactRouteHydrationEnabled,
-    maxConcurrency: artifactRouteHydrationEnabled ? 4 : undefined,
-    waitForPrefetch: artifactRouteHydrationEnabled,
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {

@@ -58,10 +58,30 @@ test("shell manifests contain one of every slot and only public seed routes", ()
 });
 
 test("artifact configuration is fail-closed when enabled", () => {
-  assert.deepEqual(artifactConfigFromEnvironment({}), { mode: "off" });
+  assert.deepEqual(artifactConfigFromEnvironment({}), { mode: "off", delivery: "proxy" });
   assert.throws(
     () => artifactConfigFromEnvironment({ STOREFRONT_ARTIFACT_MODE: "artifact" }),
     /STOREFRONT_ARTIFACT_ORIGIN/,
+  );
+});
+
+test("static-first delivery keeps artifact publication enabled without proxy delivery", () => {
+  const config = artifactConfigFromEnvironment({
+    STOREFRONT_ARTIFACT_MODE: "artifact",
+    STOREFRONT_ARTIFACT_DELIVERY: "static-first",
+    STOREFRONT_ARTIFACT_ORIGIN: "https://v3.superfunky.pro",
+    STOREFRONT_ARTIFACT_SITE_KEY: "flagship",
+    STOREFRONT_ARTIFACT_SIGNING_SECRET: "a".repeat(32),
+  });
+
+  assert.equal(config.mode, "artifact");
+  assert.equal(config.delivery, "static-first");
+  assert.throws(
+    () => artifactConfigFromEnvironment({
+      STOREFRONT_ARTIFACT_MODE: "artifact",
+      STOREFRONT_ARTIFACT_DELIVERY: "edge-function",
+    }),
+    /STOREFRONT_ARTIFACT_DELIVERY/,
   );
 });
 

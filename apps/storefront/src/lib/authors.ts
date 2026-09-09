@@ -1,12 +1,12 @@
 import type { PostCardData } from "@funky/ui";
-import { BLOG_POST_CARD_FIELDS, mapBlogPost, type RawBlogPost } from "./postArchives";
+import { BLOG_POST_CARD_FIELDS, mapBlogPost, type RawBlogPost } from "./postArchives.ts";
 import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import {
   AUTHOR_ARCHIVE_COMPATIBILITY_RULE,
   createCompatibleAuthorArchiveQuery,
-} from "./authorArchiveGraphqlCompatibility";
-import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback";
-import { shouldPreferCoreContentQueries } from "./profileGraphqlCompatibility";
+} from "./authorArchiveGraphqlCompatibility.ts";
+import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
+import { shouldPreferCoreContentQueries } from "./profileGraphqlCompatibility.ts";
 
 export type CmsAuthorArchive = {
   id: string;

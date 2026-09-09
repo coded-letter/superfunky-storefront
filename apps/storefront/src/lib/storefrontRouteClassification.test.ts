@@ -46,6 +46,8 @@ test("multi-purpose shortcode showcase pages are not canonical application route
 });
 
 test("dedicated shortcode-backed routes remain discoverable", () => {
+  assert.deepEqual(classifyPageRouteKeys(page({ uri: "/shop/", slug: "shop", headlessShortcodes: [] })), ["shop"]);
+  assert.deepEqual(classifyPageRouteKeys(page({ uri: "/blog/", slug: "blog", headlessShortcodes: [] })), ["blog"]);
   assert.deepEqual(
     classifyPageRouteKeys(page({
       uri: "/shop/",
@@ -105,6 +107,17 @@ test("dedicated shortcode-backed routes remain discoverable", () => {
       ],
     })),
     ["community"],
+  );
+  assert.deepEqual(
+    classifyPageRouteKeys(page({
+      uri: "/support/",
+      slug: "support",
+      headlessShortcodes: [
+        "[community-hero layout=\"gradient\"]",
+        "[community-feed layout=\"masonry\"]",
+      ],
+    })),
+    [],
   );
   assert.deepEqual(
     classifyPageRouteKeys(page({

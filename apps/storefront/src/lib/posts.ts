@@ -1,4 +1,4 @@
-import type { ProductReview } from "../pages/shared";
+import type { ProductReview } from "../pages/shared.tsx";
 import {
   graphqlRequest,
   STOREFRONT_BACKEND_PROFILE,
@@ -10,7 +10,7 @@ import {
   missingGraphqlFieldRule,
   requestGraphqlWithCompatibility,
   unsupportedRenderedFormatRule,
-} from "./graphqlFieldFallback";
+} from "./graphqlFieldFallback.ts";
 import {
   mapScript,
   mapSeo,
@@ -23,14 +23,14 @@ import {
   type RawCmsSeo,
   type CmsThemeStyles,
   THEME_STYLES_FIELDS,
-} from "./pages";
+} from "./pages.ts";
 import { normalizeFeaturedImage, type CmsFeaturedImage, type RawFeaturedImage } from "@funky/cms";
-import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings";
-import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility";
+import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings.ts";
+import { POST_GRAPHQL_COMPATIBILITY_RULES } from "./postGraphqlCompatibility.ts";
 import {
   createProfilePostQuery,
-} from "./profileGraphqlCompatibility";
-import { requestPostWithSlugFallback } from "./postLookup";
+} from "./profileGraphqlCompatibility.ts";
+import { requestPostWithSlugFallback } from "./postLookup.ts";
 import { storefrontPostPath } from "./postRoutePaths.mjs";
 
 export type CmsPostTerm = {

@@ -85,6 +85,12 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
   if (page.isTermsPage) keys.add("terms");
   if (keys.size) return [...keys];
   const slug = page.slug?.toLowerCase();
+  if (slug === "shop") keys.add("shop");
+  if (slug === "blog") keys.add("blog");
+  if (slug === "community" || slug === "spolecznosc") keys.add("community");
+  if (slug === "auth" || slug === "login") keys.add("auth-login");
+  if (slug === "register") keys.add("auth-register");
+  if (slug === "forgot-password") keys.add("auth-forgot-password");
   if (slug === "privacy-policy" || slug === "privacy") keys.add("privacy-policy");
   if (slug === "terms" || slug === "terms-and-conditions") keys.add("terms");
   const shortcodes = page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [];
@@ -95,6 +101,9 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
     const name = canonicalShortcodeName(rawName);
     const routeKey = SHORTCODE_ROUTE_KEYS[name];
     if (routeKey) {
+      if (routeKey === "community" && !keys.has("community")) {
+        continue;
+      }
       keys.add(routeKey);
       continue;
     }

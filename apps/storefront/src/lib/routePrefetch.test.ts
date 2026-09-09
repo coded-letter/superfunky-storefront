@@ -10,12 +10,13 @@ test("commerce taxonomy prefetch bypasses generic and protected page lookup", ()
   assert.match(source, /const documentWarmup = warmStorefrontDocument[\s\S]*await documentWarmup;/);
   assert.match(source, /if \(artifactRouteHydrationEnabled\) return;/);
   assert.match(documentWarmupSource, /#storefront-route-payload/);
-  assert.match(documentWarmupSource, /seedStorefrontHydration\(JSON\.parse\(routePayload\)\)/);
-  assert.match(documentWarmupSource, /rememberStorefrontMain\(url\.pathname/);
-  assert.match(documentWarmupSource, /seedStorefrontHydration\(await hydrationResponse\.json\(\)\)/);
+  assert.match(documentWarmupSource, /queueStorefrontHydration\(JSON\.parse\(routePayload\)\)/);
+  assert.match(documentWarmupSource, /queueStorefrontHydration\(await hydrationResponse\.json\(\)\)/);
+  assert.match(documentWarmupSource, /await Promise\.all\(routeAssets\.map\(loadHydrationAsset\)\)/);
+  assert.match(documentWarmupSource, /void Promise\.all\(supportingAssets\.map\(loadHydrationAsset\)\)/);
   assert.match(documentWarmupSource, /signal: AbortSignal\.timeout\(2_000\)/);
   assert.match(source, /content-node:v3:/);
-  assert.match(source, /\["product-category", "pro-cat"\]/);
+  assert.match(source, /\["product-category", "pro-cat", "pro-category"\]/);
   assert.match(source, /\["product-tag", "pro-tag"\]/);
   assert.match(source, /const taxonomy = commerceTaxonomyForPath\(pathname, languageCodes\)/);
   assert.match(source, /if \(taxonomy\) \{[\s\S]*getProductArchive\([\s\S]*return;/);

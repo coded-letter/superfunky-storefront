@@ -14,7 +14,7 @@ function commerceTaxonomyForPath(pathname: string, languageCodes: readonly strin
   const routeSegments = languageCodes.some((code) => code.toLowerCase() === firstSegment)
     ? segments.slice(1)
     : segments;
-  if (["product-category", "pro-cat"].includes(routeSegments[0])) return "category";
+  if (["product-category", "pro-cat", "pro-category"].includes(routeSegments[0])) return "category";
   if (["product-tag", "pro-tag"].includes(routeSegments[0])) return "tag";
   if (["brand", "product-brand"].includes(routeSegments[0])) return "brand";
   if (routeSegments[0] === "shop" && routeSegments[1] === "category") return "category";

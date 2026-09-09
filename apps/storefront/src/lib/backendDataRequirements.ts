@@ -82,7 +82,7 @@ export function resolveBackendDataRequirements(
     || ["account", "funkycommerce_account", "woocommerce_my_account"].includes(name),
   );
   const isBlogRoute = /^\/(?:blog|author|reading-list)(?:\/|$)/.test(route);
-  const isCommerceRoute = /^\/(?:shop|product|product-category|product-tag|brand|cart|checkout|wishlist|order)(?:\/|$)/.test(route);
+  const isCommerceRoute = /^\/(?:shop|product|product-category|pro-category|product-tag|pro-tag|brand|cart|checkout|wishlist|order)(?:\/|$)/.test(route);
   const isCommunityRoute = /^\/(?:community|community-author|community-tag|account)(?:\/|$)/.test(route);
 
   return {
