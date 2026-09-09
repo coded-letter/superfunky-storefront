@@ -58,6 +58,8 @@ const isManagedStorefront = (() => {
 })();
 const hydrateFlagshipImmediately = isFlagshipStorefront
   && import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+const deferFlagshipHomeHydration = hydrateFlagshipImmediately
+  && location.pathname === "/";
 let root = initialRoot;
 let bootstrapFinished = false;
 let overlayFinished = false;
@@ -131,17 +133,22 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
     "/wp-json/funkycommerce/v1/recent-orders",
     import.meta.env.VITE_GRAPHQL_ENDPOINT?.trim() || location.origin,
   ).toString();
-  void startRecentOrdersNotifier({
-      enabled: true,
-      itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
-      intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
-      quietSeconds: Number(prerenderedChrome.dataset.recentOrdersQuiet),
-      openLinksInNewTab: prerenderedChrome.dataset.recentOrdersNewTab !== "false",
-      endpoint,
-    })
-    .catch((error) => {
-      console.error("Recent-order notifications could not start.", error);
-    });
+  const startNotifier = () => {
+    void startRecentOrdersNotifier({
+        enabled: true,
+        itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
+        intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
+        quietSeconds: Number(prerenderedChrome.dataset.recentOrdersQuiet),
+        openLinksInNewTab: prerenderedChrome.dataset.recentOrdersNewTab !== "false",
+        endpoint,
+      })
+      .catch((error) => {
+        console.error("Recent-order notifications could not start.", error);
+      });
+  };
+  window.addEventListener("load", () => {
+    window.setTimeout(startNotifier, deferFlagshipHomeHydration ? 10_000 : 2_000);
+  }, { once: true });
 }
 const currentDocumentKey = `${location.pathname}${location.search}${location.hash}`;
 let savedReloadScrollY = 0;
@@ -572,7 +579,7 @@ if (prerenderRoot) {
     stopStaticMobileNavigation = installStaticMobileNavigation(prerenderRoot);
     stopStaticHeaderBehavior = installStaticHeaderBehavior(prerenderRoot);
   }
-  if (!isFlagshipStorefront) {
+  if (!isFlagshipStorefront || deferFlagshipHomeHydration) {
     const content = prerenderRoot.querySelector<HTMLElement>("#prerendered-storefront");
     let disposed = false;
     let idleHandle: number | null = null;
@@ -593,7 +600,9 @@ if (prerenderRoot) {
         console.error("Static CMS behaviors could not be loaded.", error);
       });
     };
-    if ("requestIdleCallback" in window) {
+    if (deferFlagshipHomeHydration) {
+      idleHandle = window.setTimeout(mountBehaviors, 8_000);
+    } else if ("requestIdleCallback" in window) {
       idleCallback = window.requestIdleCallback(mountBehaviors, { timeout: 1_000 });
     } else {
       idleHandle = window.setTimeout(mountBehaviors, 250);
@@ -1047,6 +1056,9 @@ function requestReactPreparation(event: Event) {
 
 if (!prerenderRoot) {
   void mountApplication();
+} else if (deferFlagshipHomeHydration) {
+  // The complete static homepage remains the LCP/title source. Existing capture
+  // listeners activate React only when a visitor requests an interactive control.
 } else if (hydrateFlagshipImmediately) {
   document.documentElement.classList.add("storefront-instant-handoff");
   requestReactActivation();
