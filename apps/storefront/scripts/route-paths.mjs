@@ -170,6 +170,7 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
         ? node.headlessShortcodes.filter((shortcode) => typeof shortcode === "string")
         : [],
       isPrivacyPolicyPage: node.isPrivacyPage === true,
+      isShopPage: node.isShopPage === true,
       isTermsPage: node.isTermsPage === true,
       modified: node.modified || null,
       templateName: null,

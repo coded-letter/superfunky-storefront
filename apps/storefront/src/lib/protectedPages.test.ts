@@ -27,6 +27,7 @@ test("CMS behaviors follow the global code-controls preference after protected-p
   assert.match(content, /mountCmsBehaviors\(contentRef\.current, showCodeControls\)/);
   assert.match(content, /\[page\?\.headlessContent, showCodeControls\]/);
   assert.match(content, /protectedPageRevision/);
+  assert.match(content, /protectedPageRevision > 0[\s\S]*`page:\$\{pageUri\}:protected-\$\{protectedPageRevision\}`[\s\S]*`page:\$\{pageUri\}`/);
 });
 
 test("known special pages do not probe the protected-page endpoint", () => {

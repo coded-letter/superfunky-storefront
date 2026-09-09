@@ -80,12 +80,7 @@ export function warmStorefrontDocument(to: string): Promise<void> {
             }
           };
           const boundedAssets = hydrationAssets.slice(0, 12);
-          const routeAssets = boundedAssets.filter(
-            (asset) => typeof asset === "string" && asset.includes("/storefront-hydration-route-"),
-          );
-          const supportingAssets = boundedAssets.filter((asset) => !routeAssets.includes(asset));
-          await Promise.all(routeAssets.map(loadHydrationAsset));
-          void Promise.all(supportingAssets.map(loadHydrationAsset));
+          await Promise.all(boundedAssets.map(loadHydrationAsset));
         }
       } catch (error) {
         console.warn("Target-route hydration manifest could not be parsed.", error);

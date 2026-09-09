@@ -13,21 +13,24 @@ export function SmartLinkNavigation() {
   const initialLocation = useRef(true);
   const { languageCode, languageBackendCode, configuredLanguageCodes } = useLanguage();
 
-  useEffect(() => mountSmartLinkNavigation({
-    document,
-    window,
-    backendOrigin: BACKEND_ORIGIN,
-    normalizeTo: (to) => normalizeLanguagePath(to, languageCode, configuredLanguageCodes),
-    navigate: artifactRouteHydrationEnabled
-      ? (to) => window.location.assign(to)
-      : navigate,
-    prefetch: (to) => prefetchStorefrontRoute(
+  useEffect(() => {
+    const prefetch = (to: string) => prefetchStorefrontRoute(
       to,
       languageCode,
       languageBackendCode,
       configuredLanguageCodes,
-    ),
-  }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
+    );
+    return mountSmartLinkNavigation({
+      document,
+      window,
+      backendOrigin: BACKEND_ORIGIN,
+      normalizeTo: (to) => normalizeLanguagePath(to, languageCode, configuredLanguageCodes),
+      navigate: artifactRouteHydrationEnabled
+        ? (to) => void prefetch(to).then(() => navigate(to), () => navigate(to))
+        : navigate,
+      prefetch,
+    });
+  }, [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {
     const isInitialLocation = initialLocation.current;

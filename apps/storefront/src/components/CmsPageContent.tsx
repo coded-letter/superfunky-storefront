@@ -132,8 +132,12 @@ export function CmsPageContent({
   const snapshotRef = useRef<HTMLElement>(null);
   const [pageStylesReady, setPageStylesReady] = useState(false);
   const [protectedPageRevision, setProtectedPageRevision] = useState(0);
+  const resolvedPageCacheKey = pageCacheKey
+    || (protectedPageRevision > 0
+      ? `page:${pageUri}:protected-${protectedPageRevision}`
+      : `page:${pageUri}`);
   const { data: page, isLoading, isRevalidating, error } = useIncrementalData(
-    pageCacheKey || `page:${pageUri}:protected-${protectedPageRevision}`,
+    resolvedPageCacheKey,
     loadPage || (() => getPageByUri(pageUri)),
   );
   const contentLanguageCode = resolveConfiguredContentLanguage(
