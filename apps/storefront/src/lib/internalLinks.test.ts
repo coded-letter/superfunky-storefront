@@ -342,6 +342,29 @@ test("eagerly prefetches a bounded set of unique matching links", async () => {
   cleanup();
 });
 
+test("keeps current content visible until navigation prefetch settles", async () => {
+  let finishPrefetch: (() => void) | undefined;
+  const navigations: string[] = [];
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    navigate: (to) => navigations.push(to),
+    prefetch: () => new Promise<void>((resolve) => {
+      finishPrefetch = resolve;
+    }),
+    awaitPrefetchOnNavigate: true,
+  });
+  dom.window.document.querySelector("#root")!.innerHTML = '<a id="awaited" href="/awaited">Awaited</a>';
+  dom.window.document.querySelector("#awaited")!
+    .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+
+  assert.deepEqual(navigations, []);
+  finishPrefetch?.();
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+  assert.deepEqual(navigations, ["/awaited"]);
+  cleanup();
+});
+
 test("respects Save-Data and slow network hints", async () => {
   const navigator = dom.window.navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
   Object.defineProperty(navigator, "connection", {
