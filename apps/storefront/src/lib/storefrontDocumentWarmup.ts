@@ -1,3 +1,5 @@
+import { seedStorefrontHydration } from "@funky/sdk/react";
+
 const warmedDocuments = new Map<string, Promise<void>>();
 const warmedAssets = new Map<string, Promise<void>>();
 
@@ -29,6 +31,33 @@ export function warmStorefrontDocument(to: string): Promise<void> {
     if (!response.ok) return;
     const html = await response.text();
     const parsed = new DOMParser().parseFromString(html, "text/html");
+    const hydrationManifest = parsed.querySelector<HTMLScriptElement>(
+      '#storefront-static-hydration-assets[type="application/json"]',
+    )?.textContent;
+    if (hydrationManifest) {
+      try {
+        const hydrationAssets = JSON.parse(hydrationManifest) as unknown;
+        if (Array.isArray(hydrationAssets)) {
+          await Promise.all(hydrationAssets.slice(0, 12).map(async (asset) => {
+            if (typeof asset !== "string" || !asset.startsWith("/assets/")) return;
+            const assetUrl = new URL(asset, url);
+            if (assetUrl.origin !== window.location.origin) return;
+            try {
+              const hydrationResponse = await fetch(assetUrl.href, {
+                credentials: "omit",
+                signal: AbortSignal.timeout(2_000),
+              });
+              if (!hydrationResponse.ok) return;
+              seedStorefrontHydration(await hydrationResponse.json());
+            } catch (error) {
+              console.warn(`Target-route hydration asset could not be loaded: ${assetUrl.pathname}`, error);
+            }
+          }));
+        }
+      } catch (error) {
+        console.warn("Target-route hydration manifest could not be parsed.", error);
+      }
+    }
     const assets = [...parsed.querySelectorAll<HTMLLinkElement>(
       'link[rel="stylesheet"][href], link[rel="preload"][as="style"][href], link[rel="preload"][as="font"][href]',
     )].flatMap((link) => {
@@ -43,7 +72,7 @@ export function warmStorefrontDocument(to: string): Promise<void> {
       }
     });
     const uniqueAssets = [...new Map(assets.map((asset) => [asset.href, asset])).values()].slice(0, 12);
-    await Promise.all(uniqueAssets.map(({ href, font }) => {
+    void Promise.all(uniqueAssets.map(({ href, font }) => {
       const existingAsset = warmedAssets.get(href);
       if (existingAsset) return existingAsset;
       const assetWarmup = fetch(href, font

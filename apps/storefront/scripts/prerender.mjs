@@ -92,7 +92,7 @@ let staticRouteRegistryAsset = null;
 // which resolves the exact same entries at runtime via `useStorefrontPath`.
 let staticRouteRegistryEntries = [];
 let staticPageHydrationAssets = new Map();
-const STATIC_HYDRATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+const STATIC_HYDRATION_TTL_MS = 15 * 60 * 1_000;
 
 const stableRoutes = [
   { path: "/", lang: "en", title: "FunkyCommerce", description: "A modern storefront experience for shopping, stories, and community.", indexable: true },
@@ -2659,7 +2659,7 @@ async function writeStaticPageHydrationAsset(route, generatedAt) {
         dependencies: [`page:${route.cmsPage.databaseId}`, `translation:${route.lang}`],
       },
       {
-        cacheKey: `content-node:v2:${pageUri}`,
+        cacheKey: `content-node:v3:${pageUri}`,
         value: { type: "Page" },
         dependencies: [`page:${route.cmsPage.databaseId}`],
       },

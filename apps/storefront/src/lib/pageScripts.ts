@@ -4,6 +4,7 @@ const CMS_SCRIPT_SELECTOR = 'script[data-wp-block-html="js"]';
 const EXECUTED_ATTRIBUTE = "data-funky-cms-executed";
 const REJECTED_ATTRIBUTE = "data-funky-cms-rejected";
 const HTML_PAYLOAD_PATTERN = /^\s*<(?!\!--)/;
+const CMS_SCRIPT_ERROR_EVENT = "funky:cms-script-error";
 const BUNDLED_SCRIPT_HANDLES = new Set([
   "wc-add-to-cart",
   "woocommerce",
@@ -39,7 +40,13 @@ function executeCmsScript(source: HTMLScriptElement): void {
       );
       return;
     }
-    executable.text = scriptText;
+    const identifier = source.id || source.dataset.wpBlockHtml || "inline";
+    executable.text = `try {\n${scriptText}\n} catch (error) {
+      window.dispatchEvent(new CustomEvent(${JSON.stringify(CMS_SCRIPT_ERROR_EVENT)}, {
+        detail: { identifier: ${JSON.stringify(identifier)}, message: error instanceof Error ? error.message : String(error) }
+      }));
+      console.warn(${JSON.stringify(`[CMS content] Inline script "${identifier}" stopped after an execution error.`)}, error);
+    }`;
   }
 
   source.replaceWith(executable);
