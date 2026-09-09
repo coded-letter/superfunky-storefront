@@ -26,8 +26,10 @@ export function SmartLinkNavigation() {
       languageBackendCode,
       configuredLanguageCodes,
     ),
-    eagerPrefetchSelector: artifactRouteHydrationEnabled ? "#sf-header a[href]" : undefined,
-    eagerPrefetchLimit: 6,
+    eagerPrefetchSelector: artifactRouteHydrationEnabled
+      ? '#sf-header nav[aria-label="Main navigation"] a[href]:not([href^="/auth"])'
+      : undefined,
+    eagerPrefetchLimit: 10,
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {
