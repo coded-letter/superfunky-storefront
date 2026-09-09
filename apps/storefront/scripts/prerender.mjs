@@ -3090,7 +3090,7 @@ function renderRedirects(appleMerchantFileEnabled) {
     ...sitemapFallback,
     ...appleMerchantFallback,
     ...(artifactDelivery?.mode === "artifact"
-      ? artifactProxyRedirects(artifactDelivery.manifest)
+      ? artifactProxyRedirects(artifactDelivery.manifest, artifactDelivery.origin)
       : []),
     ...opaqueMediaProxy,
     ...mediaDocumentProxy,
@@ -3348,11 +3348,7 @@ if (!staticGenerationConfig.sitemapEnabled) {
 for (const route of routes) {
   const routeDirectory = resolve(outputDirectory, prerenderRouteDirectoryPath(route.path));
   await mkdir(routeDirectory, { recursive: true });
-  const document = await renderRoute(route);
-  await writeFile(resolve(routeDirectory, "index.html"), document);
-  const fallbackDirectory = resolve(outputDirectory, ".storefront-static", prerenderRouteDirectoryPath(route.path));
-  await mkdir(fallbackDirectory, { recursive: true });
-  await writeFile(resolve(fallbackDirectory, "index.html"), document);
+  await writeFile(resolve(routeDirectory, "index.html"), await renderRoute(route));
 }
 
 await writeFile(
