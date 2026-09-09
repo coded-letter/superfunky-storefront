@@ -4,6 +4,7 @@ import test from "node:test";
 
 const source = readFileSync(new URL("./routePrefetch.ts", import.meta.url), "utf8");
 const documentWarmupSource = readFileSync(new URL("./storefrontDocumentWarmup.ts", import.meta.url), "utf8");
+const contentNodeRouteSource = readFileSync(new URL("../pages/ContentNodeRoute.tsx", import.meta.url), "utf8");
 
 test("commerce taxonomy prefetch bypasses generic and protected page lookup", () => {
   assert.match(source, /const documentWarmup = warmStorefrontDocument[\s\S]*await documentWarmup;/);
@@ -31,5 +32,13 @@ test("public author and post taxonomy archives bypass protected page lookup", ()
   assert.ok(
     source.indexOf("if (publicArchive?.type") < source.indexOf("getPageByUri(uri)"),
     "public archive routing must return before generic page prefetch",
+  );
+});
+
+test("flagship artifact pages reuse the seeded page lookup through the final renderer", () => {
+  assert.match(contentNodeRouteSource, /const pageLookupCacheKey = `content-page-by-uri:v1:\$\{uri\}`/);
+  assert.match(
+    contentNodeRouteSource,
+    /artifactRouteHydrationEnabled && page[\s\S]*pageCacheKey=\{pageLookupCacheKey\}/,
   );
 });

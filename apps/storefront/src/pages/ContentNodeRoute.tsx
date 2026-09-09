@@ -41,6 +41,7 @@ export function ContentNodeRoute() {
   const handledSelectionRevision = useRef(0);
   const pendingSelectionPath = useRef<string | null>(null);
   const uri = pathname.endsWith("/") ? pathname : `${pathname}/`;
+  const pageLookupCacheKey = `content-page-by-uri:v1:${uri}`;
   const useRouteRegistry = !shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE);
   const { data: routeRegistry, isLoading: isLoadingRouteRegistry } = useIncrementalData(
     `${ROUTE_REGISTRY_CACHE_KEY}:${configuredLanguageCodes[0] || "default"}`,
@@ -53,7 +54,7 @@ export function ContentNodeRoute() {
     isRevalidating: isRevalidatingPage,
     error: pageError,
   } = useIncrementalData(
-    `content-page-by-uri:v1:${uri}`,
+    pageLookupCacheKey,
     () => getPageByUri(uri),
   );
   const matchedRoute = useRouteRegistry
@@ -140,6 +141,17 @@ export function ContentNodeRoute() {
   useEffect(() => {
     if (isRouteContentReady) markRouteDataReady();
   }, [isRouteContentReady, uri]);
+
+  if (artifactRouteHydrationEnabled && page) {
+    return (
+      <PageMockupPage
+        routeKey={matchedRoute?.key}
+        loadPage={() => getPageByUri(uri)}
+        pageCacheKey={pageLookupCacheKey}
+        synchronizeLanguage={false}
+      />
+    );
+  }
 
   // CMS route pages resolved from the ordinary Page registry take highest priority.
   if (matchedRoute) {
