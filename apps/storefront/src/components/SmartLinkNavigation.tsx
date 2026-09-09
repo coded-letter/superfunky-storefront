@@ -30,6 +30,8 @@ export function SmartLinkNavigation() {
       ? '#sf-header nav[aria-label="Main navigation"] a[href]:not([href^="/auth"])'
       : undefined,
     eagerPrefetchLimit: 10,
+    maxConcurrency: artifactRouteHydrationEnabled ? 4 : undefined,
+    awaitPrefetchOnNavigate: artifactRouteHydrationEnabled,
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {

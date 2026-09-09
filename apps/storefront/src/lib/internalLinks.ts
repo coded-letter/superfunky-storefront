@@ -209,6 +209,7 @@ type SmartLinkControllerOptions = {
   maxQueueSize?: number;
   eagerPrefetchSelector?: string;
   eagerPrefetchLimit?: number;
+  awaitPrefetchOnNavigate?: boolean;
 };
 
 export function mountSmartLinkNavigation({
@@ -224,12 +225,14 @@ export function mountSmartLinkNavigation({
   maxQueueSize = 16,
   eagerPrefetchSelector,
   eagerPrefetchLimit = 8,
+  awaitPrefetchOnNavigate = false,
 }: SmartLinkControllerOptions): () => void {
   const scheduled = new Map<string, number>();
   const prefetched = new Set<string>();
   const queue: string[] = [];
   let active = 0;
   let disposed = false;
+  let navigationPending = false;
   const isAuthoritativePrerenderAnchor = (anchor: HTMLAnchorElement) =>
     Boolean(anchor.closest("#root.storefront-prerender-stage:not(.is-replaced)"));
 
@@ -344,7 +347,22 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target);
     if (!link) return;
     event.preventDefault();
-    navigate(link.to);
+    if (!awaitPrefetchOnNavigate) {
+      navigate(link.to);
+      return;
+    }
+
+    cancelScheduled(link);
+    if (navigationPending) return;
+    navigationPending = true;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (!disposed) navigate(link.to);
+    };
+    void Promise.resolve(prefetch(link.to)).then(finish, finish);
+    window.setTimeout(finish, 1_500);
   };
   const onPointerOver = (event: PointerEvent) => {
     const link = classifyEventTarget(event.target, true);
