@@ -41,7 +41,7 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /startRecentOrdersNotifier\([\s\S]*deferFlagshipHomeHydration \? 10_000 : 2_000/);
   assert.match(mainSource, /import \{ startRecentOrdersNotifier \}/);
   assert.match(mainSource, /deferFlagshipHomeHydration\) \{\s*idleHandle = window\.setTimeout\(mountBehaviors, 8_000\)/);
-  assert.match(mainSource, /else if \(deferFlagshipHomeHydration\) \{[\s\S]*complete static homepage remains the LCP\/title source/);
+  assert.match(mainSource, /else if \(deferFlagshipHomeHydration\) \{[\s\S]*window\.setTimeout\(requestReactActivation, 8_000\)/);
   assert.match(mainSource, /else if \(hydrateFlagshipImmediately\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
   assert.match(mainSource, /window\.__funkyStorefrontHydrationSeed = incrementalData\.seedStorefrontHydration/);
   assert.doesNotMatch(documentWarmupSource, /from "@funky\/sdk\/react"/);

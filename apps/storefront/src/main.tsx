@@ -1054,8 +1054,9 @@ function requestReactPreparation(event: Event) {
 if (!prerenderRoot) {
   void mountApplication();
 } else if (deferFlagshipHomeHydration) {
-  // The complete static homepage remains the LCP/title source. Existing capture
-  // listeners activate React only when a visitor requests an interactive control.
+  // Keep the complete static homepage as the first-paint source, then use the
+  // established React handoff to activate every CMS script without navigation.
+  window.setTimeout(requestReactActivation, 8_000);
 } else if (hydrateFlagshipImmediately) {
   document.documentElement.classList.add("storefront-instant-handoff");
   requestReactActivation();
