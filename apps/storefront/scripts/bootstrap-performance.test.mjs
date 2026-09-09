@@ -37,6 +37,11 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /if \(hasPreparedApplicationVisit\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
   assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS = 2_500/);
   assert.match(mainSource, /const hydrateFlagshipImmediately = isFlagshipStorefront/);
+  assert.match(mainSource, /const deferFlagshipHomeHydration = hydrateFlagshipImmediately[\s\S]*location\.pathname === "\/"/);
+  assert.match(mainSource, /setTimeout\(startNotifier, deferFlagshipHomeHydration \? 10_000 : 2_000\)/);
+  assert.match(mainSource, /import \{ startRecentOrdersNotifier \}/);
+  assert.match(mainSource, /deferFlagshipHomeHydration\) \{\s*idleHandle = window\.setTimeout\(mountBehaviors, 8_000\)/);
+  assert.match(mainSource, /else if \(deferFlagshipHomeHydration\) \{[\s\S]*complete static homepage remains the LCP\/title source/);
   assert.match(mainSource, /else if \(hydrateFlagshipImmediately\) \{\s*document\.documentElement\.classList\.add\("storefront-instant-handoff"\);\s*requestReactActivation\(\)/);
   assert.match(mainSource, /window\.__funkyStorefrontHydrationSeed = incrementalData\.seedStorefrontHydration/);
   assert.doesNotMatch(documentWarmupSource, /from "@funky\/sdk\/react"/);
@@ -411,7 +416,7 @@ test("interaction intent prepares code without replacing the SSG document", () =
 });
 
 test("fleet prerendered CMS content mounts lightweight native behaviors while idle", () => {
-  assert.match(mainSource, /if \(!isFlagshipStorefront\) \{[\s\S]*import\("\.\/lib\/cmsBehaviors"\)/);
+  assert.match(mainSource, /if \(!isFlagshipStorefront \|\| deferFlagshipHomeHydration\) \{[\s\S]*import\("\.\/lib\/cmsBehaviors"\)/);
   assert.match(mainSource, /mountCmsBehaviors\(content\)/);
   assert.match(mainSource, /stopStaticCmsBehaviors\(\)/);
   assert.match(mainSource, /Static CMS behaviors could not be loaded/);
