@@ -17,12 +17,12 @@ beforeEach(() => {
   dom.window.document.querySelector("#root")!.innerHTML = `
       <style data-wp-block-html="css">.editor-styled { color: rgb(12, 34, 56); }</style>
       <div class="editor-styled">Styled by WordPress</div>
-      <script data-wp-block-html="js">
+      <script data-wp-block-html="js" type="text/funkycommerce-cms" data-wp-block-html-type="text/javascript">
         if (true &#038;&#038; true) {
           window.cmsExecutionCount = (window.cmsExecutionCount || 0) + 1;
         }
       </script>
-      <script data-wp-block-html="js" src="https://cdn.example.test/integration.js"
+      <script data-wp-block-html="js" type="text/funkycommerce-cms" src="https://cdn.example.test/integration.js"
         async defer crossorigin="anonymous" data-integration="example"></script>
   `;
 
@@ -45,8 +45,12 @@ test("mountCmsScripts executes editor code, preserves attributes, and does not r
   const cleanup = mountCmsScripts(root);
 
   assert.equal(runtimeWindow.cmsExecutionCount, 1);
+  const inline = root.querySelector<HTMLScriptElement>('script:not([src])')!;
+  assert.equal(inline.type, "text/javascript");
+  assert.equal(inline.hasAttribute("data-wp-block-html-type"), false);
   assert.equal(document.styleSheets[0]?.cssRules[0]?.cssText.includes(".editor-styled"), true);
   const external = root.querySelector<HTMLScriptElement>('script[src*="integration.js"]')!;
+  assert.equal(external.hasAttribute("type"), false);
   assert.equal(external.hasAttribute("async"), true);
   assert.equal(external.hasAttribute("defer"), true);
   assert.equal(external.getAttribute("crossorigin"), "anonymous");
