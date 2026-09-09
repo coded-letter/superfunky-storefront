@@ -133,7 +133,7 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
     "/wp-json/funkycommerce/v1/recent-orders",
     import.meta.env.VITE_GRAPHQL_ENDPOINT?.trim() || location.origin,
   ).toString();
-  const startNotifier = () => {
+  window.setTimeout(() => {
     void startRecentOrdersNotifier({
         enabled: true,
         itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
@@ -145,10 +145,7 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
       .catch((error) => {
         console.error("Recent-order notifications could not start.", error);
       });
-  };
-  window.addEventListener("load", () => {
-    window.setTimeout(startNotifier, deferFlagshipHomeHydration ? 10_000 : 2_000);
-  }, { once: true });
+  }, deferFlagshipHomeHydration ? 10_000 : 2_000);
 }
 const currentDocumentKey = `${location.pathname}${location.search}${location.hash}`;
 let savedReloadScrollY = 0;
