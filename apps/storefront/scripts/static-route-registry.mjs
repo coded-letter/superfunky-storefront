@@ -16,6 +16,7 @@ export function buildStaticRouteRegistryEntries(routes) {
       slug: route.cmsPage.slug,
       language: { code: route.cmsPage.languageCode },
       isFrontPage: route.path === "/" || route.path === `/${route.lang}`,
+      isShopPage: route.cmsPage.isShopPage,
       isPrivacyPage: route.cmsPage.isPrivacyPolicyPage,
       isTermsPage: route.cmsPage.isTermsPage,
       headlessShortcodes: route.cmsPage.headlessShortcodes,

@@ -33,6 +33,7 @@ test("buildStaticRouteRegistryEntries classifies configured special pages from b
     cmsRoute("/en/wishlist", "en", { headlessShortcodes: ["[wishlist]"] }),
     cmsRoute("/pl/polityka-prywatnosci", "pl", { isPrivacyPolicyPage: true }),
     cmsRoute("/pl/regulamin", "pl", { isTermsPage: true }),
+    cmsRoute("/pl/produkty", "pl", { isShopPage: true }),
     // Non-page routes (no cmsPage, e.g. product/community routes) are ignored.
     { path: "/en/product/widget", lang: "en" },
   ];
@@ -54,6 +55,10 @@ test("buildStaticRouteRegistryEntries classifies configured special pages from b
   assert.deepEqual(
     entries.filter((entry) => entry.key === "terms").map((entry) => [entry.languageCode, entry.uri]),
     [["pl", "/pl/regulamin/"]],
+  );
+  assert.deepEqual(
+    entries.filter((entry) => entry.key === "shop").map((entry) => [entry.languageCode, entry.uri]),
+    [["pl", "/pl/produkty/"]],
   );
 });
 

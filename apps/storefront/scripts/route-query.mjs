@@ -82,6 +82,7 @@ export function buildRoutesQuery({
   multilingual = false,
   publicRobots = false,
   specialPages = false,
+  shopPages = false,
   translations = multilingual,
   seo = false,
 } = {}) {
@@ -111,6 +112,7 @@ export function buildRoutesQuery({
           slug
           isFrontPage
           isPrivacyPage
+          ${shopPages ? "isShopPage" : ""}
           ${specialPages ? "isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent
@@ -204,6 +206,7 @@ export function buildCoreRoutesQuery({
   multilingual = false,
   publicRobots = false,
   specialPages = false,
+  shopPages = false,
   translations = multilingual,
   seo = false,
 } = {}) {
@@ -242,6 +245,7 @@ export function buildCoreRoutesQuery({
           slug
           isFrontPage
           isPrivacyPage
+          ${shopPages ? "isShopPage" : ""}
           ${specialPages ? "isTermsPage" : ""}
           content(format: RENDERED)
           headlessContent

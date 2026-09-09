@@ -11,6 +11,7 @@ test("dependency-free sitemap discovery uses only core and theme route fields", 
   assert.match(query, /databaseId\s+slug\s+isFrontPage/);
   assert.match(query, /headlessContent/);
   assert.doesNotMatch(query, /ExternalProduct|ProductCategory|PostTypeSEO|TaxonomySEO/);
+  assert.doesNotMatch(query, /isShopPage/);
   assert.doesNotMatch(query, /language \{ code \}|translations/);
 });
 
@@ -30,19 +31,20 @@ test("full sitemap discovery retains multilingual and SEO metadata", () => {
     multilingual: true,
     publicRobots: true,
     specialPages: true,
+    shopPages: true,
     seo: true,
   });
 
   assert.match(query, /PostTypeSEO/);
   assert.match(query, /TaxonomySEO/);
   assert.match(query, /funkycommercePublicRobots \{ noindex nofollow \}/);
-  assert.match(query, /isPrivacyPage\s+isTermsPage/);
+  assert.match(query, /isPrivacyPage\s+isShopPage\s+isTermsPage/);
   assert.match(query, /translations \{ databaseId uri language \{ code \} \}/);
   assert.match(query, /\.\.\. on VariableProduct \{ language \{ code \} \}/);
 });
 
 test("core fallback paginates standard routes without the generic connections", () => {
-  const query = buildCoreRoutesQuery({ publicRobots: true, specialPages: true, seo: true });
+  const query = buildCoreRoutesQuery({ publicRobots: true, specialPages: true, shopPages: true, seo: true });
 
   for (const connection of ["pages", "posts", "categories", "tags", "users"]) {
     assert.match(query, new RegExp(`${connection}\\(first: 100`));
@@ -50,7 +52,7 @@ test("core fallback paginates standard routes without the generic connections", 
   assert.match(query, /pages\(first: 100[\s\S]*databaseId\s+slug\s+isFrontPage/);
   assert.doesNotMatch(query, /contentNodes|terms\(/);
   assert.match(query, /PostTypeSEO|TaxonomySEO/);
-  assert.match(query, /isPrivacyPage\s+isTermsPage/);
+  assert.match(query, /isPrivacyPage\s+isShopPage\s+isTermsPage/);
   assert.equal(query.match(/funkycommercePublicRobots/g)?.length, 2);
 });
 

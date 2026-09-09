@@ -152,6 +152,16 @@ const SPECIAL_PAGE_SUPPORT_QUERY = `
   }
 `;
 
+const SHOP_PAGE_SUPPORT_QUERY = `
+  query StorefrontShopPageSupport {
+    pages(first: 1) {
+      nodes {
+        isShopPage
+      }
+    }
+  }
+`;
+
 const LANGUAGES_QUERY = `
   query StorefrontLanguages {
     languages { code slug }
@@ -1148,7 +1158,7 @@ const CORE_ROUTE_CONNECTIONS = [
   { responseName: "users", cursorName: "userAfter", routeConnectionName: "users" },
 ];
 
-async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, specialPages, translations, seo }) {
+async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, specialPages, shopPages, translations, seo }) {
   const discoveredNodes = [];
   let readingSettings;
   for (const connection of CORE_ROUTE_CONNECTIONS) {
@@ -1158,6 +1168,7 @@ async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, 
         multilingual,
         publicRobots,
         specialPages,
+        shopPages,
         translations,
         seo,
       }),
@@ -1181,10 +1192,22 @@ async function discoverSpecialPageSupport() {
   return Boolean(payload.data?.pages);
 }
 
+async function discoverShopPageSupport() {
+  if (!graphqlEndpoint) return false;
+  const payload = await requestGraphql(
+    SHOP_PAGE_SUPPORT_QUERY,
+    {},
+    "Storefront shop page support",
+    { optionalField: { fieldName: "isShopPage", typeName: "Page" }, attempts: 1 },
+  );
+  return Boolean(payload.data?.pages);
+}
+
 async function discoverCmsRoutes({
   publicRobotsSupported = false,
   seoSupported = false,
   specialPagesSupported = false,
+  shopPagesSupported = false,
 } = {}) {
   if (!graphqlEndpoint) return [];
 
@@ -1202,6 +1225,7 @@ async function discoverCmsRoutes({
         multilingual,
         publicRobots: publicRobotsSupported,
         specialPages: specialPagesSupported,
+        shopPages: shopPagesSupported,
         translations: configuredLanguageCodes.length > 1,
         seo: seoSupported,
       }),
@@ -1233,6 +1257,7 @@ async function discoverCmsRoutes({
           multilingual,
           publicRobots: publicRobotsSupported,
           specialPages: specialPagesSupported,
+          shopPages: shopPagesSupported,
           translations: configuredLanguageCodes.length > 1,
           seo: seoSupported,
         }),
@@ -1254,6 +1279,7 @@ async function discoverCmsRoutes({
             multilingual,
             publicRobots: publicRobotsSupported,
             specialPages: specialPagesSupported,
+            shopPages: shopPagesSupported,
             translations: configuredLanguageCodes.length > 1,
             seo: seoSupported,
           }),
@@ -1274,6 +1300,7 @@ async function discoverCmsRoutes({
           multilingual,
           publicRobots: publicRobotsSupported,
           specialPages: specialPagesSupported,
+          shopPages: shopPagesSupported,
           translations: configuredLanguageCodes.length > 1,
           seo: seoSupported,
         });
@@ -1725,7 +1752,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -3327,12 +3354,22 @@ try {
   );
 }
 
+let shopPagesSupported = false;
+try {
+  shopPagesSupported = await discoverShopPageSupport();
+} catch (error) {
+  console.warn(
+    `Optional shop-page discovery unavailable; using shortcode and conventional shop paths: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
 let cmsRoutes = [];
 try {
   cmsRoutes = await discoverCmsRoutes({
     publicRobotsSupported,
     seoSupported: routeSeoSupported,
     specialPagesSupported,
+    shopPagesSupported,
   });
 } catch (error) {
   throw new Error(
