@@ -118,7 +118,7 @@ function artifactRevisionEndpoint(): string | null {
 
 function isTrustedSeed(metadata: ArtifactSeedMetadata | null): boolean {
   if (!metadata || Date.parse(metadata.expiresAt) <= Date.now()) return false;
-  return metadata.contentRevision > 0 || artifactRevisionEndpoint() === null;
+  return true;
 }
 
 export function preloadIncrementalData<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
@@ -261,7 +261,7 @@ async function latestContentRevision() {
 }
 
 async function shouldRefreshArtifactSeed(storageKey: string, metadata: ArtifactSeedMetadata): Promise<boolean> {
-  if (metadata.contentRevision <= 0) return artifactRevisionEndpoint() !== null;
+  if (metadata.contentRevision <= 0) return false;
   if (Date.parse(metadata.expiresAt) <= Date.now()) return true;
   const latest = await latestContentRevision();
   if (!latest || latest.revision <= metadata.contentRevision) return false;
