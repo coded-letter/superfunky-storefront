@@ -191,14 +191,13 @@ export async function publishShellManifestForMode({ mode, ...options }) {
   }
 }
 
-export function artifactProxyRedirects(manifest, artifactOrigin) {
-  const endpoint = `${artifactOrigin}${ARTIFACT_API_PATH}/artifact`;
+export function artifactProxyRedirects(manifest) {
   return manifest.seedRoutes.map(({ route, locale }) => {
     const query = new URLSearchParams({
       route,
       locale,
       shell: manifest.shellVersion,
     });
-    return `${route}  ${endpoint}?${query}  200!`;
+    return `${route}  /.netlify/functions/artifact-delivery?${query}  200!`;
   });
 }
