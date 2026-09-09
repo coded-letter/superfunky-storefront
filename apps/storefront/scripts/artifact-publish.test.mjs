@@ -103,13 +103,13 @@ test("shell publication signs the exact request body", async () => {
   assert.match(request.options.headers["x-superfunky-signature"], /^[a-f0-9]{64}$/);
 });
 
-test("artifact redirects are route-specific and forced after successful registration", () => {
+test("artifact redirects use the fail-open delivery function", () => {
   const redirects = artifactProxyRedirects({
     shellVersion: "deploy-123",
     seedRoutes: [{ route: "/shop", locale: "en" }],
-  }, "https://v3.superfunky.pro");
+  });
   assert.deepEqual(redirects, [
-    "/shop  https://v3.superfunky.pro/wp-json/funkycommerce-artifacts/v1/artifact?route=%2Fshop&locale=en&shell=deploy-123  200!",
+    "/shop  /.netlify/functions/artifact-delivery?route=%2Fshop&locale=en&shell=deploy-123  200!",
   ]);
 });
 
