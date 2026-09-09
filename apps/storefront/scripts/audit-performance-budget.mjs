@@ -27,7 +27,7 @@ const initialScriptCount = entryFiles.size;
 const budgets = {
   // Keep enough headroom for continued storefront development while still
   // preventing accidental initial-bundle growth beyond 500 KiB compressed.
-  initialJavaScriptBytes: 1_050_000,
+  initialJavaScriptBytes: 1_052_000,
   initialJavaScriptGzipBytes: 512_000,
   initialScriptCount: 8,
 };

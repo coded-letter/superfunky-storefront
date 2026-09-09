@@ -38,7 +38,7 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /COLD_DESKTOP_ACTIVATION_DELAY_MS = 2_500/);
   assert.match(mainSource, /const hydrateFlagshipImmediately = isFlagshipStorefront/);
   assert.match(mainSource, /const deferFlagshipHomeHydration = hydrateFlagshipImmediately[\s\S]*location\.pathname === "\/"/);
-  assert.match(mainSource, /setTimeout\(startNotifier, deferFlagshipHomeHydration \? 10_000 : 2_000\)/);
+  assert.match(mainSource, /startRecentOrdersNotifier\([\s\S]*deferFlagshipHomeHydration \? 10_000 : 2_000/);
   assert.match(mainSource, /import \{ startRecentOrdersNotifier \}/);
   assert.match(mainSource, /deferFlagshipHomeHydration\) \{\s*idleHandle = window\.setTimeout\(mountBehaviors, 8_000\)/);
   assert.match(mainSource, /else if \(deferFlagshipHomeHydration\) \{[\s\S]*complete static homepage remains the LCP\/title source/);
