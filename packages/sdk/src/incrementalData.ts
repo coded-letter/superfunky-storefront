@@ -109,6 +109,18 @@ function readCache<T>(storageKey: string): T | null {
   return (memoryCache.get(storageKey) as T | undefined) ?? readPersistedCache<T>(storageKey);
 }
 
+function artifactRevisionEndpoint(): string | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLMetaElement>(
+    'meta[name="storefront-artifact-revision-endpoint"]',
+  )?.content || null;
+}
+
+function isTrustedSeed(metadata: ArtifactSeedMetadata | null): boolean {
+  if (!metadata || Date.parse(metadata.expiresAt) <= Date.now()) return false;
+  return metadata.contentRevision > 0 || artifactRevisionEndpoint() === null;
+}
+
 export function preloadIncrementalData<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
   const storageKey = storageKeyFor(cacheKey);
   const existing = inFlightRequests.get(storageKey) as Promise<T> | undefined;
@@ -174,6 +186,7 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
       || entry.cacheKey.startsWith("navigation-data:v16:")
       || entry.cacheKey.startsWith("navigation-assistant:v2:")
       || entry.cacheKey.startsWith("storefront-route-registry:v6:")
+      || entry.cacheKey.startsWith("storefront-route-registry:v10:")
       || entry.cacheKey.startsWith("commerce-data:v4:")
       || entry.cacheKey.startsWith("blog-data:v4:")
       || entry.cacheKey.startsWith("blog-data:summary:v1:")
@@ -183,6 +196,7 @@ export function seedStorefrontHydration(input: unknown): StorefrontHydrationPayl
       || entry.cacheKey.startsWith("page:/")
       || entry.cacheKey.startsWith("content-page-by-uri:v1:/")
       || entry.cacheKey.startsWith("content-node:v2:/")
+      || entry.cacheKey.startsWith("content-node:v3:/")
       || entry.cacheKey.startsWith("home-page:v1:")
       || entry.cacheKey === "wordpress-theme-styles:v5";
     if (!compatible) continue;
@@ -210,9 +224,7 @@ type KeyedIncrementalDataState<T> = IncrementalDataState<T> & {
 function initialState<T>(storageKey: string): KeyedIncrementalDataState<T> {
   const data = readCache<T>(storageKey);
   const metadata = data === null ? null : readArtifactMetadata(storageKey);
-  const trustedAndCurrent = metadata !== null
-    && metadata.contentRevision > 0
-    && Date.parse(metadata.expiresAt) > Date.now();
+  const trustedAndCurrent = isTrustedSeed(metadata);
   return {
     storageKey,
     data,
@@ -224,9 +236,7 @@ function initialState<T>(storageKey: string): KeyedIncrementalDataState<T> {
 
 async function latestContentRevision() {
   if (revisionRequest && Date.now() - revisionCheckedAt < 15_000) return revisionRequest;
-  const endpoint = document.querySelector<HTMLMetaElement>(
-    'meta[name="storefront-artifact-revision-endpoint"]',
-  )?.content;
+  const endpoint = artifactRevisionEndpoint();
   if (!endpoint) return null;
   revisionCheckedAt = Date.now();
   revisionRequest = fetch(endpoint, {
@@ -251,7 +261,7 @@ async function latestContentRevision() {
 }
 
 async function shouldRefreshArtifactSeed(storageKey: string, metadata: ArtifactSeedMetadata): Promise<boolean> {
-  if (metadata.contentRevision <= 0) return true;
+  if (metadata.contentRevision <= 0) return artifactRevisionEndpoint() !== null;
   if (Date.parse(metadata.expiresAt) <= Date.now()) return true;
   const latest = await latestContentRevision();
   if (!latest || latest.revision <= metadata.contentRevision) return false;
@@ -318,9 +328,7 @@ export function useIncrementalData<T>(
       };
     }
     const metadata = cached === null ? null : readArtifactMetadata(storageKey);
-    const trustedAndCurrent = metadata !== null
-      && metadata.contentRevision > 0
-      && Date.parse(metadata.expiresAt) > Date.now();
+    const trustedAndCurrent = isTrustedSeed(metadata);
     setState({
       storageKey,
       data: cached,

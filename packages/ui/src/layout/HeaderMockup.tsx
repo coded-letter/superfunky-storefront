@@ -1472,6 +1472,7 @@ const HEADER_ACTION_ICONS: Record<string, LucideIcon> = {
   "shopping-bag": ShoppingBag,
   "shopping-basket": ShoppingBasket,
   "shopping-cart": ShoppingCart,
+  sparkles: Sparkles,
   star: Star,
   "sun-moon": SunMoon,
   user: User,

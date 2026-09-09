@@ -74,98 +74,75 @@ export async function prefetchStorefrontRoute(
 ): Promise<void> {
   const url = new URL(to, window.location.origin);
   const documentWarmup = warmStorefrontDocument(`${url.pathname}${url.search}`);
+  await documentWarmup;
   const pathname = url.pathname;
   const uri = pathname === "/" ? "/" : `${pathname.replace(/\/+$/, "")}/`;
   const taxonomy = commerceTaxonomyForPath(pathname, languageCodes);
   if (taxonomy) {
     const identifier = resolveTaxonomyArchiveIdentifier(pathname);
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(
-        `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`,
-        () => getProductArchive(
-          taxonomy,
-          identifier.identifier,
-          identifier.idType,
-          languageCode,
-          languageBackendCode,
-        ),
+    await prefetchIncrementalData(
+      `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`,
+      () => getProductArchive(
+        taxonomy,
+        identifier.identifier,
+        identifier.idType,
+        languageCode,
+        languageBackendCode,
       ),
-    ]);
+    );
     return;
   }
   const publicArchive = publicArchiveForPath(pathname, languageCodes);
   if (publicArchive?.type === "author") {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(
-        `author:v2:${publicArchive.slug}:${languageCode}:${languageBackendCode}:${languageCodes.join(",")}`,
-        () => getAuthorArchive(
-          publicArchive.slug,
-          languageBackendCode,
-          languageCode,
-          languageCodes,
-        ),
+    await prefetchIncrementalData(
+      `author:v2:${publicArchive.slug}:${languageCode}:${languageBackendCode}:${languageCodes.join(",")}`,
+      () => getAuthorArchive(
+        publicArchive.slug,
+        languageBackendCode,
+        languageCode,
+        languageCodes,
       ),
-    ]);
+    );
     return;
   }
   if (publicArchive?.type === "taxonomy") {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(
-        `post-${publicArchive.taxonomy}-archive:${publicArchive.idType}:${publicArchive.identifier}:${languageCode}`,
-        () => getPostTaxonomyArchive(
-          publicArchive.taxonomy,
-          publicArchive.identifier,
-          publicArchive.idType,
-          languageCode,
-        ),
+    await prefetchIncrementalData(
+      `post-${publicArchive.taxonomy}-archive:${publicArchive.idType}:${publicArchive.identifier}:${languageCode}`,
+      () => getPostTaxonomyArchive(
+        publicArchive.taxonomy,
+        publicArchive.identifier,
+        publicArchive.idType,
+        languageCode,
       ),
-    ]);
+    );
     return;
   }
   const shopProduct = pathname.match(/^\/shop\/(?!category\/|tag\/|brand\/)([^/]+)\/?$/);
   if (shopProduct || /^\/product\//.test(pathname)) {
     const identifier = shopProduct?.[1] || pathname;
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(`product:${identifier}`, () => getProductByUriOrSlug(identifier)),
-    ]);
+    await prefetchIncrementalData(`product:${identifier}`, () => getProductByUriOrSlug(identifier));
     return;
   }
 
   if (/^\/blog\/(?!category\/|tag\/|author\/)[^/]+\/?$/.test(pathname)) {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri)),
-    ]);
+    await prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri));
     return;
   }
 
-  const [page, node] = await Promise.all([
-    prefetchIncrementalData(`content-page-by-uri:v1:${uri}`, () => getPageByUri(uri)),
-    prefetchIncrementalData(
-      `content-node:v3:${uri}`,
-      () => getContentNodeInfo(uri, undefined, undefined, { probePage: false }),
-    ),
-  ]);
-  if (node?.type === "Page" || page) {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(`page:${uri}`, () => getPageByUri(uri)),
-    ]);
+  const page = await prefetchIncrementalData(`content-page-by-uri:v1:${uri}`, () => getPageByUri(uri));
+  if (page) {
+    await prefetchIncrementalData(`page:${uri}`, () => getPageByUri(uri));
+    return;
+  }
+  const node = await prefetchIncrementalData(
+    `content-node:v3:${uri}`,
+    () => getContentNodeInfo(uri, undefined, undefined, { probePage: false }),
+  );
+  if (node?.type === "Page") {
+    await prefetchIncrementalData(`page:${uri}`, () => getPageByUri(uri));
   } else if (node?.type === "Post") {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri)),
-    ]);
+    await prefetchIncrementalData(`post:${uri}`, () => getPostByUri(uri));
   } else if (node?.type === "Product") {
-    await Promise.all([
-      documentWarmup,
-      prefetchIncrementalData(`product:${pathname}`, () => getProductByUriOrSlug(pathname)),
-    ]);
-  } else {
-    await documentWarmup;
+    await prefetchIncrementalData(`product:${pathname}`, () => getProductByUriOrSlug(pathname));
   }
 }

@@ -3,8 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("./routePrefetch.ts", import.meta.url), "utf8");
+const documentWarmupSource = readFileSync(new URL("./storefrontDocumentWarmup.ts", import.meta.url), "utf8");
 
 test("commerce taxonomy prefetch bypasses generic and protected page lookup", () => {
+  assert.match(source, /const documentWarmup = warmStorefrontDocument[\s\S]*await documentWarmup;/);
+  assert.match(documentWarmupSource, /seedStorefrontHydration\(await hydrationResponse\.json\(\)\)/);
+  assert.match(documentWarmupSource, /signal: AbortSignal\.timeout\(2_000\)/);
+  assert.match(source, /content-node:v3:/);
   assert.match(source, /\["product-category", "pro-cat"\]/);
   assert.match(source, /\["product-tag", "pro-tag"\]/);
   assert.match(source, /const taxonomy = commerceTaxonomyForPath\(pathname, languageCodes\)/);

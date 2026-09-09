@@ -65,7 +65,7 @@ test("a prerendered hydration seed is immediately revalidated with fresh content
   dom.window.close();
 });
 
-test("a revisionless static hydration seed revalidates after storefront readiness", async () => {
+test("a revisionless static hydration seed remains trusted until its bounded expiry", async () => {
   const dom = new JSDOM('<html data-storefront-ready="true"><body><div id="root"></div></body></html>', {
     url: "https://storefront.test/",
   });
@@ -108,8 +108,8 @@ test("a revisionless static hydration seed revalidates after storefront readines
     await Promise.resolve();
   });
 
-  assert.equal(fetchCount, 1);
-  assert.equal(document.querySelector("span")?.textContent, "editor-fresh");
+  assert.equal(fetchCount, 0);
+  assert.equal(document.querySelector("span")?.textContent, "build-old");
   await React.act(async () => root.unmount());
   dom.window.close();
 });

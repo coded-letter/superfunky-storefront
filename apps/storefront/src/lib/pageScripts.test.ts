@@ -96,6 +96,36 @@ test("mountCmsScripts rejects HTML responses embedded as inline JavaScript", () 
   }
 });
 
+test("mountCmsScripts contains inline execution errors and reports them", () => {
+  const root = document.querySelector<HTMLElement>("#root")!;
+  root.innerHTML = `
+    <script data-wp-block-html="js" id="pricing-script">
+      document.querySelector("[data-missing]").onclick = () => undefined;
+    </script>
+  `;
+  const warnings: unknown[][] = [];
+  const reports: Event[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args);
+  window.addEventListener("funky:cms-script-error", (event) => reports.push(event));
+
+  try {
+    const cleanup = mountCmsScripts(root);
+
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0][0]), /pricing-script/);
+    assert.equal(reports.length, 1);
+    assert.equal((reports[0] as CustomEvent).detail.identifier, "pricing-script");
+    assert.equal(
+      (reports[0] as CustomEvent).detail.message,
+      "Cannot set properties of null (setting 'onclick')",
+    );
+    cleanup();
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("service worker caches a clone before returning the network response", () => {
   assert.match(serviceWorkerSource, /await cache\.put\(request, response\.clone\(\)\)/);
   assert.equal(serviceWorkerSource.match(/event\.respondWith\(/g)?.length, 2);
