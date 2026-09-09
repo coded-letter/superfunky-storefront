@@ -2,7 +2,7 @@ import { seedStorefrontHydration } from "@funky/sdk/react";
 
 const warmedDocuments = new Map<string, Promise<void>>();
 const warmedAssets = new Map<string, Promise<void>>();
-const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+export const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
 
 function storefrontDocumentUrl(to: string): URL | null {
   try {
@@ -40,7 +40,7 @@ export function warmStorefrontDocument(to: string): Promise<void> {
         try {
           seedStorefrontHydration(JSON.parse(routePayload));
         } catch (error) {
-          console.warn("Target-route artifact hydration could not be parsed.", error);
+          console.warn("Artifact hydration failed.", error);
         }
       }
     }

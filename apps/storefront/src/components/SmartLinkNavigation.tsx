@@ -4,8 +4,7 @@ import { normalizeLanguagePath, useLanguage } from "@funky/ui";
 import { BACKEND_ORIGIN } from "@funky/sdk";
 import { mountHashAnchorScroll, mountSmartLinkNavigation } from "../lib/internalLinks";
 import { prefetchStorefrontRoute } from "../lib/routePrefetch";
-
-const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+import { artifactRouteHydrationEnabled } from "../lib/storefrontDocumentWarmup";
 
 export function SmartLinkNavigation() {
   const navigate = useNavigate();
@@ -26,12 +25,9 @@ export function SmartLinkNavigation() {
       languageBackendCode,
       configuredLanguageCodes,
     ),
-    eagerPrefetchSelector: artifactRouteHydrationEnabled
-      ? '#sf-header nav[aria-label="Main navigation"] a[href]:not([href^="/auth"])'
-      : undefined,
-    eagerPrefetchLimit: 10,
+    eager: artifactRouteHydrationEnabled,
     maxConcurrency: artifactRouteHydrationEnabled ? 4 : undefined,
-    awaitPrefetchOnNavigate: artifactRouteHydrationEnabled,
+    waitForPrefetch: artifactRouteHydrationEnabled,
   }), [configuredLanguageCodes, languageBackendCode, languageCode, navigate]);
 
   useEffect(() => {

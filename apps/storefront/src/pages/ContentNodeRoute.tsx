@@ -26,8 +26,7 @@ import { resolveRouteLanguageSync } from "../lib/contentRouteLanguageSync";
 import { STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { shouldPreferCoreContentQueries } from "../lib/profileGraphqlCompatibility";
 import { markRouteDataReady, markRouteRequestStart } from "../lib/contentReadinessInstrumentation";
-
-const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
+import { artifactRouteHydrationEnabled } from "../lib/storefrontDocumentWarmup";
 
 export function ContentNodeRoute() {
   const { pathname } = useLocation();

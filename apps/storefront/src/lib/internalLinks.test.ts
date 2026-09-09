@@ -320,11 +320,11 @@ test("prefetches same-site new-tab links without intercepting their navigation",
 
 test("eagerly prefetches a bounded set of unique matching links", async () => {
   dom.window.document.body.innerHTML = `
-    <header>
-      <a href="/one/">One</a>
-      <a href="/one/">One duplicate</a>
-      <a href="/two/">Two</a>
-      <a href="/three/">Three</a>
+    <header id="sf-header">
+      <nav aria-label="Main navigation">
+        <a href="/one/">One</a>
+        <a href="/two/">Two</a>
+      </nav>
     </header>
   `;
   const prefetched: string[] = [];
@@ -333,8 +333,7 @@ test("eagerly prefetches a bounded set of unique matching links", async () => {
     window: dom.window as unknown as Window,
     navigate: () => undefined,
     prefetch: (to) => prefetched.push(to),
-    eagerPrefetchSelector: "header a[href]",
-    eagerPrefetchLimit: 2,
+    eager: true,
   });
 
   await new Promise((resolve) => dom.window.setTimeout(resolve, 300));
@@ -352,7 +351,7 @@ test("keeps current content visible until navigation prefetch settles", async ()
     prefetch: () => new Promise<void>((resolve) => {
       finishPrefetch = resolve;
     }),
-    awaitPrefetchOnNavigate: true,
+    waitForPrefetch: true,
   });
   dom.window.document.querySelector("#root")!.innerHTML = '<a id="awaited" href="/awaited">Awaited</a>';
   dom.window.document.querySelector("#awaited")!

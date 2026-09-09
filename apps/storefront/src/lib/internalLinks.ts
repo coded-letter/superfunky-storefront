@@ -207,9 +207,8 @@ type SmartLinkControllerOptions = {
   maxPrefetches?: number;
   maxConcurrency?: number;
   maxQueueSize?: number;
-  eagerPrefetchSelector?: string;
-  eagerPrefetchLimit?: number;
-  awaitPrefetchOnNavigate?: boolean;
+  eager?: boolean;
+  waitForPrefetch?: boolean;
 };
 
 export function mountSmartLinkNavigation({
@@ -223,16 +222,14 @@ export function mountSmartLinkNavigation({
   maxPrefetches = 50,
   maxConcurrency = 2,
   maxQueueSize = 16,
-  eagerPrefetchSelector,
-  eagerPrefetchLimit = 8,
-  awaitPrefetchOnNavigate = false,
+  eager = false,
+  waitForPrefetch = false,
 }: SmartLinkControllerOptions): () => void {
   const scheduled = new Map<string, number>();
   const prefetched = new Set<string>();
   const queue: string[] = [];
   let active = 0;
   let disposed = false;
-  let navigationPending = false;
   const isAuthoritativePrerenderAnchor = (anchor: HTMLAnchorElement) =>
     Boolean(anchor.closest("#root.storefront-prerender-stage:not(.is-replaced)"));
 
@@ -347,14 +344,12 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target);
     if (!link) return;
     event.preventDefault();
-    if (!awaitPrefetchOnNavigate) {
+    if (!waitForPrefetch) {
       navigate(link.to);
       return;
     }
 
     cancelScheduled(link);
-    if (navigationPending) return;
-    navigationPending = true;
     let settled = false;
     const finish = () => {
       if (settled) return;
@@ -391,19 +386,15 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target, true);
     if (link) requestPrefetch(link, 0);
   };
-  const eagerPrefetchTimer = eagerPrefetchSelector
-    ? window.setTimeout(() => {
-        const targets = [...document.querySelectorAll<HTMLAnchorElement>(eagerPrefetchSelector)];
-        const queued = new Set<string>();
-        for (const target of targets) {
-          const link = classifyEventTarget(target, true);
-          if (!link || queued.has(link.to)) continue;
-          queued.add(link.to);
-          requestPrefetch(link, 0);
-          if (queued.size >= eagerPrefetchLimit) break;
-        }
-      }, 250)
-    : 0;
+  if (eager) {
+    const targets = document.querySelectorAll<HTMLAnchorElement>(
+      '#sf-header nav[aria-label="Main navigation"] a[href]:not([href^="/auth"])',
+    );
+    for (const target of [...targets].slice(0, 10)) {
+      const link = classifyEventTarget(target, true);
+      if (link) requestPrefetch(link, 0);
+    }
+  }
 
   document.addEventListener("click", onClick);
   document.addEventListener("pointerover", onPointerOver);
@@ -415,7 +406,6 @@ export function mountSmartLinkNavigation({
 
   return () => {
     disposed = true;
-    if (eagerPrefetchTimer) window.clearTimeout(eagerPrefetchTimer);
     anchorObserver.disconnect();
     scheduled.forEach((timer) => window.clearTimeout(timer));
     scheduled.clear();
