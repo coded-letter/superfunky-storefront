@@ -1,6 +1,8 @@
 import type { CmsPageScript } from "./pages";
 
 const CMS_SCRIPT_SELECTOR = 'script[data-wp-block-html="js"]';
+const CMS_SCRIPT_INERT_TYPE = "text/funkycommerce-cms";
+const CMS_SCRIPT_ORIGINAL_TYPE_ATTRIBUTE = "data-wp-block-html-type";
 const EXECUTED_ATTRIBUTE = "data-funky-cms-executed";
 const REJECTED_ATTRIBUTE = "data-funky-cms-rejected";
 const HTML_PAYLOAD_PATTERN = /^\s*<(?!\!--)/;
@@ -24,8 +26,16 @@ function executeCmsScript(source: HTMLScriptElement): void {
 
   const executable = document.createElement("script");
   for (const attribute of Array.from(source.attributes)) {
+    if (
+      attribute.name === CMS_SCRIPT_ORIGINAL_TYPE_ATTRIBUTE
+      || (attribute.name === "type" && attribute.value === CMS_SCRIPT_INERT_TYPE)
+    ) {
+      continue;
+    }
     executable.setAttribute(attribute.name, attribute.value);
   }
+  const originalType = source.getAttribute(CMS_SCRIPT_ORIGINAL_TYPE_ATTRIBUTE);
+  if (originalType) executable.setAttribute("type", originalType);
   executable.setAttribute(EXECUTED_ATTRIBUTE, "true");
 
   if (source.src && !source.hasAttribute("async")) {
