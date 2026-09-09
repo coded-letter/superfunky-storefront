@@ -396,7 +396,7 @@ export function mountSmartLinkNavigation({
     }
   }
 
-  document.addEventListener("click", onClick);
+  document.addEventListener("click", onClick, true);
   document.addEventListener("pointerover", onPointerOver);
   document.addEventListener("pointerout", onPointerOut);
   document.addEventListener("focusin", onFocusIn);
@@ -410,7 +410,7 @@ export function mountSmartLinkNavigation({
     scheduled.forEach((timer) => window.clearTimeout(timer));
     scheduled.clear();
     queue.length = 0;
-    document.removeEventListener("click", onClick);
+    document.removeEventListener("click", onClick, true);
     document.removeEventListener("pointerover", onPointerOver);
     document.removeEventListener("pointerout", onPointerOut);
     document.removeEventListener("focusin", onFocusIn);
