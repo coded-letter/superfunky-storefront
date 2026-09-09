@@ -1557,6 +1557,7 @@ async function discoverCommunityRoutes() {
     COMMUNITY_BUILD_MEMBERS_QUERY,
     {},
     "WPGraphQL community member route discovery",
+    { attempts: 2, timeoutMs: 10_000 },
   );
   if (!Array.isArray(memberPayload.data?.communityMembers)) {
     throw new Error("WPGraphQL community route discovery omitted communityMembers");
@@ -1602,6 +1603,7 @@ async function discoverCommunityRoutes() {
         backendLanguageFieldsAvailable ? COMMUNITY_BUILD_POSTS_QUERY : COMPATIBLE_COMMUNITY_BUILD_POSTS_QUERY,
         backendLanguageFieldsAvailable ? { after, language: backendCode } : { after },
         `WPGraphQL ${routeCode} community tag route discovery`,
+        { attempts: 2, timeoutMs: 10_000 },
       );
       const posts = payload.data?.communityPosts;
       if (!posts) throw new Error("WPGraphQL community route discovery omitted communityPosts");
@@ -3383,9 +3385,8 @@ if (backendProfile === "full") {
   try {
     communityRoutes = await discoverCommunityRoutes();
   } catch (error) {
-    throw new Error(
-      `Community route discovery failed; refusing to generate a partial sitemap: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
+    console.warn(
+      `Optional community detail route discovery unavailable; using stable community directory routes: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
