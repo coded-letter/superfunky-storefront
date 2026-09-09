@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { PaginablePostGrid, ProfileHeader, ProfileStat, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
+import { ArtifactRouteLoadingState } from "../components/ArtifactRouteLoadingState";
 import { getAuthorArchive } from "../lib/authors";
 import { useIncrementalData } from "@funky/sdk/react";
 import { useStorefrontPath } from "../lib/storefrontPaths";
@@ -39,7 +40,7 @@ export function AuthorMockupPage() {
     if (explicitLanguage) syncLanguageCode(explicitLanguage);
   }, [explicitLanguage, syncLanguageCode]);
 
-  if (isLoading) return <ContentLoadingState label={t("loading.author")} />;
+  if (isLoading) return <ArtifactRouteLoadingState label={t("loading.author")} />;
   if (error) return <AuthorStatus title={t("error.author_unavailable")} message={error.message} />;
   if (!author) return <NotFoundMockupPage />;
 

@@ -11,6 +11,7 @@ import { Link, useLocation } from "react-router-dom";
 import { ResponsiveImage, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
+import { ArtifactRouteLoadingState } from "../components/ArtifactRouteLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
 import { renderCmsContent } from "../components/CmsPageContent";
 import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
@@ -85,7 +86,7 @@ export function PostMockupPage({ fallback }: { fallback?: ReactNode } = {}) {
     return mountPageStyles(post.themeStyles, BACKEND_ORIGIN);
   }, [post?.themeStyles]);
 
-  if (isLoading) return <ContentLoadingState label={t("loading.post")} />;
+  if (isLoading) return <ArtifactRouteLoadingState label={t("loading.post")} />;
   if (error) return <PostStatus title={t("error.post_unavailable")} message={error.message} />;
   if (!post) {
     return fallback ?? <PostStatus title={t("post.not_found")} message={t("post.not_found_message", { uri: postUri })} />;

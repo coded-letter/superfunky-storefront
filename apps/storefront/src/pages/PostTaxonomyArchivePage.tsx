@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { PaginablePostGrid, Seo, useLanguage, useLayoutPreferences, useT } from "@funky/ui";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
+import { ArtifactRouteLoadingState } from "../components/ArtifactRouteLoadingState";
 import { HeroMock } from "../components/HeroMock";
 import { useIncrementalData } from "@funky/sdk/react";
 import { mountCmsBehaviors } from "../lib/cmsBehaviors";
@@ -82,7 +83,7 @@ function PostTaxonomyArchiveLoader({
   }, [archive]);
 
   if (isLoading) {
-    return <ContentLoadingState label={t("loading.post_archive", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} />;
+    return <ArtifactRouteLoadingState label={t("loading.post_archive", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} />;
   }
   if (error) {
     return <ArchiveStatus title={t("archive.post_taxonomy_unavailable", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} message={t("archive.collection_unavailable")} />;

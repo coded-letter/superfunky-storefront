@@ -5,7 +5,7 @@ import { getAuthorArchive } from "./authors";
 import { getPageByUri } from "./pages";
 import { getPostTaxonomyArchive, type PostTaxonomy, type TaxonomyIdentifierType } from "./postArchives";
 import { getPostByUri } from "./posts";
-import { warmStorefrontDocument } from "./storefrontDocumentWarmup";
+import { artifactRouteHydrationEnabled, warmStorefrontDocument } from "./storefrontDocumentWarmup";
 import { resolveTaxonomyArchiveIdentifier } from "./taxonomyRoutes";
 
 function commerceTaxonomyForPath(pathname: string, languageCodes: readonly string[]): CommerceTaxonomy | null {
@@ -75,6 +75,7 @@ export async function prefetchStorefrontRoute(
   const url = new URL(to, window.location.origin);
   const documentWarmup = warmStorefrontDocument(`${url.pathname}${url.search}`);
   await documentWarmup;
+  if (artifactRouteHydrationEnabled) return;
   const pathname = url.pathname;
   const uri = pathname === "/" ? "/" : `${pathname.replace(/\/+$/, "")}/`;
   const taxonomy = commerceTaxonomyForPath(pathname, languageCodes);
