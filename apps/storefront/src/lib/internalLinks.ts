@@ -207,6 +207,8 @@ type SmartLinkControllerOptions = {
   maxPrefetches?: number;
   maxConcurrency?: number;
   maxQueueSize?: number;
+  eagerPrefetchSelector?: string;
+  eagerPrefetchLimit?: number;
 };
 
 export function mountSmartLinkNavigation({
@@ -220,6 +222,8 @@ export function mountSmartLinkNavigation({
   maxPrefetches = 50,
   maxConcurrency = 2,
   maxQueueSize = 16,
+  eagerPrefetchSelector,
+  eagerPrefetchLimit = 8,
 }: SmartLinkControllerOptions): () => void {
   const scheduled = new Map<string, number>();
   const prefetched = new Set<string>();
@@ -369,6 +373,19 @@ export function mountSmartLinkNavigation({
     const link = classifyEventTarget(event.target, true);
     if (link) requestPrefetch(link, 0);
   };
+  const eagerPrefetchTimer = eagerPrefetchSelector
+    ? window.setTimeout(() => {
+        const targets = [...document.querySelectorAll<HTMLAnchorElement>(eagerPrefetchSelector)];
+        const queued = new Set<string>();
+        for (const target of targets) {
+          const link = classifyEventTarget(target, true);
+          if (!link || queued.has(link.to)) continue;
+          queued.add(link.to);
+          requestPrefetch(link, 0);
+          if (queued.size >= eagerPrefetchLimit) break;
+        }
+      }, 250)
+    : 0;
 
   document.addEventListener("click", onClick);
   document.addEventListener("pointerover", onPointerOver);
@@ -380,6 +397,7 @@ export function mountSmartLinkNavigation({
 
   return () => {
     disposed = true;
+    if (eagerPrefetchTimer) window.clearTimeout(eagerPrefetchTimer);
     anchorObserver.disconnect();
     scheduled.forEach((timer) => window.clearTimeout(timer));
     scheduled.clear();

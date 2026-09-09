@@ -2,6 +2,7 @@ import { seedStorefrontHydration } from "@funky/sdk/react";
 
 const warmedDocuments = new Map<string, Promise<void>>();
 const warmedAssets = new Map<string, Promise<void>>();
+const artifactRouteHydrationEnabled = import.meta.env.VITE_ARTIFACT_ROUTE_HYDRATION === "true";
 
 function storefrontDocumentUrl(to: string): URL | null {
   try {
@@ -31,6 +32,18 @@ export function warmStorefrontDocument(to: string): Promise<void> {
     if (!response.ok) return;
     const html = await response.text();
     const parsed = new DOMParser().parseFromString(html, "text/html");
+    if (artifactRouteHydrationEnabled) {
+      const routePayload = parsed.querySelector<HTMLScriptElement>(
+        "#storefront-route-payload",
+      )?.textContent;
+      if (routePayload) {
+        try {
+          seedStorefrontHydration(JSON.parse(routePayload));
+        } catch (error) {
+          console.warn("Target-route artifact hydration could not be parsed.", error);
+        }
+      }
+    }
     const hydrationManifest = parsed.querySelector<HTMLScriptElement>(
       '#storefront-static-hydration-assets[type="application/json"]',
     )?.textContent;

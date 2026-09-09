@@ -318,6 +318,30 @@ test("prefetches same-site new-tab links without intercepting their navigation",
   cleanup();
 });
 
+test("eagerly prefetches a bounded set of unique matching links", async () => {
+  dom.window.document.body.innerHTML = `
+    <header>
+      <a href="/one/">One</a>
+      <a href="/one/">One duplicate</a>
+      <a href="/two/">Two</a>
+      <a href="/three/">Three</a>
+    </header>
+  `;
+  const prefetched: string[] = [];
+  const cleanup = mountSmartLinkNavigation({
+    document: dom.window.document,
+    window: dom.window as unknown as Window,
+    navigate: () => undefined,
+    prefetch: (to) => prefetched.push(to),
+    eagerPrefetchSelector: "header a[href]",
+    eagerPrefetchLimit: 2,
+  });
+
+  await new Promise((resolve) => dom.window.setTimeout(resolve, 300));
+  assert.deepEqual(prefetched, ["/one/", "/two/"]);
+  cleanup();
+});
+
 test("respects Save-Data and slow network hints", async () => {
   const navigator = dom.window.navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
   Object.defineProperty(navigator, "connection", {

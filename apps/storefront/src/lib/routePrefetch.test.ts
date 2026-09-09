@@ -7,6 +7,8 @@ const documentWarmupSource = readFileSync(new URL("./storefrontDocumentWarmup.ts
 
 test("commerce taxonomy prefetch bypasses generic and protected page lookup", () => {
   assert.match(source, /const documentWarmup = warmStorefrontDocument[\s\S]*await documentWarmup;/);
+  assert.match(documentWarmupSource, /#storefront-route-payload/);
+  assert.match(documentWarmupSource, /seedStorefrontHydration\(JSON\.parse\(routePayload\)\)/);
   assert.match(documentWarmupSource, /seedStorefrontHydration\(await hydrationResponse\.json\(\)\)/);
   assert.match(documentWarmupSource, /signal: AbortSignal\.timeout\(2_000\)/);
   assert.match(source, /content-node:v3:/);
