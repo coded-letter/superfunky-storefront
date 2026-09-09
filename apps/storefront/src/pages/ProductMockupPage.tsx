@@ -19,6 +19,7 @@ import {
 } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
+import { ArtifactRouteLoadingState } from "../components/ArtifactRouteLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
 import { ProductInquiryForm } from "../components/ProductInquiryForm";
 import { renderCmsContent } from "../components/CmsPageContent";
@@ -55,7 +56,7 @@ export function ProductMockupPage() {
     normalizedProduct?.uri,
   );
 
-  if (isLoading) return <ContentLoadingState label={t("product.loading")} />;
+  if (isLoading) return <ArtifactRouteLoadingState label={t("product.loading")} />;
   if (error) return <ProductStatus title={t("product.unavailable")} message={error.message} />;
   if (!normalizedProduct) return <ProductStatus title={t("product.not_found")} message={t("product.not_found_message", { identifier })} />;
 

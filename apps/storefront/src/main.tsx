@@ -1,11 +1,12 @@
 import "./styles.css";
 import { activatePrerenderImages } from "./lib/prerenderImages";
 import { captureInitialCmsPageMarkup } from "./lib/prerenderSnapshot";
-import { installStaticDocumentWarmup } from "./lib/storefrontDocumentWarmup";
+import { installStaticDocumentWarmup, rememberStorefrontMain } from "./lib/storefrontDocumentWarmup";
 import { startRecentOrdersNotifier } from "./lib/recentOrders";
 
 let hasMounted = false;
 const initialRoot = document.getElementById("root")!;
+rememberStorefrontMain(location.pathname, initialRoot.querySelector("main"));
 const bootstrapOverlay = document.getElementById("storefront-bootstrap");
 const bootstrapStartedAt = performance.now();
 const hasPrerenderedContent = Boolean(initialRoot.querySelector("#prerendered-storefront"));
