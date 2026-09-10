@@ -74,6 +74,7 @@ test("prerender authenticates route discovery and preserves stable routes during
   const prerender = await readFile(new URL("scripts/prerender.mjs", appRoot), "utf8");
 
   assert.match(prerender, /\{ Origin: graphqlRequestOrigin \}/);
+  assert.match(prerender, /process\.env\.VITE_GRAPHQL_ENDPOINT\?\.trim\(\)\s*\|\| "https:\/\/dev\.superfunky\.pro\/graphql"/);
   assert.match(prerender, /Optional route SEO discovery unavailable/);
   assert.match(prerender, /Optional public robots discovery unavailable; using core route metadata/);
   assert.match(prerender, /\{ attempts: 5, timeoutMs: 60_000 \}/);
