@@ -133,7 +133,7 @@ test("artifact redirects are portable PHP endpoint rewrites", () => {
   ]);
 });
 
-test("shadow publication preserves static delivery while artifact mode remains fail-closed", async () => {
+test("shadow and static-first publication preserve static delivery while artifact proxy mode remains fail-closed", async () => {
   const manifest = createShellManifest({
     html,
     routes: [{ path: "/", lang: "en" }],
@@ -157,9 +157,22 @@ test("shadow publication preserves static delivery while artifact mode remains f
   assert.equal(shadowResult.registration, null);
   assert.match(shadowResult.error, /HTTP 401/);
 
+  const staticFirstResult = await publishShellManifestForMode({
+    mode: "artifact",
+    delivery: "static-first",
+    manifest,
+    artifactOrigin: "https://v3.superfunky.pro",
+    signingSecret: "a".repeat(32),
+    fetchImpl: rejectedFetch,
+  });
+  assert.equal(staticFirstResult.published, false);
+  assert.equal(staticFirstResult.registration, null);
+  assert.match(staticFirstResult.error, /HTTP 401/);
+
   await assert.rejects(
     publishShellManifestForMode({
       mode: "artifact",
+      delivery: "proxy",
       manifest,
       artifactOrigin: "https://v3.superfunky.pro",
       signingSecret: "a".repeat(32),
