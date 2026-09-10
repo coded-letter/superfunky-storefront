@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { JSDOM } from "jsdom";
 
 const appRoot = new URL("../", import.meta.url);
 
@@ -42,12 +43,28 @@ test("prerender emits complete CMS metadata in the first document response", asy
 test("client SEO removes generated metadata without restoring stale tags", async () => {
   const seo = await readFile(new URL("../../packages/ui/src/seo/Seo.tsx", appRoot), "utf8");
 
-  assert.match(seo, /querySelectorAll\([\s\S]*data-storefront-seo/);
+  assert.match(seo, /querySelectorAll\([\s\S]*data-storefront-seo\]:not\(\[data-rh\]\)/);
   assert.doesNotMatch(seo, /insertBefore\(element/);
   assert.match(seo, /image\?\.url \|\| opengraphImage/);
   assert.match(seo, /property="og:image:alt"/);
   assert.match(seo, /property="article:modified_time"/);
   assert.match(seo, /name="twitter:image:alt"/);
+});
+
+test("client SEO cleanup preserves prerendered titles adopted by Helmet", () => {
+  const dom = new JSDOM(`<!doctype html><head>
+    <title data-storefront-seo data-rh="true">Adopted title</title>
+    <meta data-storefront-seo name="description" content="Stale description">
+  </head>`);
+
+  dom.window.document.head
+    .querySelectorAll(
+      '[data-storefront-seo]:not([data-rh]), meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
+    )
+    .forEach((element) => element.remove());
+
+  assert.equal(dom.window.document.title, "Adopted title");
+  assert.equal(dom.window.document.querySelector('meta[name="description"]'), null);
 });
 
 test("controlled crawler files remain exact and product feed uses its canonical address", async () => {
