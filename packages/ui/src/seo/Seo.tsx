@@ -121,7 +121,7 @@ export function Seo({
   useLayoutEffect(() => {
     document.head
       .querySelectorAll(
-        '[data-storefront-seo], meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
+        '[data-storefront-seo]:not([data-rh]), meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
       )
       .forEach((element) => element.remove());
   }, []);
