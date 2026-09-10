@@ -3469,6 +3469,7 @@ if (artifactConfig.mode !== "off") {
   });
   const publication = await publishShellManifestForMode({
     mode: artifactConfig.mode,
+    delivery: artifactConfig.delivery,
     manifest,
     artifactOrigin: artifactConfig.origin,
     signingSecret: artifactConfig.signingSecret,
@@ -3478,7 +3479,7 @@ if (artifactConfig.mode !== "off") {
       ? " Ensure the deployment STOREFRONT_ARTIFACT_SIGNING_SECRET exactly matches WordPress Build & Deploy > Artifact signing secret."
       : "";
     console.warn(
-      `[artifacts] Shadow shell registration failed; static delivery remains authoritative: ${publication.error}${signingHint}`,
+      `[artifacts] Shell registration failed; static delivery remains authoritative: ${publication.error}${signingHint}`,
     );
   }
   artifactDelivery = {

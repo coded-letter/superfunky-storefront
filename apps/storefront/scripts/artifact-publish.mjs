@@ -179,7 +179,7 @@ export async function publishShellManifest({
   return response.json();
 }
 
-export async function publishShellManifestForMode({ mode, ...options }) {
+export async function publishShellManifestForMode({ mode, delivery = "proxy", ...options }) {
   try {
     return {
       published: true,
@@ -187,7 +187,7 @@ export async function publishShellManifestForMode({ mode, ...options }) {
       error: null,
     };
   } catch (error) {
-    if (mode !== "shadow") throw error;
+    if (mode !== "shadow" && delivery !== "static-first") throw error;
     return {
       published: false,
       registration: null,
