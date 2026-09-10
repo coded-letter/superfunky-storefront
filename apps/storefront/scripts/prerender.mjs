@@ -67,7 +67,8 @@ const configuredBackendHostname = process.env.VITE_GRAPHQL_ENDPOINT
 const hasInteractiveStaticChrome = [configuredSiteHostname, configuredBackendHostname].some(
   (hostname) => hostname === "superfunky.pro" || hostname.endsWith(".superfunky.pro"),
 );
-const graphqlEndpoint = process.env.VITE_GRAPHQL_ENDPOINT?.trim();
+const graphqlEndpoint = process.env.VITE_GRAPHQL_ENDPOINT?.trim()
+  || "https://dev.superfunky.pro/graphql";
 let defaultLanguage = process.env.VITE_DEFAULT_LANGUAGE?.trim().toLowerCase() || "en";
 const configuredBackendProfile = process.env.VITE_BACKEND_PROFILE?.trim().toLowerCase() || "full";
 const backendProfile = ["shell", "blog", "shop", "full"].includes(configuredBackendProfile)

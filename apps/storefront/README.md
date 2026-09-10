@@ -99,7 +99,14 @@ The generated class set is a build artifact, so publishing or changing a CMS-aut
 utility requires a storefront rebuild. Keep the site's Netlify `WordPress` build hook
 configured in Control Center; public-content saves already trigger that hook after the
 existing one-minute debounce. Hook URLs stay in WordPress and Netlify and must not be
-committed. Configure its credential-free `VITE_GRAPHQL_ENDPOINT` directly in Netlify.
+committed. If an internal preview site is not managed by `sites.json`, configure its
+credential-free `VITE_GRAPHQL_ENDPOINT` directly in the hosting provider.
+
+For Cloudflare Pages deployments of the open-source workspace, build from the
+repository root with `pnpm build` and publish `apps/storefront/dist`. The exported
+root `wrangler.jsonc` identifies that directory as the Pages application. When no
+backend endpoint is configured, the storefront uses the public
+`https://dev.superfunky.pro/graphql` reference backend.
 
 ## CMS code and bundled behaviors
 
@@ -185,10 +192,16 @@ and newsletter UI, and visiting a CMS documentation page. Violations raised insi
 Spotify, or other cross-origin iframe documents belong to that framed origin and cannot be
 controlled by the parent storefront CSP.
 
-## Standalone Netlify deployments
+## Standalone deployments
 
-Configure the public `VITE_GRAPHQL_ENDPOINT` directly in Netlify. Build-hook URLs
-and provider credentials belong in WordPress or Netlify and must never be committed.
+The repository root is the pnpm workspace. For Cloudflare Pages, use `pnpm build`
+and publish `apps/storefront/dist`; the included `wrangler.jsonc` identifies that
+directory as the application so Cloudflare does not need to guess between packages.
+
+Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider when using
+your own WordPress backend. When omitted, the storefront uses the public
+`https://dev.superfunky.pro/graphql` reference backend. Build-hook URLs and
+provider credentials must never be committed.
 
 The production generator also consumes the Control Center's public static-generation
 configuration. It creates or removes the sitemap, custom robots file, `llms.txt`,
