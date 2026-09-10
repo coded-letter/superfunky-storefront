@@ -15,8 +15,9 @@ export type GraphqlResponse<T> = {
   }[];
 };
 
-const MAX_CONCURRENT_GRAPHQL_REQUESTS = 2;
-const GRAPHQL_REQUEST_TIMEOUT_MS = 60_000;
+const IS_SERVER = typeof window === "undefined";
+const MAX_CONCURRENT_GRAPHQL_REQUESTS = IS_SERVER ? 6 : 2;
+const GRAPHQL_REQUEST_TIMEOUT_MS = IS_SERVER ? 12_000 : 60_000;
 const NODE_ENV = (
   globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }
 ).process?.env;

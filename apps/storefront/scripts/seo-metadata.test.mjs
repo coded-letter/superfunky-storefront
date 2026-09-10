@@ -67,6 +67,26 @@ test("client SEO cleanup preserves prerendered titles adopted by Helmet", () => 
   assert.equal(dom.window.document.querySelector('meta[name="description"]'), null);
 });
 
+test("client SEO cleanup never removes the only document title", () => {
+  const dom = new JSDOM(`<!doctype html><head>
+    <title data-storefront-seo>Route title</title>
+    <meta data-storefront-seo name="description" content="Stale description">
+  </head>`);
+  const generatedElements = dom.window.document.head.querySelectorAll(
+    '[data-storefront-seo]:not([data-rh]), meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
+  );
+  generatedElements.forEach((element) => {
+    if (
+      element instanceof dom.window.HTMLTitleElement
+      && !dom.window.document.head.querySelector("title[data-rh]")
+    ) return;
+    element.remove();
+  });
+
+  assert.equal(dom.window.document.title, "Route title");
+  assert.equal(dom.window.document.querySelector('meta[name="description"]'), null);
+});
+
 test("controlled crawler files remain exact and product feed uses its canonical address", async () => {
   const prerender = await readFile(new URL("scripts/prerender.mjs", appRoot), "utf8");
   const feedDiscovery = await readFile(new URL("src/components/GlobalFeedDiscovery.tsx", appRoot), "utf8");

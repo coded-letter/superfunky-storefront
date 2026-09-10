@@ -119,11 +119,17 @@ export function Seo({
   const imageType = image?.type || imageTypeFromUrl(resolvedImageUrl);
 
   useLayoutEffect(() => {
-    document.head
+    const generatedElements = document.head
       .querySelectorAll(
         '[data-storefront-seo]:not([data-rh]), meta[name="description"]:not([data-rh]), link[rel="canonical"]:not([data-rh])',
-      )
-      .forEach((element) => element.remove());
+      );
+    generatedElements.forEach((element) => {
+      if (
+        element instanceof HTMLTitleElement
+        && !document.head.querySelector("title[data-rh]")
+      ) return;
+      element.remove();
+    });
   }, []);
 
   const breadcrumbJsonLd =
