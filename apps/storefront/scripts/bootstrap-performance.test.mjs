@@ -404,6 +404,12 @@ test("non-zero reload waits for fonts before revealing the restored viewport", (
   assert.match(indexSource, /\.storefront-scroll-reload-status \{/);
 });
 
+test("restored flagship homepages resume hydration without waiting for navigation", () => {
+  assert.match(mainSource, /window\.addEventListener\("pageshow", \(event\) => \{/);
+  assert.match(mainSource, /if \(!event\.persisted\) return;/);
+  assert.match(mainSource, /if \(deferFlagshipHomeHydration && !activationRequested\) requestReactActivation\(\)/);
+});
+
 test("interaction intent prepares code without replacing the SSG document", () => {
   assert.match(mainSource, /window\.addEventListener\(eventName, requestReactPreparation/);
   assert.match(mainSource, /function requestReactPreparation\(event: Event\)/);

@@ -940,7 +940,9 @@ window.addEventListener("funky:storefront-shell-ready", () => {
   finishWhenReactCoherent();
 }, { once: true });
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) finishWhenReactCoherent();
+  if (!event.persisted) return;
+  if (deferFlagshipHomeHydration && !activationRequested) requestReactActivation();
+  finishWhenReactCoherent();
 });
 
 const mountApplication = async () => {
