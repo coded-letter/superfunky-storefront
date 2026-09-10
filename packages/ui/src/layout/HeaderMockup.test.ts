@@ -55,8 +55,16 @@ test("top-level fragment links highlight only the section in active view", () =>
   assert.match(headerSource, /activeFragmentHref === item\.href/);
   assert.match(headerSource, /window\.addEventListener\("scroll", updateActiveFragment/);
   assert.match(headerSource, /\.filter\(\(\{ rect \}\) => rect\.bottom > headerHeight && rect\.top < window\.innerHeight\)/);
-  assert.match(headerSource, /setActiveFragmentHref\(activeSection\?\.href \?\? null\)/);
+  assert.match(headerSource, /const activeHref = activeSection\?\.href \?\? null;\s*setActiveFragmentHref\(activeHref\)/);
   assert.doesNotMatch(headerSource, /\}, null\) \?\? sections\[0\]/);
+});
+
+test("scrollspy replaces only observed section hashes without growing browser history", () => {
+  assert.match(headerSource, /const sectionHashes = new Set\(\s*sections\.map/);
+  assert.match(headerSource, /const nextHash = activeHref \? new URL\(activeHref, window\.location\.href\)\.hash : ""/);
+  assert.match(headerSource, /sectionHashes\.has\(window\.location\.hash\)/);
+  assert.match(headerSource, /window\.history\.replaceState/);
+  assert.doesNotMatch(headerSource, /window\.history\.pushState/);
 });
 
 test("header supports stacked, true single-row, centered, and floating island arrangements", () => {

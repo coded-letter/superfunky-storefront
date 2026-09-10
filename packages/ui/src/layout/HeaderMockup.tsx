@@ -419,6 +419,9 @@ export function HeaderMockup({
       setActiveFragmentHref(null);
       return;
     }
+    const sectionHashes = new Set(
+      sections.map(({ href }) => new URL(href, window.location.href).hash),
+    );
 
     const updateActiveFragment = () => {
       const activeLine = Math.max(headerHeight, window.innerHeight * 0.35);
@@ -442,7 +445,19 @@ export function HeaderMockup({
           ? section
           : closest;
       }, null);
-      setActiveFragmentHref(activeSection?.href ?? null);
+      const activeHref = activeSection?.href ?? null;
+      setActiveFragmentHref(activeHref);
+      const nextHash = activeHref ? new URL(activeHref, window.location.href).hash : "";
+      if (
+        window.location.hash !== nextHash
+        && (!window.location.hash || sectionHashes.has(window.location.hash))
+      ) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${window.location.search}${nextHash}`,
+        );
+      }
     };
 
     updateActiveFragment();
