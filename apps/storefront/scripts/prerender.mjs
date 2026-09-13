@@ -1182,6 +1182,48 @@ async function discoverCoreRouteNodesIndividually({ multilingual, publicRobots, 
   return { discoveredNodes, readingSettings };
 }
 
+async function discoverStandardWordPressRoutes({
+  multilingual,
+  publicRobots,
+  specialPages,
+  shopPages,
+  translations,
+  seo,
+}) {
+  try {
+    return await discoverRouteNodes(
+      buildCoreRoutesQuery({
+        multilingual,
+        publicRobots,
+        specialPages,
+        shopPages,
+        translations,
+        seo,
+      }),
+      CORE_ROUTE_CONNECTIONS,
+      "WPGraphQL standard route discovery",
+    );
+  } catch (error) {
+    if (
+      !(error instanceof Error)
+      || !/WPGraphQL standard route discovery failed with status 500/.test(error.message)
+    ) {
+      throw error;
+    }
+    console.warn(
+      "[prerender] Combined core route discovery failed; retrying isolated WordPress connections.",
+    );
+    return discoverCoreRouteNodesIndividually({
+      multilingual,
+      publicRobots,
+      specialPages,
+      shopPages,
+      translations,
+      seo,
+    });
+  }
+}
+
 async function discoverSpecialPageSupport() {
   if (!graphqlEndpoint) return false;
   const payload = await requestGraphql(
@@ -1252,19 +1294,39 @@ async function discoverCmsRoutes({
       console.warn(
         `[prerender] ${compatibilityReason}; retrying route discovery without commerce metadata.`,
       );
-      discovery = await discoverRouteNodes(
-        buildRoutesQuery({
-          commerce: false,
+      try {
+        discovery = await discoverRouteNodes(
+          buildRoutesQuery({
+            commerce: false,
+            multilingual,
+            publicRobots: publicRobotsSupported,
+            specialPages: specialPagesSupported,
+            shopPages: shopPagesSupported,
+            translations: configuredLanguageCodes.length > 1,
+            seo: seoSupported,
+          }),
+          routeConnections,
+          "WPGraphQL route discovery without commerce metadata",
+        );
+      } catch (compatibilityError) {
+        if (
+          !(compatibilityError instanceof Error)
+          || !/WPGraphQL route discovery without commerce metadata failed with status 500/.test(compatibilityError.message)
+        ) {
+          throw compatibilityError;
+        }
+        console.warn(
+          "[prerender] Generic non-commerce route discovery failed; retrying standard WordPress connections.",
+        );
+        discovery = await discoverStandardWordPressRoutes({
           multilingual,
           publicRobots: publicRobotsSupported,
           specialPages: specialPagesSupported,
           shopPages: shopPagesSupported,
           translations: configuredLanguageCodes.length > 1,
           seo: seoSupported,
-        }),
-        routeConnections,
-        "WPGraphQL route discovery without commerce metadata",
-      );
+        });
+      }
     } else if (
       commerceRoutesAvailable
       || backendProfile === "full"
@@ -1274,38 +1336,14 @@ async function discoverCmsRoutes({
       console.warn(
         `Generic route discovery unavailable for the ${backendProfile} profile; retrying standard free connections: ${error instanceof Error ? error.message : String(error)}`,
       );
-      try {
-        discovery = await discoverRouteNodes(
-          buildCoreRoutesQuery({
-            multilingual,
-            publicRobots: publicRobotsSupported,
-            specialPages: specialPagesSupported,
-            shopPages: shopPagesSupported,
-            translations: configuredLanguageCodes.length > 1,
-            seo: seoSupported,
-          }),
-          CORE_ROUTE_CONNECTIONS,
-          "WPGraphQL standard route discovery",
-        );
-      } catch (coreError) {
-        if (
-          !(coreError instanceof Error)
-          || !/WPGraphQL standard route discovery failed with status 500/.test(coreError.message)
-        ) {
-          throw coreError;
-        }
-        console.warn(
-          "[prerender] Combined core route discovery failed; retrying isolated WordPress connections.",
-        );
-        discovery = await discoverCoreRouteNodesIndividually({
-          multilingual,
-          publicRobots: publicRobotsSupported,
-          specialPages: specialPagesSupported,
-          shopPages: shopPagesSupported,
-          translations: configuredLanguageCodes.length > 1,
-          seo: seoSupported,
-        });
-      }
+      discovery = await discoverStandardWordPressRoutes({
+        multilingual,
+        publicRobots: publicRobotsSupported,
+        specialPages: specialPagesSupported,
+        shopPages: shopPagesSupported,
+        translations: configuredLanguageCodes.length > 1,
+        seo: seoSupported,
+      });
     }
   }
 
