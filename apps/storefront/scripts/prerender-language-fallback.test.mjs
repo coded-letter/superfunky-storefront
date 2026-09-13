@@ -33,4 +33,12 @@ test("prerender retries commerce route discovery without multilingual WooCommerc
     prerenderSource,
     /"WPGraphQL route discovery without commerce metadata"/,
   );
+  assert.match(
+    prerenderSource,
+    /WPGraphQL route discovery without commerce metadata failed with status 500[\s\S]*?discoverStandardWordPressRoutes/,
+  );
+  assert.match(
+    prerenderSource,
+    /Generic non-commerce route discovery failed; retrying standard WordPress connections/,
+  );
 });
