@@ -562,7 +562,7 @@ export function CheckoutMockupPage() {
   // Real order submission — every live WooCommerce gateway that the backend exposes
   // through the Store API can be submitted here. Crypto still remains preview-only
   // until the custom gateway is fully validated on the live backend.
-  async function handlePlaceOrder(event: MouseEvent<HTMLAnchorElement>) {
+  async function handlePlaceOrder(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     if (orderSubmitting) {
       return;

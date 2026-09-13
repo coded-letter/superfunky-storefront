@@ -263,10 +263,9 @@ export function OrderSummaryCard({
   /** When true, the CTA renders as a visibly disabled, non-navigating control instead of a
    * live link — used to block "Place order" until required consent checkboxes are ticked. */
   ctaDisabled?: boolean;
-  /** Optional interception handler — e.g. checkout submits a real payment before
-   * navigating. Call `event.preventDefault()` inside to stop the `<Link>` navigation
-   * and navigate programmatically once the async submission resolves. */
-  onCtaClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  /** Optional submission handler. When present, the CTA is a button so navigation can
+   * only happen programmatically after the handler completes successfully. */
+  onCtaClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Shows a "Placing order…" busy state and blocks re-clicks while a real payment
    * submission (see `onCtaClick`) is in flight. */
   ctaBusy?: boolean;
@@ -320,10 +319,21 @@ export function OrderSummaryCard({
         >
           {ctaLabel}
         </span>
+      ) : onCtaClick ? (
+        <button
+          type="button"
+          onClick={onCtaClick}
+          disabled={ctaBusy}
+          aria-busy={ctaBusy}
+          className={`mt-5 inline-flex w-full justify-center rounded-full border-0 bg-brand-gradient px-4 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 ${
+            ctaBusy ? "cursor-wait opacity-70" : "cursor-pointer"
+          }`}
+        >
+          {ctaBusy ? "Placing order…" : ctaLabel}
+        </button>
       ) : (
         <Link
           to={ctaHref}
-          onClick={ctaBusy ? (event) => event.preventDefault() : onCtaClick}
           aria-busy={ctaBusy}
           className={`mt-5 inline-flex w-full justify-center rounded-full bg-brand-gradient px-4 py-3 text-sm font-semibold text-white no-underline shadow-glow transition hover:-translate-y-0.5 ${
             ctaBusy ? "cursor-wait opacity-70" : ""
