@@ -563,8 +563,8 @@ export function CheckoutMockupPage() {
   // through the Store API can be submitted here. Crypto still remains preview-only
   // until the custom gateway is fully validated on the live backend.
   async function handlePlaceOrder(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
     if (orderSubmitting) {
-      event.preventDefault();
       return;
     }
     const canSubmitRealOrder =
@@ -577,21 +577,6 @@ export function CheckoutMockupPage() {
         (paymentMethod === "cod" && !isCryptoOnlyCurrency && isCodAvailable) ||
         (paymentMethod === "cheque" && !isCryptoOnlyCurrency && isCheckAvailable)
       );
-    if (!canSubmitRealOrder) {
-      if (isBackendConfigured) {
-        event.preventDefault();
-        setOrderError(
-          paymentMethod === "crypto"
-            ? t("checkout.payment.unavailable_backend")
-            : isCryptoOnlyCurrency
-              ? "Only the crypto wallet payment method is available while paying in BTC/ETH."
-              : t("checkout.payment.method_unavailable"),
-        );
-      }
-      return;
-    }
-
-    event.preventDefault();
     setOrderError(null);
 
     const checkoutValidation = validateCheckoutForm({
@@ -692,6 +677,20 @@ export function CheckoutMockupPage() {
           ? t("checkout.shipping_loading")
           : "No shipping method is available for this address.",
       );
+      return;
+    }
+    if (!canSubmitRealOrder) {
+      if (isBackendConfigured) {
+        setOrderError(
+          paymentMethod === "crypto"
+            ? t("checkout.payment.unavailable_backend")
+            : isCryptoOnlyCurrency
+              ? "Only the crypto wallet payment method is available while paying in BTC/ETH."
+              : t("checkout.payment.method_unavailable"),
+        );
+      } else {
+        navigate(shouldHideShipping ? orderSuccessDigitalPath : orderSuccessPath);
+      }
       return;
     }
 
