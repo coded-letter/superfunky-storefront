@@ -65,7 +65,7 @@ export function languageHomePath(
   const defaultLanguageCode = configuredLanguageCodes[0]?.trim().toLowerCase();
   return normalizedLanguageCode === defaultLanguageCode
     ? "/"
-    : normalizeLanguagePath("/", normalizedLanguageCode, configuredLanguageCodes);
+    : `${normalizeLanguagePath("/", normalizedLanguageCode, configuredLanguageCodes)}/`;
 }
 
 export function resolvePathLanguageCode(

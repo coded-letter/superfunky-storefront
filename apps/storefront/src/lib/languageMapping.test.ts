@@ -36,7 +36,7 @@ test("maps backend EN and JA records without deriving enum values from slugs", (
       { code: "ja", label: "日本語", backendCode: "JA" },
     ],
   );
-  assert.equal(languageHomePath("ja", ["en", "ja"]), "/ja");
+  assert.equal(languageHomePath("ja", ["en", "ja"]), "/ja/");
 });
 
 test("maps the WordPress site language without requiring a Polylang slug", () => {
@@ -66,7 +66,7 @@ test("orders the backend default first and adopts it without a visitor preferenc
   assert.equal(resolveSyncedLanguageCode("en", false, options), "pl");
   assert.equal(resolveSyncedLanguageCode("en", true, options), "en");
   assert.equal(languageHomePath("pl", ["pl", "en", "ja"]), "/");
-  assert.equal(languageHomePath("en", ["pl", "en", "ja"]), "/en");
+  assert.equal(languageHomePath("en", ["pl", "en", "ja"]), "/en/");
 });
 
 test("infers route languages from configured URI prefixes and preserves the default locale", () => {
@@ -138,6 +138,10 @@ test("keeps admin tools language-independent and removes stale language prefixes
 
 test("a language selection replaces the old URL prefix instead of reverting the selection", () => {
   assert.deepEqual(
+    resolveLanguageUrlAction("/", "en", ["pl", "en"], true),
+    { type: "navigate", to: "/en/" },
+  );
+  assert.deepEqual(
     resolveLanguageUrlAction("/en/cart/?coupon=summer#totals", "pl", ["pl", "en"], true),
     { type: "navigate", to: "/cart/?coupon=summer#totals" },
   );
@@ -147,10 +151,25 @@ test("a language selection replaces the old URL prefix instead of reverting the 
   );
 });
 
+test("translated product brand directories preserve the selected language prefix", () => {
+  assert.deepEqual(
+    resolveLanguageUrlAction("/product-brand/", "en", ["pl", "en"], true),
+    { type: "navigate", to: "/en/product-brand/" },
+  );
+  assert.deepEqual(
+    resolveLanguageUrlAction("/en/product-brand/", "pl", ["pl", "en"], true),
+    { type: "navigate", to: "/product-brand/" },
+  );
+});
+
 test("canonical language selection keeps its marker until navigation arrives", () => {
   assert.match(
     appSource,
-    /pendingSelection\.current = \{ sourceUrl: currentUrl, targetUrl \};\s+navigate\(targetUrl, \{ replace: true \}\)/,
+    /languageSelectionPending\s+&& storefrontLanguageTargetUrl\s+&& storefrontLanguageTargetUrl !== currentUrl/,
+  );
+  assert.match(
+    appSource,
+    /pendingSelection\.current = \{ sourceUrl: currentUrl, targetUrl: storefrontLanguageTargetUrl \};\s+navigate\(storefrontLanguageTargetUrl, \{ replace: true \}\)/,
   );
   assert.match(
     appSource,
