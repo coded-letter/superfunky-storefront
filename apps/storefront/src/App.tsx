@@ -675,14 +675,16 @@ function LanguageUrlNormalizer() {
       pendingSelection.current = null;
     }
     const languageSelectionPending = pendingSelection.current?.sourceUrl === currentUrl;
-    if (languageSelectionPending && storefrontLanguageTarget) {
-      const targetUrl = `${storefrontLanguageTarget}${location.search}${location.hash}`;
-      if (targetUrl === currentUrl) {
-        pendingSelection.current = null;
-      } else {
-        pendingSelection.current = { sourceUrl: currentUrl, targetUrl };
-        navigate(targetUrl, { replace: true });
-      }
+    const storefrontLanguageTargetUrl = storefrontLanguageTarget
+      ? `${storefrontLanguageTarget}${location.search}${location.hash}`
+      : null;
+    if (
+      languageSelectionPending
+      && storefrontLanguageTargetUrl
+      && storefrontLanguageTargetUrl !== currentUrl
+    ) {
+      pendingSelection.current = { sourceUrl: currentUrl, targetUrl: storefrontLanguageTargetUrl };
+      navigate(storefrontLanguageTargetUrl, { replace: true });
       return;
     }
 
