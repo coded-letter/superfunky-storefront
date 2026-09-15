@@ -12,11 +12,11 @@ const CommerceDataContext = createContext<IncrementalDataState<CmsCommerceCatalo
  * storefront language, so consumers never mistake it for translated content.
  */
 export function CommerceDataProvider({ children, enabled = true }: { children?: ReactNode; enabled?: boolean }) {
-  const { languageCode, languageBackendCode } = useLanguage();
+  const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
   const normalizedLanguage = languageCode.toLowerCase();
   const rawState = useIncrementalData(
-    `commerce-data:v4:${normalizedLanguage}:${languageBackendCode}`,
-    () => getCommerceCatalog(normalizedLanguage, languageBackendCode),
+    `commerce-data:v5:${normalizedLanguage}:${languageBackendCode}`,
+    () => getCommerceCatalog(normalizedLanguage, languageBackendCode, configuredLanguageCodes),
     enabled,
   );
   const state = useMemo<IncrementalDataState<CmsCommerceCatalog>>(() => ({
