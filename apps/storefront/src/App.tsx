@@ -830,6 +830,7 @@ export function App() {
                     <Route path="/:year/:month/:day/:slug" element={<PostMockupPage />} />
                     <Route path="/:language/:year/:month/:day/:slug" element={<PostMockupPage />} />
                     <Route path="/sitemap" element={<SitemapPage />} />
+                    <Route path="/:language/sitemap" element={<SitemapPage />} />
                     <Route path="/cart" element={<StorefrontPageRoute routeKey="cart" fallback="/cart" />} />
                     <Route path="/:language/cart" element={<StorefrontPageRoute routeKey="cart" fallback="/cart" />} />
                     <Route path="/checkout" element={<StorefrontPageRoute routeKey="checkout" fallback="/checkout" />} />

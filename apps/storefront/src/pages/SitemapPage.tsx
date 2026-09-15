@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Seo } from "@funky/ui";
+import { languageHomePath, normalizeLanguagePath, Seo, useLanguage } from "@funky/ui";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -54,6 +54,9 @@ async function getStaticRouteManifest(): Promise<StaticRouteManifest> {
 }
 
 export function SitemapPage() {
+  const { configuredLanguageCodes, languageCode } = useLanguage();
+  const homePath = languageHomePath(languageCode, configuredLanguageCodes);
+  const sitemapPath = normalizeLanguagePath("/sitemap/", languageCode, configuredLanguageCodes);
   const { data, isLoading, error } = useIncrementalData("static-route-manifest:v5", getStaticRouteManifest);
 
   if (isLoading) return <ContentLoadingState label="Loading sitemap" />;
@@ -62,12 +65,14 @@ export function SitemapPage() {
       <section className="mx-auto mt-16 grid max-w-lg gap-4 rounded-3xl border border-zinc-200/80 bg-white p-10 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
         <h1 className="m-0 font-display text-2xl font-bold text-zinc-900 dark:text-zinc-100">Sitemap unavailable</h1>
         <p className="m-0 text-zinc-500 dark:text-zinc-400">The public sitemap is disabled in the site Control Center.</p>
-        <Link to="/" className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">Back to home</Link>
+        <Link to={homePath} className="mx-auto text-sm font-semibold text-brand-600 no-underline hover:text-brand-500 dark:text-brand-400">Back to home</Link>
       </section>
     );
   }
 
-  const publicRoutes = (data?.routes || []).filter(({ listed }) => listed);
+  const publicRoutes = (data?.routes || []).filter(
+    (route) => route.listed && route.lang.toLowerCase() === languageCode,
+  );
   const groupedRoutes = new Map<string, SitemapRoute[]>();
   for (const route of publicRoutes) {
     const group = GROUP_LABELS[route.type] || "Other";
@@ -79,10 +84,10 @@ export function SitemapPage() {
       <Seo
         title="Sitemap"
         description="Browse every public URL available in the latest generated site build."
-        canonical="/sitemap"
+        canonical={sitemapPath}
         schema={{ pageType: "CollectionPage" }}
       />
-      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Sitemap" }]} includeStructuredData={false} />
+      <Breadcrumbs items={[{ label: "Home", href: homePath }, { label: "Sitemap" }]} includeStructuredData={false} />
       <header className="grid gap-3">
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-brand-600 dark:text-brand-400">Directory</span>
         <h1 className="m-0 font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">Sitemap</h1>
@@ -106,10 +111,12 @@ export function SitemapPage() {
           <ul className="m-0 grid list-none gap-x-8 gap-y-2 p-0 sm:grid-cols-2 lg:grid-cols-3">
             {routes.map((route) => (
               <li key={route.path}>
-                <Link to={route.path} className="text-sm font-medium text-zinc-700 no-underline hover:text-brand-600 dark:text-zinc-300 dark:hover:text-brand-400">
+                <Link
+                  to={normalizeLanguagePath(route.path, languageCode, configuredLanguageCodes)}
+                  className="text-sm font-medium text-zinc-700 no-underline hover:text-brand-600 dark:text-zinc-300 dark:hover:text-brand-400"
+                >
                   {route.title.replace(/\s+\|\s+(?:FunkyCommerce|Superfunky)$/, "")}
                 </Link>
-                {route.lang !== "en" ? <span className="ml-2 text-[0.65rem] uppercase text-zinc-400">{route.lang}</span> : null}
               </li>
             ))}
           </ul>
