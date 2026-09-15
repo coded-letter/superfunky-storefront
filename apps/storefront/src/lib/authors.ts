@@ -5,7 +5,7 @@ import {
   AUTHOR_ARCHIVE_COMPATIBILITY_RULE,
   createCompatibleAuthorArchiveQuery,
 } from "./authorArchiveGraphqlCompatibility.ts";
-import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
+import { missingGraphqlFieldRule, requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
 import { shouldPreferCoreContentQueries } from "./profileGraphqlCompatibility.ts";
 
 export type CmsAuthorArchive = {
@@ -29,6 +29,7 @@ type AuthorArchiveResult = {
     uri: string | null;
     name: string | null;
     description: string | null;
+    storefrontDescription?: string | null;
     avatar: { url: string | null } | null;
     communityCover: { url: string | null } | null;
   } | null;
@@ -48,6 +49,7 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
       uri
       name
       description
+      storefrontDescription(language: $language)
       avatar(size: 192) {
         url
       }
@@ -79,7 +81,7 @@ export async function getAuthorArchive(
       authorName: slug,
       language: backendLanguageCode,
     },
-    [AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
+    [missingGraphqlFieldRule("storefrontDescription"), AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
   );
 
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
@@ -92,7 +94,7 @@ export async function getAuthorArchive(
     slug: data.user.slug || slug,
     uri: data.user.uri,
     name: data.user.name?.trim() || "Unknown author",
-    bio: data.user.description?.trim() || "",
+    bio: data.user.storefrontDescription?.trim() || data.user.description?.trim() || "",
     avatarUrl: data.user.avatar?.url || null,
     // Reuses the canonical `_community_cover_attachment_id` user meta (via the
     // existing `communityCover` field) so authors and community members share one
