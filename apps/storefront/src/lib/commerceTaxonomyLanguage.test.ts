@@ -7,6 +7,7 @@ import {
   mapLocalizedTerms,
   type RawLocalizedTerm,
 } from "./commerceTaxonomyLanguage.ts";
+import { matchesCommerceRouteLanguage } from "./commerce.ts";
 import {
   isMissingProductOptionalFieldSchemaError,
   requestCommerceWithFallback,
@@ -63,6 +64,16 @@ function mapCatalogCategories(
     (product) => product.productCategories.nodes,
   );
 }
+
+test("commerce review routes match only the selected storefront language", () => {
+  const languages = ["pl", "en"];
+
+  assert.equal(matchesCommerceRouteLanguage("/product/polski-produkt/", "pl", languages), true);
+  assert.equal(matchesCommerceRouteLanguage("/en/product/english-product/", "pl", languages), false);
+  assert.equal(matchesCommerceRouteLanguage("/en/product/english-product/", "en", languages), true);
+  assert.equal(matchesCommerceRouteLanguage("/product/polski-produkt/", "en", languages), false);
+  assert.equal(matchesCommerceRouteLanguage("/product/single-language/", "en", ["en"]), true);
+});
 
 test("catalog terms select and deduplicate the requested category translation", () => {
   const english = term(38, "Sport wear", "EN", 15);

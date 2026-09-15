@@ -1014,7 +1014,11 @@ export function compatibleLocalizedBrandArchiveQuery(): string {
   `;
 }
 
-export async function getCommerceCatalog(languageCode: string, backendLanguageCode: string): Promise<CmsCommerceCatalog> {
+export async function getCommerceCatalog(
+  languageCode: string,
+  backendLanguageCode: string,
+  configuredLanguageCodes: readonly string[] = [],
+): Promise<CmsCommerceCatalog> {
   const requestedLanguageCode = languageCode.trim().toLowerCase();
   const languageCodeUsed = requestedLanguageCode;
   const preferCoreQueries = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
@@ -1073,7 +1077,11 @@ export async function getCommerceCatalog(languageCode: string, backendLanguageCo
     reviews:
       data.reviews?.nodes.flatMap((review) => {
         const product = review.commentedOn?.node;
-        if (!product?.title || !product.uri) return [];
+        if (
+          !product?.title
+          || !product.uri
+          || !matchesCommerceRouteLanguage(product.uri, requestedLanguageCode, configuredLanguageCodes)
+        ) return [];
         return [{
           id: review.id,
           databaseId: review.databaseId,
@@ -1087,6 +1095,21 @@ export async function getCommerceCatalog(languageCode: string, backendLanguageCo
       }) || [],
     hasMoreProducts: data.products?.pageInfo.hasNextPage || false,
   };
+}
+
+export function matchesCommerceRouteLanguage(
+  uri: string,
+  languageCode: string,
+  configuredLanguageCodes: readonly string[],
+): boolean {
+  const requestedLanguage = languageCode.trim().toLowerCase();
+  const configured = [...new Set(configuredLanguageCodes.map((code) => code.trim().toLowerCase()).filter(Boolean))];
+  if (configured.length < 2) return true;
+
+  const firstSegment = uri.split(/[?#]/, 1)[0].split("/").filter(Boolean)[0]?.toLowerCase() || "";
+  return requestedLanguage === configured[0]
+    ? !configured.slice(1).includes(firstSegment)
+    : firstSegment === requestedLanguage;
 }
 
 export async function getFeaturedProducts(
