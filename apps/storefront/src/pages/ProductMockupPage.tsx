@@ -156,10 +156,15 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     { label: product.name },
   ];
   const reviewSummary = summarizeReviews(product.reviews);
-  const primaryDescriptionHtml = productDescriptionsOrder === "long-first"
+  const isCrossSellStudio = productPageLayout === "studio-cross-sell";
+  const primaryDescriptionHtml = isCrossSellStudio
+    ? product.shortDescriptionHtml
+    : productDescriptionsOrder === "long-first"
     ? product.descriptionHtml
     : product.shortDescriptionHtml;
-  const secondaryDescriptionHtml = productDescriptionsOrder === "long-first"
+  const secondaryDescriptionHtml = isCrossSellStudio
+    ? product.descriptionHtml
+    : productDescriptionsOrder === "long-first"
     ? product.shortDescriptionHtml
     : product.descriptionHtml;
   const hasPrimaryDescription = hasMeaningfulProductHtml(primaryDescriptionHtml);
@@ -297,6 +302,14 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             </div>
           ) : null}
 
+          {isCrossSellStudio ? (
+            <ProductConnections
+              title={t("product.cross_sells")}
+              products={product.crossSells}
+              columns={relatedProductsColumns}
+            />
+          ) : null}
+
           {product.variationOptions.map((option) => (
             <fieldset key={option.label} className="grid gap-2 border-0 p-0">
               <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{option.label}</legend>
@@ -432,12 +445,12 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
             ) : null}
             {product.tags.length ? <MetaLinks label={t("product.meta.tags")} items={product.tags.map((item) => ({ name: item.name, uri: item.uri }))} /> : null}
           </dl>
-          {showStudioRelatedProductsUnderMeta ? (
+          {productPageLayout === "studio" && showStudioRelatedProductsUnderMeta ? (
             <ProductConnectionsList product={product} columns={relatedProductsColumns} />
           ) : null}
           </div>
         )}
-        details={productPageLayout === "classic" ? (
+        details={productPageLayout === "classic" || isCrossSellStudio ? (
           hasSecondaryDescription || displayAttributes.length ? (
             <section className={`grid gap-8 border-t border-zinc-200 pt-10 dark:border-zinc-800 ${
               hasSecondaryDescription && displayAttributes.length ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""
@@ -494,7 +507,13 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
         connections={
           productPageLayout === "studio" && showStudioRelatedProductsUnderMeta
             ? null
-            : <ProductConnectionsList product={product} columns={relatedProductsColumns} />
+            : (
+              <ProductConnectionsList
+                product={product}
+                columns={relatedProductsColumns}
+                includeCrossSells={!isCrossSellStudio}
+              />
+            )
         }
       />
     </div>
@@ -504,16 +523,20 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
 function ProductConnectionsList({
   product,
   columns,
+  includeCrossSells = true,
 }: {
   product: CmsProductDetail;
   columns: RelatedProductsColumns;
+  includeCrossSells?: boolean;
 }) {
   const t = useT();
   return (
     <>
       <ProductConnections title={t("product.related")} products={product.related} columns={columns} />
       <ProductConnections title={t("product.upsells")} products={product.upsells} columns={columns} />
-      <ProductConnections title={t("product.cross_sells")} products={product.crossSells} columns={columns} />
+      {includeCrossSells ? (
+        <ProductConnections title={t("product.cross_sells")} products={product.crossSells} columns={columns} />
+      ) : null}
     </>
   );
 }
@@ -551,7 +574,7 @@ function ProductPageLayoutShell({
   return (
     <>
       <section
-        data-product-page-layout="studio"
+        data-product-page-layout={layout}
         className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(28rem,0.95fr)] lg:items-start"
       >
         <div className="lg:sticky lg:top-28 lg:self-start">{gallery}</div>

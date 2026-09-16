@@ -112,6 +112,7 @@ const NEWSLETTER_POPUP_VARIANT_OPTIONS: { value: NewsletterPopupVariant; label: 
 const PRODUCT_PAGE_LAYOUT_OPTIONS: { value: ProductPageLayout; label: string }[] = [
   { value: "classic", label: "Classic" },
   { value: "studio", label: "Studio" },
+  { value: "studio-cross-sell", label: "Studio + cross-sells" },
 ];
 
 const RELATED_PRODUCTS_COLUMNS_OPTIONS: { value: RelatedProductsColumns; label: string }[] = [
@@ -731,7 +732,7 @@ export function LayoutStudioMockupPage() {
         icon={<LayoutGrid className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Product"
         title="Product page template"
-        description="Classic keeps the page in one document flow. Studio pins the gallery and gives the complete product information rail its own desktop scroll region, while retaining a single accessible flow on smaller screens."
+        description="Classic keeps the page in one document flow. Studio uses a pinned gallery and focused information rail. Studio + cross-sells keeps the short description and cross-sells in that top rail, then moves the long description below the primary section."
       >
         <ViewSwitch
           label="Product layout"

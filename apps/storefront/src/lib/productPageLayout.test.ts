@@ -11,17 +11,34 @@ const preferenceSync = readFileSync(new URL("layoutPreferencesSync.ts", import.m
 
 test("normalizes the persisted product template preference safely", () => {
   assert.equal(normalizeProductPageLayout("studio"), "studio");
+  assert.equal(normalizeProductPageLayout("studio-cross-sell"), "studio-cross-sell");
   assert.equal(normalizeProductPageLayout("classic"), "classic");
   assert.equal(normalizeProductPageLayout("unexpected"), "classic");
   assert.equal(normalizeProductPageLayout(null), "classic");
 });
 
 test("studio layout keeps product details, reviews, and connections below its primary columns", () => {
-  assert.match(productPage, /data-product-page-layout="studio"/);
+  assert.match(productPage, /data-product-page-layout=\{layout\}/);
   assert.match(productPage, /lg:sticky lg:top-28/);
   assert.match(productPage, /aria-label=\{t\("product\.information_aria"\)\}[\s\S]*?\{summary\}[\s\S]*?<\/section>[\s\S]*?\{details\}[\s\S]*?\{reviews\}[\s\S]*?\{connections\}/);
   assert.doesNotMatch(productPage, /lg:max-h-\[calc\(100dvh-8rem\)\]|lg:overflow-y-auto/);
   assert.match(productPage, /layout === "classic"/);
+});
+
+test("cross-sell studio keeps short copy and cross-sells above the long description", () => {
+  assert.match(
+    productPage,
+    /isCrossSellStudio[\s\S]*?product\.shortDescriptionHtml[\s\S]*?product\.descriptionHtml/,
+  );
+  assert.match(
+    productPage,
+    /renderProductContent\(primaryDescriptionHtml\)[\s\S]*?isCrossSellStudio[\s\S]*?product\.crossSells/,
+  );
+  assert.match(
+    productPage,
+    /productPageLayout === "classic" \|\| isCrossSellStudio[\s\S]*?renderProductContent\(secondaryDescriptionHtml\)/,
+  );
+  assert.match(productPage, /includeCrossSells=\{!isCrossSellStudio\}/);
 });
 
 test("product media stays top-aligned with thumbnails immediately after the main image", () => {
@@ -64,11 +81,11 @@ test("product wishlist supports full, icon, and disabled layouts", () => {
 test("product descriptions swap primary and secondary positions without being dropped", () => {
   assert.match(
     productPage,
-    /primaryDescriptionHtml = productDescriptionsOrder === "long-first"[\s\S]*?product\.descriptionHtml[\s\S]*?product\.shortDescriptionHtml/,
+    /primaryDescriptionHtml = isCrossSellStudio[\s\S]*?: productDescriptionsOrder === "long-first"[\s\S]*?product\.descriptionHtml[\s\S]*?product\.shortDescriptionHtml/,
   );
   assert.match(
     productPage,
-    /secondaryDescriptionHtml = productDescriptionsOrder === "long-first"[\s\S]*?product\.shortDescriptionHtml[\s\S]*?product\.descriptionHtml/,
+    /secondaryDescriptionHtml = isCrossSellStudio[\s\S]*?: productDescriptionsOrder === "long-first"[\s\S]*?product\.shortDescriptionHtml[\s\S]*?product\.descriptionHtml/,
   );
   assert.match(productPage, /renderProductContent\(primaryDescriptionHtml\)/);
   assert.match(productPage, /renderProductContent\(secondaryDescriptionHtml\)/);
@@ -91,7 +108,7 @@ test("studio layout can place all recommendation groups below product metadata",
   );
   assert.match(
     productPage,
-    /productPageLayout === "studio" && showStudioRelatedProductsUnderMeta[\s\S]*?\? null[\s\S]*?: <ProductConnectionsList/,
+    /productPageLayout === "studio" && showStudioRelatedProductsUnderMeta[\s\S]*?\? null[\s\S]*?:[\s\S]*?<ProductConnectionsList/,
   );
   assert.match(
     preferenceSync,

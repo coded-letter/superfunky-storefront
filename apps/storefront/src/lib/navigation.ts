@@ -1512,6 +1512,18 @@ export function normalizeStorefrontConfiguration(configuration: StorefrontConfig
       noPriceBehavior: isNoPriceBehavior(configuration.productPresentation?.noPriceBehavior)
         ? configuration.productPresentation.noPriceBehavior
         : DEFAULT_STOREFRONT_CONFIGURATION.productPresentation.noPriceBehavior,
+      inquiryHeading: nonEmptyConfigurationString(
+        configuration.productPresentation?.inquiryHeading,
+        DEFAULT_STOREFRONT_CONFIGURATION.productPresentation.inquiryHeading,
+      ),
+      inquiryButtonLabel: nonEmptyConfigurationString(
+        configuration.productPresentation?.inquiryButtonLabel,
+        DEFAULT_STOREFRONT_CONFIGURATION.productPresentation.inquiryButtonLabel,
+      ),
+      inquiryCopy: nonEmptyConfigurationString(
+        configuration.productPresentation?.inquiryCopy,
+        DEFAULT_STOREFRONT_CONFIGURATION.productPresentation.inquiryCopy,
+      ),
     },
     codeHighlighting: {
       lightTheme: isPrismLightTheme(configuration.codeHighlighting?.lightTheme)
@@ -1609,7 +1621,11 @@ export function normalizeStorefrontLayoutConfiguration(
       defaults.newsletterPopupVariant,
     ),
     newsletterPopupCooldownDays: pickBoundedInt(source.newsletterPopupCooldownDays, 1, 365, defaults.newsletterPopupCooldownDays),
-    productPageLayout: pickEnum(source.productPageLayout, ["classic", "studio"] as const, defaults.productPageLayout),
+    productPageLayout: pickEnum(
+      source.productPageLayout,
+      ["classic", "studio", "studio-cross-sell"] as const,
+      defaults.productPageLayout,
+    ),
     relatedProductsColumns: pickEnum(source.relatedProductsColumns, ["2", "3", "4"] as const, defaults.relatedProductsColumns),
     showStudioRelatedProductsUnderMeta: pickBoolean(
       source.showStudioRelatedProductsUnderMeta,
@@ -1857,6 +1873,10 @@ function normalizeExternalHttpUrl(value: string | null | undefined): string | nu
 
 function isNoPriceBehavior(value: unknown): value is NoPriceBehavior {
   return value === "free" || value === "inquiry";
+}
+
+function nonEmptyConfigurationString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function isPrismLightTheme(value: unknown): value is PrismLightTheme {
