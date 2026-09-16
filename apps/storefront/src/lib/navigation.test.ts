@@ -52,6 +52,21 @@ test("interaction sounds remain disabled unless the backend explicitly enables t
   }).soundsEnabled, true);
 });
 
+test("blank legacy inquiry copy falls back to localized storefront defaults", () => {
+  const defaults = normalizeStorefrontConfiguration(null);
+  const normalized = normalizeStorefrontConfiguration({
+    ...defaults,
+    productPresentation: {
+      ...defaults.productPresentation,
+      inquiryHeading: " ",
+      inquiryButtonLabel: "",
+      inquiryCopy: "\t",
+    },
+  });
+
+  assert.deepEqual(normalized.productPresentation, defaults.productPresentation);
+});
+
 test("prerender and runtime share the current navigation hydration cache key", () => {
   assert.equal(navigationDataCacheKey("en"), "navigation-data:v16:en");
   assert.match(navigationDataSource, /navigationDataCacheKey\(languageCode\)/);
@@ -638,7 +653,7 @@ test("normalizeStorefrontLayoutConfiguration preserves an intentional all-hidden
 test("normalizeStorefrontLayoutConfiguration strictly allowlists enum fields instead of passing raw backend strings through", () => {
   assert.match(
     navigationSource,
-    /productPageLayout: pickEnum\(source\.productPageLayout, \["classic", "studio"\] as const, defaults\.productPageLayout\)/,
+    /productPageLayout: pickEnum\(\s*source\.productPageLayout,\s*\["classic", "studio", "studio-cross-sell"\] as const,\s*defaults\.productPageLayout,\s*\)/,
   );
   assert.match(
     navigationSource,

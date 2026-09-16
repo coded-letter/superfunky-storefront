@@ -43,4 +43,9 @@ test("flagship artifact pages reuse the seeded page lookup through the final ren
     contentNodeRouteSource,
     /artifactRouteHydrationEnabled && page[\s\S]*pageCacheKey=\{pageLookupCacheKey\}/,
   );
+  assert.match(
+    contentNodeRouteSource,
+    /artifactRouteHydrationEnabled && page && !isLoading && \(!nodeInfo \|\| nodeInfo\.type === "Page"\)/,
+  );
+  assert.match(contentNodeRouteSource, /artifactPageTypePending/);
 });

@@ -132,9 +132,10 @@ export function ContentNodeRoute() {
   // of navigation-shell readiness. `isRouteContentReady` mirrors the negation of every
   // loading/fallback gate below — once true, the render below returns real content or
   // a definitive not-found state rather than another loading placeholder.
+  const artifactPageTypePending = artifactRouteHydrationEnabled && Boolean(page) && isLoading;
   const isRouteContentReady = Boolean(matchedRoute) || (
-    (!isLoadingRouteRegistry || (artifactRouteHydrationEnabled && Boolean(page || nodeInfo)))
-    && !(isLoading && !page)
+    (!isLoadingRouteRegistry || (artifactRouteHydrationEnabled && Boolean(nodeInfo || (page && !isLoading))))
+    && !(isLoading && (!page || artifactRouteHydrationEnabled))
     && !(isLoadingPage && !nodeInfo)
     && !(shouldResolveLanguageFallback && (isLoadingLanguageFallback || languageFallbackPath))
   );
@@ -145,7 +146,7 @@ export function ContentNodeRoute() {
     if (isRouteContentReady) markRouteDataReady();
   }, [isRouteContentReady, uri]);
 
-  if (artifactRouteHydrationEnabled && page) {
+  if (artifactRouteHydrationEnabled && page && !isLoading && (!nodeInfo || nodeInfo.type === "Page")) {
     return (
       <PageMockupPage
         routeKey={matchedRoute?.key}
@@ -169,7 +170,7 @@ export function ContentNodeRoute() {
   // may still refine the route type without holding a known page or post off-screen.
   const routeRegistryBlocksKnownContent = isLoadingRouteRegistry
     && (!artifactRouteHydrationEnabled || (!page && !nodeInfo));
-  if (routeRegistryBlocksKnownContent || (isLoading && !page) || (isLoadingPage && !nodeInfo)) {
+  if (routeRegistryBlocksKnownContent || artifactPageTypePending || (isLoading && !page) || (isLoadingPage && !nodeInfo)) {
     return <ContentLoadingState label="Resolving content" />;
   }
   const fatalPageError = nodeInfo ? null : pageError;
