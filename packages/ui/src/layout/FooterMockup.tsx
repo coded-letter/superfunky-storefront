@@ -20,6 +20,8 @@ import { filterVisibleSocialLinks } from "./FooterMockup.socialVisibility";
 export type FooterLinkItem = {
   label: string;
   href: string;
+  target?: string;
+  linkRelationship?: string;
   /** Sanitized WordPress menu-item description HTML. */
   description?: string;
   cssClasses?: string[];
@@ -621,6 +623,8 @@ function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: numb
       <div className="flex items-center justify-between gap-2">
         <a
           href={item.href}
+          target={item.target}
+          rel={footerLinkRel(item)}
           className={`${depth ? "text-zinc-500" : "text-zinc-400"} inline-flex min-h-12 items-center py-2 text-sm no-underline transition hover:text-white`}
         >
           {item.label}
@@ -659,6 +663,15 @@ function FooterNavItem({ item, depth = 0 }: { item: FooterLinkItem; depth?: numb
       ) : null}
     </li>
   );
+}
+
+function footerLinkRel(item: FooterLinkItem): string | undefined {
+  const relationships = new Set(item.linkRelationship?.split(/\s+/).filter(Boolean) || []);
+  if (item.target === "_blank") {
+    relationships.add("noopener");
+    relationships.add("noreferrer");
+  }
+  return relationships.size ? [...relationships].join(" ") : undefined;
 }
 
 /** Shared email-capture form used by all three newsletter layouts — `stacked` swaps

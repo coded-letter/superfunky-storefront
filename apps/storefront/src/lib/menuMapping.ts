@@ -62,7 +62,13 @@ export function mapFooterColumns(items: HeaderNavItem[]): FooterColumn[] {
     // description belongs to the heading and must not be rendered twice.
     links: item.children?.length
       ? item.children.map(mapFooterLink)
-      : [{ label: item.label, href: item.href, cssClasses: item.cssClasses }],
+      : [{
+          label: item.label,
+          href: item.href,
+          target: item.target,
+          linkRelationship: item.linkRelationship,
+          cssClasses: item.cssClasses,
+        }],
   }));
 }
 
@@ -70,6 +76,8 @@ function mapFooterLink(item: HeaderNavItem): FooterLinkItem {
   return {
     label: item.label,
     href: item.href,
+    target: item.target,
+    linkRelationship: item.linkRelationship,
     description: item.description,
     cssClasses: item.cssClasses,
     children: item.children?.map(mapFooterLink),

@@ -23,6 +23,7 @@ import { navigationDataCacheKey } from "./navigationCacheKey.mjs";
 const navigationSource = readFileSync(new URL("navigation.ts", import.meta.url), "utf8");
 const navigationDataSource = readFileSync(new URL("../state/navigationData.tsx", import.meta.url), "utf8");
 const prerenderSource = readFileSync(new URL("../../scripts/prerender.mjs", import.meta.url), "utf8");
+const footerSource = readFileSync(new URL("../../../../packages/ui/src/layout/FooterMockup.tsx", import.meta.url), "utf8");
 
 let dom: JSDOM;
 
@@ -557,6 +558,38 @@ test("carries descriptions, classes, and arbitrary descendants into footer links
   assert.equal(columns[0].links[0].description, "Browse the full catalog");
   assert.deepEqual(columns[0].links[0].cssClasses, ["expanded"]);
   assert.equal(columns[0].links[0].children?.[0].children?.[0].label, "Summer");
+});
+
+test("preserves new-tab targets and safe relationships across all footer layouts", () => {
+  const columns = mapFooterColumns(
+    mapMenuItems([
+      buildRawItem({
+        databaseId: 1,
+        label: "AI links",
+      }),
+      buildRawItem({
+        databaseId: 2,
+        parentDatabaseId: 1,
+        label: "Ask ChatGPT",
+        url: "https://chat.openai.com/",
+        target: "_blank",
+        linkRelationship: "nofollow",
+      }),
+      buildRawItem({
+        databaseId: 3,
+        label: "Standalone external link",
+        url: "https://example.com/",
+        target: "_blank",
+      }),
+    ], normalizeHref),
+  );
+
+  assert.equal(columns[0].links[0].target, "_blank");
+  assert.equal(columns[0].links[0].linkRelationship, "nofollow");
+  assert.equal(columns[1].links[0].target, "_blank");
+  assert.match(footerSource, /target=\{item\.target\}/);
+  assert.match(footerSource, /item\.target === "_blank"[\s\S]*relationships\.add\("noopener"\)[\s\S]*relationships\.add\("noreferrer"\)/);
+  assert.match(prerenderSource, /item\.target === "_blank" \? "noopener noreferrer"/);
 });
 
 test("does not duplicate a childless top-level description onto its single link", () => {
