@@ -5,6 +5,7 @@ import type { ProductReview, ProductVariationCombo, ProductVariationOption } fro
 import {
   graphqlRequest,
   hasOnlyMissingGraphqlFields,
+  restUrl,
   STOREFRONT_BACKEND_PROFILE,
 } from "@funky/sdk";
 import {
@@ -28,7 +29,10 @@ import {
   resolveCommerceProductType,
   type CommerceProductType,
 } from "../../../../packages/commerce/src/productTypes.ts";
-import { shouldPreferCoreGraphqlQueries } from "./profileGraphqlCompatibility.ts";
+import {
+  shouldPreferCoreGraphqlQueries,
+  shouldPreferUnscopedCommerceQueries,
+} from "./profileGraphqlCompatibility.ts";
 import { mapPublicEngagementRating, type PublicEngagementRatingSummary } from "./engagementRatings.ts";
 import { normalizeProductPriceBehavior, type ProductPriceBehavior } from "./productPriceMode.ts";
 import {
@@ -279,6 +283,45 @@ type CatalogBrandsResult = {
 
 type CatalogTagsResult = {
   productTags: { nodes: RawTerm[] } | null;
+};
+
+type StoreApiCatalogProduct = {
+  id: number;
+  name: string;
+  slug: string;
+  permalink: string;
+  short_description?: string;
+  description?: string;
+  type?: string;
+  featured?: boolean;
+  on_sale?: boolean;
+  is_in_stock?: boolean;
+  stock_quantity?: number | null;
+  prices?: {
+    price?: string;
+    regular_price?: string;
+    sale_price?: string;
+    currency_code?: string;
+    currency_minor_unit?: number;
+  };
+  images?: {
+    id: number;
+    src: string;
+    alt?: string;
+    name?: string;
+  }[];
+  categories?: {
+    id: number;
+    name: string;
+    slug: string;
+    link?: string;
+  }[];
+  tags?: {
+    id: number;
+    name: string;
+    slug: string;
+    link?: string;
+  }[];
 };
 
 type FeaturedProductsResult = {
@@ -1021,7 +1064,10 @@ export async function getCommerceCatalog(
 ): Promise<CmsCommerceCatalog> {
   const requestedLanguageCode = languageCode.trim().toLowerCase();
   const languageCodeUsed = requestedLanguageCode;
-  const preferCoreQueries = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
+  const preferCoreQueries = shouldPreferUnscopedCommerceQueries(
+    STOREFRONT_BACKEND_PROFILE,
+    configuredLanguageCodes,
+  );
   const [
     {
       data,
@@ -1056,20 +1102,25 @@ export async function getCommerceCatalog(
       preferCoreQueries,
     ),
   ]);
+  const graphqlProducts = data.products?.nodes || [];
+  const storeApiProducts = !graphqlProducts.length && configuredLanguageCodes.length <= 1
+    ? await getStoreApiCatalogProducts()
+    : [];
+  const catalogProducts = graphqlProducts.length ? graphqlProducts : storeApiProducts;
 
   return {
     requestedLanguageCode,
     languageCode: usesSourceLanguageFallback ? COMMERCE_SOURCE_LANGUAGE : languageCodeUsed,
     usesSourceLanguageFallback,
-    products: data.products?.nodes.map(mapProductCard) || [],
+    products: catalogProducts.map(mapProductCard),
     categories: mapCatalogTerms(
-      data.products?.nodes,
+      catalogProducts,
       data.productCategories?.nodes,
       usesSourceLanguageFallback ? undefined : languageCodeUsed,
     ),
     tags: mapTerms(tagData?.productTags?.nodes, languageCodeUsed),
     brands: mapCatalogTerms(
-      data.products?.nodes,
+      catalogProducts,
       brandData?.productBrands?.nodes,
       usesSourceLanguageFallback ? undefined : languageCodeUsed,
       (product) => product.productBrands?.nodes,
@@ -1095,6 +1146,82 @@ export async function getCommerceCatalog(
       }) || [],
     hasMoreProducts: data.products?.pageInfo.hasNextPage || false,
   };
+}
+
+export function mapStoreApiCatalogProduct(product: StoreApiCatalogProduct): RawProductCard {
+  const productUri = storefrontPathFromUrl(product.permalink, `/product/${product.slug}/`);
+  const images = (product.images || []).flatMap((image) => image.src ? [{
+    id: `store-api-media:${image.id}`,
+    sourceUrl: image.src,
+    altText: image.alt || "",
+    title: image.name || "",
+  }] : []);
+  const mapTerm = (term: NonNullable<StoreApiCatalogProduct["categories"]>[number]): RawTerm => ({
+    id: `store-api-term:${term.id}`,
+    databaseId: term.id,
+    name: term.name,
+    slug: term.slug,
+    uri: storefrontPathFromUrl(term.link, `/product-category/${term.slug}/`),
+  });
+  const price = (value?: string) => {
+    if (!value) return null;
+    const minorUnit = product.prices?.currency_minor_unit ?? 2;
+    return `${(Number(value) / (10 ** minorUnit)).toFixed(minorUnit)} ${product.prices?.currency_code || ""}`.trim();
+  };
+
+  return {
+    __typename: product.type === "variable" ? "VariableProduct" : product.type === "external" ? "ExternalProduct" : "SimpleProduct",
+    id: `store-api-product:${product.id}`,
+    databaseId: product.id,
+    slug: product.slug,
+    uri: productUri,
+    name: product.name,
+    shortDescription: product.short_description || null,
+    description: product.description || null,
+    engagementRating: {
+      average: null,
+      count: 0,
+      guestCount: 0,
+      authoredCount: 0,
+      histogram: [0, 0, 0, 0, 0],
+    },
+    featured: product.featured === true,
+    onSale: product.on_sale === true,
+    image: images[0] || null,
+    galleryImages: { nodes: images.slice(1) },
+    productCategories: { nodes: (product.categories || []).map(mapTerm) },
+    productTags: { nodes: (product.tags || []).map(mapTerm) },
+    productBrands: { nodes: [] },
+    price: price(product.prices?.price),
+    regularPrice: price(product.prices?.regular_price),
+    salePrice: product.on_sale ? price(product.prices?.sale_price) : null,
+    stockStatus: product.is_in_stock === false ? "OUT_OF_STOCK" : "IN_STOCK",
+    stockQuantity: product.stock_quantity ?? null,
+    variations: null,
+  };
+}
+
+async function getStoreApiCatalogProducts(): Promise<RawProductCard[]> {
+  const endpoint = restUrl("wc/store/v1/products?per_page=24");
+  if (!endpoint) return [];
+  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(`WooCommerce Store API catalog fallback failed with status ${response.status}`);
+  }
+  const products: unknown = await response.json();
+  if (!Array.isArray(products)) {
+    throw new Error("WooCommerce Store API catalog fallback returned a non-array payload");
+  }
+  return (products as StoreApiCatalogProduct[]).map(mapStoreApiCatalogProduct);
+}
+
+function storefrontPathFromUrl(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  try {
+    return new URL(value).pathname || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function matchesCommerceRouteLanguage(

@@ -111,6 +111,19 @@ test("catalog term mapping preserves assigned terms when language metadata is un
   );
 });
 
+test("catalog term mapping preserves non-empty listings when product nodes are unavailable", () => {
+  const hoodies = term(21, "Hoodies");
+  hoodies.count = 1;
+
+  assert.deepEqual(
+    mapLocalizedCatalogTerms([], [hoodies], "en", () => []).map(({ databaseId, count }) => ({
+      databaseId,
+      count,
+    })),
+    [{ databaseId: 21, count: 1 }],
+  );
+});
+
 test("localized term mapping excludes language-less terms when exact metadata is available", () => {
   const english = term(38, "Sport wear", "EN", 15);
   const languageLess = term(15, "Sportowe");

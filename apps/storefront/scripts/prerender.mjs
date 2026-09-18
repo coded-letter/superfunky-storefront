@@ -2964,7 +2964,7 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         enabled: commerceRoutesAvailable,
         load: () => getCommerceCatalog(languageCode, backendLanguageCode, configuredLanguageCodes),
         entries: (value) => [{
-          cacheKey: `commerce-data:v5:${languageCode}:${backendLanguageCode}`,
+          cacheKey: `commerce-data:v6:${languageCode}:${backendLanguageCode}`,
           value,
           dependencies: ["product:catalog", `translation:${languageCode}`],
         }],

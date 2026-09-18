@@ -21,18 +21,51 @@ import {
   getCompatibilityRetryCount,
   resetCompatibilityRetryCountForTests,
 } from "./contentReadinessInstrumentation.ts";
+import { shouldPreferUnscopedCommerceQueries } from "./profileGraphqlCompatibility.ts";
 import {
   COMPATIBLE_FEATURED_PRODUCT_QUERY,
   CORE_FEATURED_PRODUCT_QUERY,
   FEATURED_PRODUCT_QUERY,
   PRODUCT_LIST_CARD_FIELDS,
   archiveQuery,
+  mapStoreApiCatalogProduct,
   mapProductCard,
   normalizeProductTaxonomyIdentifier,
   type RawProductCard,
 } from "./commerce.ts";
 
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+
+test("single-locale commerce avoids language filters that can silently hide products", () => {
+  assert.equal(shouldPreferUnscopedCommerceQueries("full", ["en"]), true);
+  assert.equal(shouldPreferUnscopedCommerceQueries("full", ["pl", "en"]), false);
+  assert.equal(shouldPreferUnscopedCommerceQueries("shop", ["en", "pl"]), true);
+});
+
+test("Woo Store API catalog products map into shortcode product cards", () => {
+  const product = mapProductCard(mapStoreApiCatalogProduct({
+    id: 500,
+    name: "Keep Fighting",
+    slug: "keep-fighting",
+    permalink: "https://backend.example/sklep/keep-fighting/",
+    type: "simple",
+    is_in_stock: true,
+    prices: {
+      price: "12900",
+      regular_price: "12900",
+      currency_code: "PLN",
+      currency_minor_unit: 2,
+    },
+    images: [{ id: 9, src: "https://backend.example/image.webp", alt: "Product" }],
+    categories: [{ id: 20, name: "Koszulki", slug: "koszulki" }],
+  }));
+
+  assert.equal(product.name, "Keep Fighting");
+  assert.equal(product.uri, "/sklep/keep-fighting/");
+  assert.equal(product.priceAmount, 129);
+  assert.deepEqual(product.categorySlugs, ["koszulki"]);
+  assert.equal(product.inStock, true);
+});
 
 test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {
   assert.deepEqual(
