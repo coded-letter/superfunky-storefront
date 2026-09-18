@@ -38,6 +38,7 @@ const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
 test("localized Woo product permalinks route to product details", () => {
   assert.match(appSource, /path="\/sklep\/:slug" element=\{<ProductMockupPage \/>}/);
+  assert.match(appSource, /path="\/kategoria-produktu\/\*" element=\{<ProductCategoryMockupPage \/>}/);
 });
 
 test("single-locale commerce avoids language filters that can silently hide products", () => {
@@ -75,6 +76,15 @@ test("product detail loading falls back to the Woo Store API when WooGraphQL omi
   const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
   assert.match(source, /if \(!data\?\.product\) return getStoreApiProductDetail\(slug\)/);
   assert.match(source, /wc\/store\/v1\/products\?slug=/);
+  assert.match(source, /wc\/store\/v1\/products\/\$\{productId\}\/variations\?per_page=100/);
+  assert.match(source, /variationOptions,\s*variationCombos,/);
+});
+
+test("single-locale catalogs merge current Store API products with GraphQL products", () => {
+  const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
+  assert.match(source, /const storeApiProducts = configuredLanguageCodes\.length <= 1/);
+  assert.match(source, /\.\.\.storeApiProducts\.filter/);
+  assert.match(source, /wc\/store\/v1\/products\?per_page=100/);
 });
 
 test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {

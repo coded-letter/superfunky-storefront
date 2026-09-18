@@ -1446,7 +1446,7 @@ async function discoverStoreApiProductRouteNodes() {
   if (!Array.isArray(products)) {
     throw new Error("WooCommerce Store API route discovery returned a non-array payload");
   }
-  return products.flatMap((product) => {
+  const routeNodes = products.flatMap((product) => {
     const databaseId = Number(product?.id);
     const name = typeof product?.name === "string" ? product.name.trim() : "";
     const permalink = typeof product?.permalink === "string" ? product.permalink : "";
@@ -1457,7 +1457,7 @@ async function discoverStoreApiProductRouteNodes() {
     } catch {
       return [];
     }
-    return [{
+    const productNode = {
       connectionName: "contentNodes",
       node: {
         __typename: product.type === "variable" ? "VariableProduct" : "SimpleProduct",
@@ -1475,8 +1475,36 @@ async function discoverStoreApiProductRouteNodes() {
           mediaDetails: null,
         } : null,
       },
-    }];
+    };
+    const categoryNodes = Array.isArray(product.categories)
+      ? product.categories.flatMap((category) => {
+          const categoryId = Number(category?.id);
+          const categoryName = typeof category?.name === "string" ? category.name.trim() : "";
+          const categorySlug = typeof category?.slug === "string" ? category.slug : "";
+          const categoryLink = typeof category?.link === "string" ? category.link : "";
+          if (!Number.isInteger(categoryId) || categoryId <= 0 || !categoryName || !categorySlug || !categoryLink) return [];
+          try {
+            return [{
+              connectionName: "terms",
+              node: {
+                __typename: "ProductCategory",
+                databaseId: categoryId,
+                name: categoryName,
+                slug: categorySlug,
+                uri: new URL(categoryLink).pathname,
+              },
+            }];
+          } catch {
+            return [];
+          }
+        })
+      : [];
+    return [productNode, ...categoryNodes];
   });
+  return [...new Map(routeNodes.map((entry) => [
+    `${entry.node.__typename}:${entry.node.databaseId}`,
+    entry,
+  ])).values()];
 }
 
 const svgIntrinsicSizeCache = new Map();

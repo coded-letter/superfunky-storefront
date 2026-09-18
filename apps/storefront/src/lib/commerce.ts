@@ -330,6 +330,18 @@ type StoreApiCatalogProduct = {
     has_variations?: boolean;
     terms?: { id: number; name: string; slug: string }[];
   }[];
+  variations?: { id: number }[];
+};
+
+type StoreApiVariation = {
+  id: number;
+  attributes?: { name: string; value: string }[];
+  prices?: StoreApiCatalogProduct["prices"];
+  image?: { id: number; src: string };
+  sku?: string;
+  is_in_stock?: boolean;
+  stock_quantity?: number | null;
+  backorders_allowed?: boolean;
 };
 
 type FeaturedProductsResult = {
@@ -1111,10 +1123,20 @@ export async function getCommerceCatalog(
     ),
   ]);
   const graphqlProducts = data.products?.nodes || [];
-  const storeApiProducts = !graphqlProducts.length && configuredLanguageCodes.length <= 1
+  const storeApiProducts = configuredLanguageCodes.length <= 1
     ? await getStoreApiCatalogProducts()
     : [];
-  const catalogProducts = graphqlProducts.length ? graphqlProducts : storeApiProducts;
+  const graphqlProductKeys = new Set(graphqlProducts.flatMap((product) => [
+    product.databaseId ? `id:${product.databaseId}` : "",
+    product.slug ? `slug:${product.slug}` : "",
+  ]));
+  const catalogProducts = [
+    ...graphqlProducts,
+    ...storeApiProducts.filter((product) =>
+      !graphqlProductKeys.has(`id:${product.databaseId}`)
+      && !graphqlProductKeys.has(`slug:${product.slug}`),
+    ),
+  ];
 
   return {
     requestedLanguageCode,
@@ -1210,9 +1232,10 @@ export function mapStoreApiCatalogProduct(product: StoreApiCatalogProduct): RawP
 }
 
 async function getStoreApiCatalogProducts(): Promise<RawProductCard[]> {
-  const endpoint = restUrl("wc/store/v1/products?per_page=24");
+  const endpoint = restUrl("wc/store/v1/products?per_page=100");
   if (!endpoint) return [];
   const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (response.status === 404) return [];
   if (!response.ok) {
     throw new Error(`WooCommerce Store API catalog fallback failed with status ${response.status}`);
   }
@@ -1421,6 +1444,46 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
     variation: attribute.has_variations === true,
     visible: true,
   }));
+  const variationPayload = product.type === "variable"
+    ? await getStoreApiVariations(product.id)
+    : [];
+  const variationOptions: ProductVariationOption[] = attributes
+    .filter((attribute) => attribute.variation)
+    .map((attribute) => ({
+      label: attribute.label,
+      values: attribute.options,
+      ...(Object.keys(Object.fromEntries(attribute.options.flatMap((value) => {
+        const color = resolveVariationSwatchColor(attribute.label, value);
+        return color ? [[value, color]] : [];
+      }))).length
+        ? {
+            swatches: Object.fromEntries(attribute.options.flatMap((value) => {
+              const color = resolveVariationSwatchColor(attribute.label, value);
+              return color ? [[value, color]] : [];
+            })),
+          }
+        : {}),
+    }));
+  const variationCombos: ProductVariationCombo[] = variationPayload.map((variation) => {
+    const price = formatStoreApiPrice(variation.prices);
+    return {
+      id: `store-api-variation:${variation.id}`,
+      databaseId: variation.id,
+      options: Object.fromEntries((variation.attributes || []).map(({ name, value }) => [name, value])),
+      priceLabel: price.current,
+      priceAmount: parseLocalizedPrice(price.current) ?? undefined,
+      compareAtPriceLabel: price.sale && price.regular !== price.current ? price.regular : undefined,
+      compareAtPriceAmount: price.sale && price.regular !== price.current
+        ? parseLocalizedPrice(price.regular) ?? undefined
+        : undefined,
+      imageId: variation.image?.id ? String(variation.image.id) : undefined,
+      imageUrl: variation.image?.src,
+      sku: variation.sku || "",
+      inStock: variation.backorders_allowed === true || variation.is_in_stock !== false,
+      stockQuantity: variation.stock_quantity ?? null,
+      backordersAllowed: variation.backorders_allowed === true,
+    };
+  });
 
   return normalizeProductDetail({
     id: rawProduct.id,
@@ -1437,8 +1500,8 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
     currencyPrices: {},
     gallery,
     attributes,
-    variationOptions: [],
-    variationCombos: [],
+    variationOptions,
+    variationCombos,
     categories: mapTerms(rawProduct.productCategories?.nodes),
     tags: mapTerms(rawProduct.productTags?.nodes),
     brands: [],
@@ -1450,6 +1513,37 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
     externalButtonText: null,
     priceBehavior: normalizeProductPriceBehavior(null),
   });
+}
+
+async function getStoreApiVariations(productId: number): Promise<StoreApiVariation[]> {
+  const endpoint = restUrl(`wc/store/v1/products/${productId}/variations?per_page=100`);
+  if (!endpoint) return [];
+  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(`WooCommerce Store API variation fallback failed with status ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error("WooCommerce Store API variation fallback returned a non-array payload");
+  }
+  return payload as StoreApiVariation[];
+}
+
+function formatStoreApiPrice(prices: StoreApiCatalogProduct["prices"]): {
+  current: string;
+  regular: string;
+  sale: string;
+} {
+  const format = (value?: string) => {
+    if (!value) return "";
+    const minorUnit = prices?.currency_minor_unit ?? 2;
+    return `${(Number(value) / (10 ** minorUnit)).toFixed(minorUnit)} ${prices?.currency_code || ""}`.trim();
+  };
+  return {
+    current: format(prices?.price),
+    regular: format(prices?.regular_price),
+    sale: format(prices?.sale_price),
+  };
 }
 
 async function loadRemainingProductReviews(product: RawProductDetail): Promise<RawProductDetail> {
@@ -1588,7 +1682,9 @@ export async function getProductArchive(
     }
     if (data?.archive) break;
   }
-  if (!initialData?.archive || !resolvedQuery || !resolvedIdentifier) return null;
+  if (!initialData?.archive || !resolvedQuery || !resolvedIdentifier) {
+    return getStoreApiProductArchive(taxonomy, normalizedIdentifier.slug, identifier, languageCode);
+  }
 
   const loadArchivePage = async (first: number, after: string | null): Promise<ArchiveResult> => {
     const { data, errors } = await graphqlRequest<ArchiveResult>(resolvedQuery, {
@@ -1629,6 +1725,23 @@ export async function getProductArchive(
     },
   );
 
+  const storeApiArchive = await getStoreApiProductArchive(
+    taxonomy,
+    normalizedIdentifier.slug,
+    identifier,
+    languageCode,
+  );
+  const productKeys = new Set(products.flatMap((product) => [
+    product.databaseId ? `id:${product.databaseId}` : "",
+    product.slug ? `slug:${product.slug}` : "",
+  ]));
+  const mergedProducts = [
+    ...products,
+    ...(storeApiArchive?.products || []).filter((product) =>
+      !productKeys.has(`id:${product.databaseId}`)
+      && !productKeys.has(`slug:${product.slug}`),
+    ),
+  ];
   const archive = initialData.archive;
   const archiveLanguageCode = archive.language?.code?.toLowerCase() || null;
   return {
@@ -1650,13 +1763,49 @@ export async function getProductArchive(
     slug: archive.slug || "",
     uri: archive.uri || identifier,
     descriptionHtml: archive.description || "",
-    count: archive.count || 0,
+    count: Math.max(archive.count || 0, mergedProducts.length),
     imageUrl: archive.image?.sourceUrl || null,
-    products: products.map(mapProductCard),
+    products: mergedProducts.map((product) => "commerceProductType" in product ? product : mapProductCard(product)),
     hasMoreProducts: hasMore,
     siblings: mapTerms(initialData.siblings?.nodes, archiveLanguageCode || languageCode.trim().toLowerCase()),
     children: mapTerms(archive.children?.nodes, archiveLanguageCode || languageCode.trim().toLowerCase()),
     seo: mapTaxonomySeo(archive.seo || null),
+  };
+}
+
+async function getStoreApiProductArchive(
+  taxonomy: CommerceTaxonomy,
+  slug: string,
+  identifier: string,
+  languageCode: string,
+): Promise<CmsProductArchive | null> {
+  if (taxonomy === "brand") return null;
+  const products = await getStoreApiCatalogProducts();
+  const termKey = taxonomy === "category" ? "productCategories" : "productTags";
+  const matchingProducts = products.filter((product) =>
+    product[termKey]?.nodes.some((term) => term.slug === slug),
+  );
+  const term = matchingProducts
+    .flatMap((product) => product[termKey]?.nodes || [])
+    .find((candidate) => candidate.slug === slug);
+  if (!term) return null;
+  return {
+    taxonomy,
+    languageCode,
+    translations: [],
+    id: term.id,
+    databaseId: term.databaseId,
+    name: term.name || TAXONOMY_FALLBACK_NAME[taxonomy],
+    slug,
+    uri: term.uri || identifier,
+    descriptionHtml: "",
+    count: matchingProducts.length,
+    imageUrl: null,
+    products: matchingProducts.map(mapProductCard),
+    hasMoreProducts: false,
+    siblings: [],
+    children: [],
+    seo: mapTaxonomySeo(null),
   };
 }
 
