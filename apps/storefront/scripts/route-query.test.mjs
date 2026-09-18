@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCoreRoutesQuery, buildRoutesQuery } from "./route-query.mjs";
+import {
+  buildConfiguredFrontPageQuery,
+  buildCoreRoutesQuery,
+  buildRoutesQuery,
+} from "./route-query.mjs";
 
 test("dependency-free sitemap discovery uses only core and theme route fields", () => {
   const query = buildRoutesQuery();
@@ -13,6 +17,21 @@ test("dependency-free sitemap discovery uses only core and theme route fields", 
   assert.doesNotMatch(query, /ExternalProduct|ProductCategory|PostTypeSEO|TaxonomySEO/);
   assert.doesNotMatch(query, /isShopPage/);
   assert.doesNotMatch(query, /language \{ code \}|translations/);
+});
+
+test("configured front page discovery resolves an omitted page directly by database ID", () => {
+  const query = buildConfiguredFrontPageQuery({
+    publicRobots: true,
+    specialPages: true,
+    shopPages: true,
+    seo: true,
+  });
+
+  assert.match(query, /query StorefrontConfiguredFrontPage\(\$databaseId: ID!\)/);
+  assert.match(query, /page\(id: \$databaseId, idType: DATABASE_ID\)/);
+  assert.match(query, /databaseId\s+slug\s+isFrontPage\s+isPrivacyPage\s+isShopPage\s+isTermsPage/);
+  assert.match(query, /funkycommercePublicRobots/);
+  assert.match(query, /StorefrontPostTypeRouteSeo/);
 });
 
 test("shop sitemap discovery adds WooCommerce routes without optional SEO or language fields", () => {

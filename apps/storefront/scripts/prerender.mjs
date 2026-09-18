@@ -41,7 +41,11 @@ import {
   hasOnlyMissingRootField,
   hasOnlyUnknownTypes,
 } from "./optional-graphql.mjs";
-import { buildCoreRoutesQuery, buildRoutesQuery } from "./route-query.mjs";
+import {
+  buildConfiguredFrontPageQuery,
+  buildCoreRoutesQuery,
+  buildRoutesQuery,
+} from "./route-query.mjs";
 import {
   artifactConfigFromEnvironment,
   artifactProxyRedirects,
@@ -1354,14 +1358,34 @@ async function discoverCmsRoutes({
     if (!readingSettings.pageOnFront) {
       throw new Error("WordPress is configured for a static homepage without a pageOnFront");
     }
-    const configuredFrontPage = discoveredNodes.find(
+    let configuredFrontPage = discoveredNodes.find(
       ({ node, connectionName }) =>
         connectionName === "contentNodes"
         && node?.__typename === "Page"
         && node.databaseId === readingSettings.pageOnFront,
     )?.node;
     if (!configuredFrontPage) {
-      throw new Error(`The configured static front page ${readingSettings.pageOnFront} was not discovered`);
+      const payload = await requestGraphql(
+        buildConfiguredFrontPageQuery({
+          multilingual,
+          publicRobots: publicRobotsSupported,
+          specialPages: specialPagesSupported,
+          shopPages: shopPagesSupported,
+          translations: configuredLanguageCodes.length > 1,
+          seo: seoSupported,
+        }),
+        { databaseId: readingSettings.pageOnFront },
+        "WPGraphQL configured front page discovery",
+        { attempts: 5, timeoutMs: 60_000 },
+      );
+      configuredFrontPage = payload.data?.page;
+      if (
+        configuredFrontPage?.__typename !== "Page"
+        || configuredFrontPage.databaseId !== readingSettings.pageOnFront
+      ) {
+        throw new Error(`The configured static front page ${readingSettings.pageOnFront} was not discovered`);
+      }
+      discoveredNodes.push({ node: configuredFrontPage, connectionName: "contentNodes" });
     }
     frontPageIds.add(configuredFrontPage.databaseId);
     for (const translation of configuredFrontPage.translations || []) {
