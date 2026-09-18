@@ -129,6 +129,13 @@ test("dedicated shortcode-backed routes remain discoverable", () => {
   );
 });
 
+test("localized legal page slugs resolve checkout route keys", () => {
+  assert.deepEqual(
+    classifyPageRouteKeys(page({ uri: "/regulamin/", slug: "regulamin", isTermsPage: false })),
+    ["terms"],
+  );
+});
+
 test("a WordPress posts page without a URI falls back to its canonical slug", () => {
   assert.equal(resolveRoutePageUri(page({ uri: null, slug: "blog" })), "/blog/");
   assert.equal(resolveRoutePageUri(page({ uri: null, slug: null })), null);

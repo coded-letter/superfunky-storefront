@@ -24,6 +24,10 @@ const shortcodesSource = readFileSync(
   new URL("../components/wordpressShortcodes.tsx", import.meta.url),
   "utf8",
 );
+const productGridSource = readFileSync(
+  new URL("../../../../packages/ui/src/catalog/PaginableProductGrid.tsx", import.meta.url),
+  "utf8",
+);
 
 function term(
   databaseId: number,
@@ -73,6 +77,11 @@ test("commerce review routes match only the selected storefront language", () =>
   assert.equal(matchesCommerceRouteLanguage("/en/product/english-product/", "en", languages), true);
   assert.equal(matchesCommerceRouteLanguage("/product/polski-produkt/", "en", languages), false);
   assert.equal(matchesCommerceRouteLanguage("/product/single-language/", "en", ["en"]), true);
+});
+
+test("product grid shortcodes preserve their explicit column count", () => {
+  assert.match(shortcodesSource, /columns=\{columns\}/);
+  assert.match(productGridSource, /columns === 3[\s\S]*xl:grid-cols-3/);
 });
 
 test("catalog terms select and deduplicate the requested category translation", () => {

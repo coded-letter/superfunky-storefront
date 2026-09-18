@@ -17,6 +17,7 @@ export type PaginableProductGridProps = {
   cardVariant?: ProductCardVariant;
   allowPurchaseActions?: boolean;
   gridVariant?: ProductGridVariant;
+  columns?: number;
   toolbarEnd?: ReactNode;
   showFilters?: boolean;
 };
@@ -31,6 +32,7 @@ export function PaginableProductGrid({
   cardVariant = "default",
   allowPurchaseActions = true,
   gridVariant = "standard",
+  columns,
   toolbarEnd,
   showFilters = true,
 }: PaginableProductGridProps) {
@@ -188,7 +190,7 @@ export function PaginableProductGrid({
       ) : null}
 
       {visibleItems.length ? (
-        <div className={getGridClassName(gridVariant)}>
+        <div className={getGridClassName(gridVariant, columns)}>
           {visibleItems.map((product, index) => (
             <div key={product.id} className="h-full min-w-0 animate-rise-in" style={{ animationDelay: `${index * 40}ms`, animationFillMode: "backwards" }}>
               <ProductCard
@@ -266,7 +268,13 @@ const pageButtonClass =
 const filterControlClass =
   "min-h-9 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-soft outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:focus:border-brand-500 dark:focus:ring-brand-900";
 
-function getGridClassName(variant: ProductGridVariant): string {
+function getGridClassName(variant: ProductGridVariant, columns?: number): string {
+  if (columns === 1) return "grid grid-cols-1 gap-5";
+  if (columns === 2) return "grid grid-cols-1 gap-5 sm:grid-cols-2";
+  if (columns === 3) return "grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3";
+  if (columns === 4) return "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4";
+  if (columns === 5) return "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5";
+  if (columns === 6) return "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6";
   if (variant === "compact") {
     return "grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4";
   }
