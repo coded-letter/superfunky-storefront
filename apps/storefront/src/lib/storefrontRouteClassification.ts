@@ -92,7 +92,7 @@ export function classifyPageRouteKeys(page: RoutePageNode): StorefrontRouteKey[]
   if (slug === "register") keys.add("auth-register");
   if (slug === "forgot-password") keys.add("auth-forgot-password");
   if (slug === "privacy-policy" || slug === "privacy") keys.add("privacy-policy");
-  if (slug === "terms" || slug === "terms-and-conditions") keys.add("terms");
+  if (slug === "terms" || slug === "terms-and-conditions" || slug === "regulamin") keys.add("terms");
   const shortcodes = page.headlessShortcodes?.filter((shortcode): shortcode is string => Boolean(shortcode)) || [];
 
   for (const shortcode of shortcodes) {

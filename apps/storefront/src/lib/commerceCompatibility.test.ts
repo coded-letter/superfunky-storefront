@@ -36,6 +36,10 @@ import {
 
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
+test("localized Woo product permalinks route to product details", () => {
+  assert.match(appSource, /path="\/sklep\/:slug" element=\{<ProductMockupPage \/>}/);
+});
+
 test("single-locale commerce avoids language filters that can silently hide products", () => {
   assert.equal(shouldPreferUnscopedCommerceQueries("full", ["en"]), true);
   assert.equal(shouldPreferUnscopedCommerceQueries("full", ["pl", "en"]), false);

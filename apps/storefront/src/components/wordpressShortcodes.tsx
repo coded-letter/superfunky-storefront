@@ -417,6 +417,7 @@ function GridShortcode({ attributes }: ShortcodeProps) {
         pageSize={pageSize}
         cardVariant={oneOf<ProductCardVariant>(attributes["card-variant"], PRODUCT_CARD_VARIANTS, "default")}
         gridVariant={columns <= 2 ? "compact" : "standard"}
+        columns={columns}
         showFilters={attributes["show-filters"] !== "false"}
       />
     );
