@@ -76,7 +76,7 @@ test("product detail loading falls back to the Woo Store API when WooGraphQL omi
   const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
   assert.match(source, /if \(!data\?\.product\) return getStoreApiProductDetail\(slug\)/);
   assert.match(source, /wc\/store\/v1\/products\?slug=/);
-  assert.match(source, /wc\/store\/v1\/products\/\$\{productId\}\/variations\?per_page=100/);
+  assert.match(source, /const variationPayload = product\.type === "variable" \? product\.variations \|\| \[\] : \[\]/);
   assert.match(source, /variationOptions,\s*variationCombos,/);
 });
 

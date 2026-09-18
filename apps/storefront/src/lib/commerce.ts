@@ -330,7 +330,7 @@ type StoreApiCatalogProduct = {
     has_variations?: boolean;
     terms?: { id: number; name: string; slug: string }[];
   }[];
-  variations?: { id: number }[];
+  variations?: StoreApiVariation[];
 };
 
 type StoreApiVariation = {
@@ -1444,9 +1444,7 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
     variation: attribute.has_variations === true,
     visible: true,
   }));
-  const variationPayload = product.type === "variable"
-    ? await getStoreApiVariations(product.id)
-    : [];
+  const variationPayload = product.type === "variable" ? product.variations || [] : [];
   const variationOptions: ProductVariationOption[] = attributes
     .filter((attribute) => attribute.variation)
     .map((attribute) => ({
@@ -1465,7 +1463,7 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
         : {}),
     }));
   const variationCombos: ProductVariationCombo[] = variationPayload.map((variation) => {
-    const price = formatStoreApiPrice(variation.prices);
+    const price = formatStoreApiPrice(variation.prices || product.prices);
     return {
       id: `store-api-variation:${variation.id}`,
       databaseId: variation.id,
@@ -1479,8 +1477,11 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
       imageId: variation.image?.id ? String(variation.image.id) : undefined,
       imageUrl: variation.image?.src,
       sku: variation.sku || "",
-      inStock: variation.backorders_allowed === true || variation.is_in_stock !== false,
-      stockQuantity: variation.stock_quantity ?? null,
+      inStock:
+        variation.backorders_allowed === true
+        || variation.is_in_stock === true
+        || (variation.is_in_stock === undefined && product.is_in_stock !== false),
+      stockQuantity: variation.stock_quantity ?? product.stock_quantity ?? null,
       backordersAllowed: variation.backorders_allowed === true,
     };
   });
@@ -1513,20 +1514,6 @@ async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail 
     externalButtonText: null,
     priceBehavior: normalizeProductPriceBehavior(null),
   });
-}
-
-async function getStoreApiVariations(productId: number): Promise<StoreApiVariation[]> {
-  const endpoint = restUrl(`wc/store/v1/products/${productId}/variations?per_page=100`);
-  if (!endpoint) return [];
-  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error(`WooCommerce Store API variation fallback failed with status ${response.status}`);
-  }
-  const payload: unknown = await response.json();
-  if (!Array.isArray(payload)) {
-    throw new Error("WooCommerce Store API variation fallback returned a non-array payload");
-  }
-  return payload as StoreApiVariation[];
 }
 
 function formatStoreApiPrice(prices: StoreApiCatalogProduct["prices"]): {
