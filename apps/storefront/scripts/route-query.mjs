@@ -77,6 +77,47 @@ const USER_SEO_FIELDS = `
   }
 `;
 
+export function buildConfiguredFrontPageQuery({
+  multilingual = false,
+  publicRobots = false,
+  specialPages = false,
+  shopPages = false,
+  translations = multilingual,
+  seo = false,
+} = {}) {
+  const languageFields = multilingual
+    ? "language { code }\n      translations { databaseId uri language { code } }"
+    : translations ? "translations { databaseId uri }" : "";
+
+  return `
+    query StorefrontConfiguredFrontPage($databaseId: ID!) {
+      page(id: $databaseId, idType: DATABASE_ID) {
+        uri
+        __typename
+        date
+        modified
+        title
+        id
+        databaseId
+        slug
+        isFrontPage
+        isPrivacyPage
+        ${shopPages ? "isShopPage" : ""}
+        ${specialPages ? "isTermsPage" : ""}
+        content(format: RENDERED)
+        headlessContent
+        headlessShortcodes
+        ${publicRobots ? "funkycommercePublicRobots { noindex nofollow }" : ""}
+        ${languageFields}
+        ${seo ? "seo { ...StorefrontPostTypeRouteSeo }" : ""}
+        featuredImage { node { ...StorefrontRouteImage } }
+      }
+    }
+    ${ROUTE_IMAGE_FRAGMENT}
+    ${seo ? POST_TYPE_SEO_FRAGMENT : ""}
+  `;
+}
+
 export function buildRoutesQuery({
   commerce = false,
   multilingual = false,
