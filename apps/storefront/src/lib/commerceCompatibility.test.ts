@@ -67,6 +67,12 @@ test("Woo Store API catalog products map into shortcode product cards", () => {
   assert.equal(product.inStock, true);
 });
 
+test("product detail loading falls back to the Woo Store API when WooGraphQL omits products", () => {
+  const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(!data\?\.product\) return getStoreApiProductDetail\(slug\)/);
+  assert.match(source, /wc\/store\/v1\/products\?slug=/);
+});
+
 test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {
   assert.deepEqual(
     normalizeProductTaxonomyIdentifier("/pro-cat/automaty-vendingowe/napoje-zimne/"),

@@ -1351,6 +1351,20 @@ async function discoverCmsRoutes({
     }
   }
 
+  if (!discovery.discoveredNodes.some(({ connectionName }) => connectionName === "contentNodes")) {
+    console.warn(
+      "[prerender] Generic content route discovery returned no nodes; retrying standard WordPress connections.",
+    );
+    discovery = await discoverStandardWordPressRoutes({
+      multilingual,
+      publicRobots: publicRobotsSupported,
+      specialPages: specialPagesSupported,
+      shopPages: shopPagesSupported,
+      translations: configuredLanguageCodes.length > 1,
+      seo: seoSupported,
+    });
+  }
+
   const { discoveredNodes, readingSettings } = discovery;
   if (!readingSettings) throw new Error("WPGraphQL route discovery omitted readingSettings");
   const frontPageIds = new Set();
@@ -1392,6 +1406,12 @@ async function discoverCmsRoutes({
       if (translation?.databaseId) frontPageIds.add(translation.databaseId);
     }
   }
+  if (
+    commerceRoutesAvailable
+    && !discoveredNodes.some(({ node }) => COMMERCE_ROUTE_TYPES.includes(node?.__typename))
+  ) {
+    discoveredNodes.push(...await discoverStoreApiProductRouteNodes());
+  }
 
   return discoveredNodes.flatMap(({ node, connectionName }) => {
     const resolvedNode = node?.__typename === "Page"
@@ -1412,6 +1432,50 @@ async function discoverCmsRoutes({
     return prefixedAlias === route.path
       ? [route]
       : [route, { ...route, path: prefixedAlias, canonical: route.canonical || route.path }];
+  });
+}
+
+async function discoverStoreApiProductRouteNodes() {
+  const endpoint = new URL("/wp-json/wc/store/v1/products?per_page=100", graphqlEndpoint);
+  const response = await fetch(endpoint, { signal: AbortSignal.timeout(20_000) });
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new Error(`WooCommerce Store API route discovery failed with status ${response.status}`);
+  }
+  const products = await response.json();
+  if (!Array.isArray(products)) {
+    throw new Error("WooCommerce Store API route discovery returned a non-array payload");
+  }
+  return products.flatMap((product) => {
+    const databaseId = Number(product?.id);
+    const name = typeof product?.name === "string" ? product.name.trim() : "";
+    const permalink = typeof product?.permalink === "string" ? product.permalink : "";
+    if (!Number.isInteger(databaseId) || databaseId <= 0 || !name || !permalink) return [];
+    let uri;
+    try {
+      uri = new URL(permalink).pathname;
+    } catch {
+      return [];
+    }
+    return [{
+      connectionName: "contentNodes",
+      node: {
+        __typename: product.type === "variable" ? "VariableProduct" : "SimpleProduct",
+        databaseId,
+        title: name,
+        name,
+        slug: typeof product.slug === "string" ? product.slug : "",
+        uri,
+        date: product.date_created || null,
+        modified: product.date_modified || null,
+        image: product.images?.[0]?.src ? {
+          sourceUrl: product.images[0].src,
+          altText: product.images[0].alt || "",
+          mimeType: null,
+          mediaDetails: null,
+        } : null,
+      },
+    }];
   });
 }
 
