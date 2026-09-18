@@ -218,7 +218,7 @@ const loadStaticHydrationPayloads = () => {
   return Promise.all(urls.map(async (url) => {
     try {
       const response = await fetch(url, {
-        credentials: "omit",
+        credentials: "same-origin",
         signal: AbortSignal.timeout(2_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
