@@ -92,6 +92,11 @@ test("managed storefronts preserve mobile performance and hydrate without scroll
   assert.match(mainSource, /const loadStaticHydrationPayloads = \(\) =>/);
   assert.match(
     mainSource,
+    /fetch\(url,\s*\{\s*credentials:\s*"same-origin"/,
+    "same-origin credentials must be preserved for access-protected hydration assets",
+  );
+  assert.match(
+    mainSource,
     /const hydrationPayloads = loadStaticHydrationPayloads\(\);[\s\S]*Promise\.all\(\[[\s\S]*hydrationPayloads,[\s\S]*for \(const payload of payloads\)/,
   );
   assert.doesNotMatch(appSource, /!navigationRevalidating/);
