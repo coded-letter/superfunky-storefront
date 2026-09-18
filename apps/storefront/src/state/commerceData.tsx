@@ -15,7 +15,7 @@ export function CommerceDataProvider({ children, enabled = true }: { children?: 
   const { configuredLanguageCodes, languageCode, languageBackendCode } = useLanguage();
   const normalizedLanguage = languageCode.toLowerCase();
   const rawState = useIncrementalData(
-    `commerce-data:v5:${normalizedLanguage}:${languageBackendCode}`,
+    `commerce-data:v6:${normalizedLanguage}:${languageBackendCode}`,
     () => getCommerceCatalog(normalizedLanguage, languageBackendCode, configuredLanguageCodes),
     enabled,
   );

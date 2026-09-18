@@ -10,6 +10,13 @@ export function shouldPreferCoreGraphqlQueries(profile: StorefrontBackendProfile
   return profile !== "full";
 }
 
+export function shouldPreferUnscopedCommerceQueries(
+  profile: StorefrontBackendProfile,
+  configuredLanguageCodes: readonly string[],
+): boolean {
+  return shouldPreferCoreGraphqlQueries(profile) || configuredLanguageCodes.length <= 1;
+}
+
 export function shouldPreferCoreContentQueries(profile: StorefrontBackendProfile): boolean {
   return profile === "shell" || profile === "shop";
 }

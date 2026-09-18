@@ -93,6 +93,9 @@ export function mapLocalizedCatalogTerms<TProduct>(
   }
 
   const assignedTerms = products?.flatMap((product) => termsOf(product) || []) || [];
+  if (!assignedTerms.length) {
+    return mapLocalizedTerms(listingTerms, normalizedLanguage);
+  }
   return mapLocalizedTerms(
     dedupeBy(assignedTerms, ({ id }) => id).map((term) => ({
       ...term,
