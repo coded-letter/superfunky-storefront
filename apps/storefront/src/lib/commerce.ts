@@ -292,6 +292,7 @@ type StoreApiCatalogProduct = {
   permalink: string;
   short_description?: string;
   description?: string;
+  sku?: string;
   type?: string;
   featured?: boolean;
   on_sale?: boolean;
@@ -321,6 +322,13 @@ type StoreApiCatalogProduct = {
     name: string;
     slug: string;
     link?: string;
+  }[];
+  attributes?: {
+    id: number;
+    name: string;
+    taxonomy?: string;
+    has_variations?: boolean;
+    terms?: { id: number; name: string; slug: string }[];
   }[];
 };
 
@@ -1321,8 +1329,7 @@ export async function getProductByUriOrSlug(identifier: string): Promise<CmsProd
     { slug },
     isMissingProductOptionalFieldSchemaError,
   );
-  if (!data) return null;
-  if (!data.product) return null;
+  if (!data?.product) return getStoreApiProductDetail(slug);
 
   const product = await loadRemainingProductReviews(data.product);
   const variations = product.variations?.nodes || [];
@@ -1383,6 +1390,65 @@ export async function getProductByUriOrSlug(identifier: string): Promise<CmsProd
     seo: mapSeo(product.seo, product.funkycommercePublicRobots),
     externalButtonText: product.buttonText?.trim() || null,
     priceBehavior: normalizeProductPriceBehavior(product.priceBehavior),
+  });
+}
+
+async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail | null> {
+  const endpoint = restUrl(`wc/store/v1/products?slug=${encodeURIComponent(slug)}&per_page=1`);
+  if (!endpoint) return null;
+  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(`WooCommerce Store API product fallback failed with status ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error("WooCommerce Store API product fallback returned a non-array payload");
+  }
+  const product = (payload as StoreApiCatalogProduct[])[0];
+  if (!product || product.slug !== slug) return null;
+
+  const rawProduct = mapStoreApiCatalogProduct(product);
+  const card = mapProductCard(rawProduct);
+  const gallery = [
+    rawProduct.image,
+    ...(rawProduct.galleryImages?.nodes || []),
+  ].map(mapImage).filter((image): image is CmsProductImage => image !== null);
+  const attributes: CmsProductAttribute[] = (product.attributes || []).map((attribute) => ({
+    id: String(attribute.id),
+    name: attribute.taxonomy || attribute.name,
+    label: attribute.name,
+    options: (attribute.terms || []).map(({ name }) => name),
+    variation: attribute.has_variations === true,
+    visible: true,
+  }));
+
+  return normalizeProductDetail({
+    id: rawProduct.id,
+    databaseId: rawProduct.databaseId,
+    name: card.name,
+    slug: product.slug,
+    uri: rawProduct.uri || `/product/${slug}/`,
+    languageCode: COMMERCE_SOURCE_LANGUAGE,
+    translations: [],
+    card,
+    shortDescriptionHtml: product.short_description || "",
+    descriptionHtml: product.description || "",
+    sku: product.sku || "",
+    currencyPrices: {},
+    gallery,
+    attributes,
+    variationOptions: [],
+    variationCombos: [],
+    categories: mapTerms(rawProduct.productCategories?.nodes),
+    tags: mapTerms(rawProduct.productTags?.nodes),
+    brands: [],
+    related: [],
+    upsells: [],
+    crossSells: [],
+    reviews: [],
+    seo: mapSeo(null, null),
+    externalButtonText: null,
+    priceBehavior: normalizeProductPriceBehavior(null),
   });
 }
 

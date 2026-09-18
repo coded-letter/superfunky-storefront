@@ -120,6 +120,9 @@ test("prerender authenticates route discovery and preserves stable routes during
   assert.match(prerender, /CMS route discovery failed; refusing to generate a partial sitemap/);
   assert.match(prerender, /buildConfiguredFrontPageQuery\(/);
   assert.match(prerender, /discoveredNodes\.push\(\{ node: configuredFrontPage, connectionName: "contentNodes" \}\)/);
+  assert.match(prerender, /Generic content route discovery returned no nodes/);
+  assert.match(prerender, /discoverStoreApiProductRouteNodes\(\)/);
+  assert.match(prerender, /if \(response\.status === 404\) return \[\]/);
   assert.match(prerender, /Optional community detail route discovery unavailable; using stable community directory routes/);
   assert.doesNotMatch(prerender, /Community route discovery failed; refusing to generate a partial sitemap/);
   assert.match(prerender, /endCursor === cursors\[cursorName\]/);
