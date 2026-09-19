@@ -345,6 +345,35 @@ test("author fallback handles malformed legacy Polylang term language values", a
   assert.doesNotMatch(requestedQueries[1], /\$authorName|\$language|\blanguage\s*\{|\bwhere\s*:/);
 });
 
+test("author fallback removes incompatible localized biography arguments without empty parentheses", () => {
+  const compatible = createCompatibleAuthorArchiveQuery(`
+    query Author(
+      $slug: ID!
+      $authorName: String!
+      $language: LanguageCodeFilterEnum!
+    ) {
+      user(id: $slug, idType: SLUG) {
+        id
+        description
+        storefrontDescription(language: $language)
+      }
+      posts(first: 100, where: { authorName: $authorName, language: $language }) {
+        nodes { id }
+      }
+    }
+  `);
+
+  assert.doesNotMatch(compatible, /storefrontDescription|\$language|\$authorName|\(\s*\)|\bwhere\s*:/);
+  assert.match(compatible, /posts\(first: 100\)/);
+  assert.equal(
+    AUTHOR_ARCHIVE_COMPATIBILITY_RULE.matches(
+      'Variable "$language" of type "LanguageCodeFilterEnum!" used in position expecting type "String!".',
+      { message: 'Variable "$language" of type "LanguageCodeFilterEnum!" used in position expecting type "String!".' },
+    ),
+    true,
+  );
+});
+
 test("post fallback preserves approved comments when only a Polylang resolver is malformed", async () => {
   const requestedQueries: string[] = [];
   const request: GraphqlFieldFallbackRequester = async <T>(query: string) => {

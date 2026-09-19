@@ -17,6 +17,7 @@ export function createCompatibleBlogDataQuery(query: string): string {
     .replace(/,\s*language:\s*(?:\$language|ALL)\b/g, "")
     .replace(/\blanguage:\s*(?:\$language|ALL)\s*,\s*/g, "")
     .replace(/\blanguage:\s*(?:\$language|ALL)\b/g, "")
+    .replace(/\(\s*\)/g, "")
     .replace(/,\s*where:\s*\{\s*\}/g, "")
     .replace(/posts\(first:\s*20\b/g, "posts(first: 100");
 }
