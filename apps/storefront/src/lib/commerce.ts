@@ -41,7 +41,7 @@ import {
   type RawLocalizedTerm,
   type RawLocalizedTermTranslation,
 } from "./commerceTaxonomyLanguage.ts";
-import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, getArchivePageSize } from "./archiveSettings.ts";
+import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, fetchRestArchiveNodes } from "./archiveSettings.ts";
 
 export type { ProductPriceBehavior, ResolvedProductPriceMode } from "./productPriceMode.ts";
 export { resolveProductPriceMode } from "./productPriceMode.ts";
@@ -257,7 +257,7 @@ type RawProductDetail = RawProductCard & {
 };
 
 type CatalogResult = {
-  products: { nodes: RawProductCard[]; pageInfo: { hasNextPage: boolean } } | null;
+  products: { nodes: RawProductCard[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
   productCategories: { nodes: RawTerm[] } | null;
   reviews: {
     nodes: {
@@ -707,10 +707,10 @@ const TAXONOMY_SEO_FIELDS = /* GraphQL */ `
 `;
 
 export const CATALOG_QUERY = /* GraphQL */ `
-  query StorefrontCommerceCatalog($language: LanguageCodeFilterEnum!) {
-    products(first: 24, where: { language: $language }) {
+  query StorefrontCommerceCatalog($language: LanguageCodeFilterEnum!, $first: Int = 100, $after: String) {
+    products(first: $first, after: $after, where: { language: $language }) {
       nodes { ...StorefrontProductListCard }
-      pageInfo { hasNextPage }
+      pageInfo { hasNextPage endCursor }
     }
     productCategories(first: 50, where: { hideEmpty: true, language: $language }) {
       nodes {
@@ -754,10 +754,10 @@ const COMPATIBLE_CATALOG_OPERATIONS = [
   {
     field: "products",
     query: /* GraphQL */ `
-      query StorefrontCommerceCatalogCompatibleProducts {
-        products(first: 24) {
+      query StorefrontCommerceCatalogCompatibleProducts($first: Int = 100, $after: String) {
+        products(first: $first, after: $after) {
           nodes { ...StorefrontProductListCard }
-          pageInfo { hasNextPage }
+          pageInfo { hasNextPage endCursor }
         }
       }
       ${PRODUCT_LIST_CARD_FRAGMENT_WITHOUT_BRANDS}
@@ -1099,7 +1099,7 @@ export async function getCommerceCatalog(
     requestCatalogWithFallback<CatalogResult>(
       graphqlRequest,
       CATALOG_QUERY,
-      { language: backendLanguageCode },
+      { language: backendLanguageCode, first: ARCHIVE_BATCH_SIZE, after: null },
       COMPATIBLE_CATALOG_OPERATIONS,
       isMissingProductOptionalFieldSchemaError,
       preferCoreQueries,
@@ -1122,7 +1122,20 @@ export async function getCommerceCatalog(
       preferCoreQueries,
     ),
   ]);
-  const graphqlProducts = data.products?.nodes || [];
+  let firstPage: CatalogResult | null = data;
+  const { nodes: graphqlProducts, hasMore } = await fetchArchiveNodesInBatches<RawProductCard>(-1, async (first, after) => {
+    const page = firstPage || (await requestCatalogWithFallback<CatalogResult>(
+      graphqlRequest,
+      CATALOG_QUERY,
+      { language: backendLanguageCode, first, after },
+      COMPATIBLE_CATALOG_OPERATIONS,
+      isMissingProductOptionalFieldSchemaError,
+      usesSourceLanguageFallback,
+      CATALOG_QUERY_WITHOUT_BRANDS,
+    )).data;
+    firstPage = null;
+    return page.products || { nodes: [], pageInfo: { hasNextPage: false } };
+  });
   const storeApiProducts = configuredLanguageCodes.length <= 1
     ? await getStoreApiCatalogProducts()
     : [];
@@ -1174,7 +1187,7 @@ export async function getCommerceCatalog(
           productUri: product.uri,
         }];
       }) || [],
-    hasMoreProducts: data.products?.pageInfo.hasNextPage || false,
+    hasMoreProducts: hasMore,
   };
 }
 
@@ -1232,18 +1245,10 @@ export function mapStoreApiCatalogProduct(product: StoreApiCatalogProduct): RawP
 }
 
 async function getStoreApiCatalogProducts(): Promise<RawProductCard[]> {
-  const endpoint = restUrl("wc/store/v1/products?per_page=100");
+  const endpoint = restUrl("wc/store/v1/products");
   if (!endpoint) return [];
-  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
-  if (response.status === 404) return [];
-  if (!response.ok) {
-    throw new Error(`WooCommerce Store API catalog fallback failed with status ${response.status}`);
-  }
-  const products: unknown = await response.json();
-  if (!Array.isArray(products)) {
-    throw new Error("WooCommerce Store API catalog fallback returned a non-array payload");
-  }
-  return (products as StoreApiCatalogProduct[]).map(mapStoreApiCatalogProduct);
+  const products = await fetchRestArchiveNodes<StoreApiCatalogProduct>(endpoint);
+  return products.map(mapStoreApiCatalogProduct);
 }
 
 function storefrontPathFromUrl(value: string | undefined, fallback: string): string {
@@ -1620,8 +1625,7 @@ export async function getProductArchive(
   languageCode = COMMERCE_SOURCE_LANGUAGE,
   backendLanguageCode = COMMERCE_SOURCE_LANGUAGE.toUpperCase(),
 ): Promise<CmsProductArchive | null> {
-  const targetCount = await getArchivePageSize();
-  const initialFirst = Math.min(targetCount, ARCHIVE_BATCH_SIZE);
+  const initialFirst = ARCHIVE_BATCH_SIZE;
   const preferCoreQueries = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
   const compatibleQuery = compatibleArchiveQuery(taxonomy);
   const scopedQueryWithoutBrands = createProductQueryWithoutBrands(archiveQuery(taxonomy));
@@ -1694,17 +1698,17 @@ export async function getProductArchive(
   };
 
   let firstPageData: ArchiveResult | null = initialData;
+  const useLocalizedProducts = Boolean(initialData.localizedProducts?.nodes.length);
   const { nodes: products, hasMore } = await fetchArchiveNodesInBatches<RawProductCard>(
-    targetCount,
+    -1,
     async (first, after) => {
       const pageData = firstPageData || await loadArchivePage(first, after);
       firstPageData = null;
       // The archive connection is already scoped to the resolved taxonomy term and
       // avoids walking unrelated products to fill a language-filtered page.
-      const localizedProducts = pageData.localizedProducts;
-      const archiveProducts = localizedProducts?.nodes.length
-        ? localizedProducts
-        : pageData.archive?.products || localizedProducts;
+      const archiveProducts = useLocalizedProducts
+        ? pageData.localizedProducts
+        : pageData.archive?.products;
       return {
         nodes: archiveProducts?.nodes || [],
         pageInfo: archiveProducts?.pageInfo || { hasNextPage: false },

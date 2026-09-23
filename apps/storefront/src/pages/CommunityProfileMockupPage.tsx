@@ -560,7 +560,7 @@ export function CommunityProfileMockupPage() {
           ) : null}
           {creatorProducts.length ? (
             <div className="grid gap-2">
-              <PaginableProductGrid title={`${user.displayName}'s shop`} products={creatorProducts} pageSize={12} allowPurchaseActions={!isOwnProfile} />
+              <PaginableProductGrid title={`${user.displayName}'s shop`} products={creatorProducts} allowPurchaseActions={!isOwnProfile} />
               {isOwnProfile && liveMember && canPublishProducts ? (
                 <div className="flex flex-wrap gap-2">
                   {creatorProducts.map((product) => product.databaseId ? (
@@ -617,7 +617,7 @@ export function CommunityProfileMockupPage() {
           ) : null}
           {creatorArticles.length ? (
             <div className="grid gap-2">
-              <PaginablePostGrid title={`${user.displayName}'s articles`} posts={creatorArticles} pageSize={6} />
+              <PaginablePostGrid title={`${user.displayName}'s articles`} posts={creatorArticles} />
               {isOwnProfile && liveMember && canPublishArticles ? (
                 <div className="flex flex-wrap gap-2">
                   {creatorArticles.map((article) => article.databaseId ? (

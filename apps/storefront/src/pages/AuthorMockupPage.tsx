@@ -109,7 +109,6 @@ export function AuthorMockupPage() {
           <PaginablePostGrid
             title={t("author.articles_by", { name: author.name })}
             posts={author.posts}
-            pageSize={6}
             cardVariant="default"
             gridVariant="standard"
           />

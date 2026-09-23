@@ -3,7 +3,8 @@ import { LayoutList, RefreshCw } from "lucide-react";
 import { ProductCard, type ProductCardData, type ProductCardVariant } from "./ProductCard";
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
-import { createPaginationSequenceKey } from "../hooks/paginationState";
+import { createPaginationSequenceKey, resolveGridPageSize } from "../hooks/paginationState";
+import { useArchivePagination } from "../state/ArchivePaginationContext";
 import { useT } from "../locale";
 
 export type ProductGridVariant = "standard" | "compact" | "editorial";
@@ -28,7 +29,7 @@ export function PaginableProductGrid({
   title,
   subtitle,
   products,
-  pageSize = 8,
+  pageSize: configuredPageSize,
   cardVariant = "default",
   allowPurchaseActions = true,
   gridVariant = "standard",
@@ -37,6 +38,8 @@ export function PaginableProductGrid({
   showFilters = true,
 }: PaginableProductGridProps) {
   const t = useT();
+  const settings = useArchivePagination();
+  const pageSize = resolveGridPageSize(configuredPageSize ?? settings.productsPerPage, products.length, 12);
   const resolvedTitle = title ?? t("filters.default_title_products");
   const LOAD_MODE_OPTIONS = [
     { value: "pages" as const, label: t("filters.load_mode_pages"), icon: LayoutList },
@@ -119,6 +122,12 @@ export function PaginableProductGrid({
   }, [totalPages]);
 
   const visibleItems = loadMode === "infinite" ? infiniteItems : pageItems;
+
+  if (configuredPageSize === undefined && (settings.isLoading || settings.error)) {
+    return <section className="sf-product-grid" role={settings.error ? "alert" : "status"}>
+      {t(settings.error ? "archive.collection_unavailable" : "loading.product")}
+    </section>;
+  }
 
   return (
     <section ref={sectionRef} className="sf-product-grid grid gap-5 scroll-mt-24">

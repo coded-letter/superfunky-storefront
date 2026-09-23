@@ -46,24 +46,83 @@ webhook after debounced public-content changes and on a configurable WP-Cron int
 
 ## Tailwind utilities in WordPress content
 
-The production build runs `scripts/generate-cms-tailwind-content.mjs --contract-only`
-before Vite. It writes the reviewed, finite CMS utility contract without querying
-WordPress, so publishing content never changes the application CSS or requires a
-storefront rebuild. Run `pnpm --filter @funky/storefront audit:cms-tailwind` separately
-to validate current CMS content and report unsupported tokens.
+The production prebuild queries the configured `VITE_GRAPHQL_ENDPOINT` before Vite
+compiles CSS. It paginates through public pages, posts, community posts, product
+descriptions, media captions/descriptions, taxonomy descriptions, authors, and menus,
+and includes localized announcement/footer HTML. Rendered `headlessContent` includes
+the backend's expanded blocks and templates. Optional plugin fields use explicit schema
+compatibility fallbacks; unavailable product GraphQL connections use the public
+WooCommerce Store API.
 
-Editors may use utilities and responsive/state variants present in that stable contract.
-Permitted arbitrary values are compiled into bounded route CSS when WordPress regenerates
-the artifact: numeric dimensions, border radii, opacity, aspect ratios, integer
-stacking/order, and hex colors. Arbitrary selectors, URLs, transforms, shadows, CSS
-declarations, unsupported variants, malformed brackets, excessive output, and non-ASCII
-tokens are rejected. Extend both the JavaScript validator and PHP compiler with tests
-when an editor needs a new finite form; never add a broad regex safelist.
+Exact HTML class names are decoded, deduplicated, and compiled with the storefront's
+real Tailwind configuration. `.tailwind/cms-content.html` is an ignored, site-specific
+build artifact, scanned alongside application source. The baseline utility inventory
+is additive, not an allowlist ceiling. Responsive fractions, opacity modifiers,
+important/negative utilities, arbitrary transforms, shadows, and calculated radii are
+supported. URLs/resource-loading values, arbitrary selectors/declarations, unsafe
+characters, and invalid tokens are excluded with source-labelled diagnostics. Custom
+WordPress classes remain unchanged. Never add a broad regex safelist.
+
+Extraction is bounded to 50 MB of HTML, 100 pages per connection, 10,000 class candidates
+including the baseline, 512 characters per token, and 1 MB of compiled utility CSS.
+Incomplete pagination, required fields, or failed requests fail the build rather than
+reusing a stale inventory. `VITE_SITE_URL` supplies the Origin for protected CMS queries.
+Production builds require an explicit endpoint; `CMS_TAILWIND_OFFLINE=true` is an
+explicit baseline-only demo mode, not a production recovery option.
+
+After Vite, `scripts/audit-cms-tailwind.mjs` verifies that every compiled inventory class
+survived in the initial CSS and reports its compressed size. Those hashed stylesheet
+links are retained by static pages and artifact shells, so utilities do not depend on
+artifact-only route CSS. Run `pnpm --filter @funky/storefront audit:cms-tailwind` to
+regenerate the inventory and diagnose current CMS content without building.
+
+Publishing a new class requires a successful storefront rebuild. Configure the
+debounced public-content build webhook in Control Center, including on artifact-enabled
+sites; published shared blocks/templates, menus, and public Control Center HTML also
+schedule that rebuild. Regenerating a route artifact alone does not compile new utilities.
+Existing compiled classes remain available until the next deployment. For local Vite
+development, regenerate the inventory after CMS changes; Vite watches the generated file.
 
 WordPress block classes such as `wp-block-*`, `has-*`, `is-layout-*`, and alignment
 classes are not Tailwind utilities. They continue to use WordPress global/block styles
 and the storefront compatibility CSS. The extractor does not fetch or execute CSS or
 JavaScript from content.
+
+## Native archive pagination
+
+Post grids, the blog index, author archives, and post taxonomy archives inherit
+**Settings > Reading > Blog pages show at most** (`posts_per_page`). Product grids
+and product category/tag/brand archives inherit WooCommerce's effective shop page
+size, including its native rows/columns and `loop_shop_per_page` filter.
+The public `funkycommerceArchiveSettings` GraphQL field supplies both values,
+independently of Layout Studio preferences.
+
+Control Center > Store & Currency > Products per page override defaults to **0**
+(inherit WooCommerce). Existing saved positive overrides remain effective in both
+native and headless mode; set an old override to 0 to follow WooCommerce again.
+Without WooCommerce, the product fallback is 12. Updating Reading, WooCommerce
+rows/columns, or the override invalidates storefront settings and schedules the
+existing debounced build webhook.
+
+The same settings are seeded during prerender and revalidated in the browser.
+Both numbered pagination and infinite scrolling use these sizes. The current
+client-side filtering/sorting model requires complete collections: archive loaders
+walk GraphQL cursors (or Woo Store API pages) in batches of at most 100, rather than
+mistaking one visual page for the whole archive. Broken/repeated cursors, incomplete
+REST pagination, or more than 1,000 batches raise errors instead of silently hiding
+later items. A native `-1` page size displays the complete collection.
+
+A `[grid]` without `page_size` (or with `page_size="0"`) inherits the relevant native
+setting. The backend transports this as `data-page-size="0"`, not a fixed 12.
+An explicit positive editorial `page_size` retains its existing 1-48 range in
+both native rendering and the React storefront; related-content sections,
+sliders, and social feeds retain their own sizes. Homepage post grids load full
+archives, not the bounded summaries intended for sliders.
+
+Older themes without the new GraphQL field use WordPress's exposed reading setting
+and 12 products per page with an explicit upgrade warning. Other settings-query
+failures surface an unavailable state rather than silently substituting defaults.
+Use the updated backend theme to synchronize WooCommerce settings accurately.
 
 ## Public component selectors
 
@@ -105,8 +164,9 @@ credential-free `VITE_GRAPHQL_ENDPOINT` directly in the hosting provider.
 For Cloudflare Pages deployments of the open-source workspace, build from the
 repository root with `pnpm build` and publish `apps/storefront/dist`. The exported
 root `wrangler.jsonc` identifies that directory as the Pages application. When no
-backend endpoint is configured, the storefront uses the public
-`https://dev.superfunky.pro/graphql` reference backend.
+backend endpoint is configured, development uses the public
+`https://dev.superfunky.pro/graphql` reference backend. Set that endpoint explicitly
+to build the reference site with its CMS-authored utilities.
 
 ## CMS code and bundled behaviors
 
@@ -198,9 +258,10 @@ The repository root is the pnpm workspace. For Cloudflare Pages, use `pnpm build
 and publish `apps/storefront/dist`; the included `wrangler.jsonc` identifies that
 directory as the application so Cloudflare does not need to guess between packages.
 
-Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider when using
-your own WordPress backend. When omitted, the storefront uses the public
-`https://dev.superfunky.pro/graphql` reference backend. Build-hook URLs and
+Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider so builds can
+compile CMS-authored Tailwind utilities. To build the reference site, set it to
+`https://dev.superfunky.pro/graphql`. Development uses that reference when omitted.
+Build-hook URLs and
 provider credentials must never be committed.
 
 The production generator also consumes the Control Center's public static-generation

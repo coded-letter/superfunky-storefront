@@ -399,7 +399,7 @@ function GridShortcode({ attributes }: ShortcodeProps) {
   const { data: blog, isLoading: blogLoading, error: blogError } = useBlogData();
   const { data: community, isLoading: communityLoading, error: communityError } = useCommunityData();
   const type = oneOf(attributes.type, ["product", "post", "community-article"], "product");
-  const pageSize = toInteger(attributes["page-size"], 12, 1, 48);
+  const pageSize = attributes["page-size"] && attributes["page-size"] !== "0" ? toInteger(attributes["page-size"], 12, 1, 48) : undefined;
   const columns = toInteger(attributes.columns, 3, 1, 6);
   const title = attributes.title || (type === "product" ? "All products" : type === "community-article" ? "Community blog" : "All posts");
   const subtitle = attributes.subtitle || "";

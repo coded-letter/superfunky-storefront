@@ -1,4 +1,5 @@
 export { ThemeProvider, useTheme, type ThemeContextValue } from "./ThemeContext";
+export { ArchivePaginationProvider, DEFAULT_ARCHIVE_PAGE_SIZES, useArchivePagination, type ArchivePageSizes } from "./ArchivePaginationContext";
 export {
   createPersistedIdCollection,
   type PersistedIdCollection,

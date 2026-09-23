@@ -19,6 +19,7 @@ import {
 } from "./profileGraphqlCompatibility.ts";
 import { filterLocalizedBlogNodes } from "./blogLocalization.ts";
 import { htmlToPlainText } from "./htmlText.ts";
+import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches } from "./archiveSettings.ts";
 
 export type CmsBlogTerm = {
   id: string;
@@ -75,7 +76,7 @@ type RestBlogListingTerm = {
 type BlogDataResult = {
   posts: {
     nodes: RawBlogPost[];
-    pageInfo: { hasNextPage: boolean };
+    pageInfo: { hasNextPage: boolean; endCursor?: string | null };
   } | null;
   categories: { nodes: RawBlogListingTerm[] } | null;
   tags: { nodes: RawBlogListingTerm[] } | null;
@@ -107,8 +108,8 @@ type BlogAuthorDirectoryResult = {
 };
 
 const BLOG_DATA_QUERY = /* GraphQL */ `
-  query StorefrontBlogData($language: LanguageCodeFilterEnum!) {
-    posts(first: 100, where: { language: $language }) {
+  query StorefrontBlogData($language: LanguageCodeFilterEnum!, $first: Int = 100, $after: String) {
+    posts(first: $first, after: $after, where: { language: $language }) {
       ${BLOG_POST_CARD_FIELDS}
     }
     categories(first: 100, where: { hideEmpty: true, language: $language, orderby: COUNT, order: DESC }) {
@@ -174,8 +175,8 @@ const BLOG_DATA_QUERY = /* GraphQL */ `
 `;
 
 const BLOG_SUMMARY_QUERY = /* GraphQL */ `
-  query StorefrontBlogSummary($language: LanguageCodeFilterEnum!) {
-    posts(first: 20, where: { language: $language }) {
+  query StorefrontBlogSummary($language: LanguageCodeFilterEnum!, $first: Int = 20, $after: String) {
+    posts(first: $first, after: $after, where: { language: $language }) {
       nodes {
         id
         databaseId
@@ -247,6 +248,7 @@ const BLOG_SUMMARY_QUERY = /* GraphQL */ `
       }
       pageInfo {
         hasNextPage
+        endCursor
       }
     }
   }
@@ -287,7 +289,7 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
     requestGraphqlWithCompatibility<BlogDataResult>(
       graphqlRequest,
       query,
-      { language: backendLanguageCode },
+      { language: backendLanguageCode, first: ARCHIVE_BATCH_SIZE, after: null },
       BLOG_DATA_COMPATIBILITY_RULES,
     ),
     usesBlogRestTerms
@@ -307,14 +309,29 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
     throw new Error("The blog data query returned no data");
   }
 
-  const posts = filterLocalizedBlogNodes(data.posts?.nodes || [], languageCode).map(mapBlogPost);
+  let firstPage: BlogDataResult | null = data;
+  const { nodes, hasMore } = await fetchArchiveNodesInBatches<RawBlogPost>(-1, async (first, after) => {
+    let page = firstPage;
+    firstPage = null;
+    if (!page) {
+      const result = await requestGraphqlWithCompatibility<BlogDataResult>(
+        graphqlRequest, query, { language: backendLanguageCode, first, after }, BLOG_DATA_COMPATIBILITY_RULES,
+      );
+      if (result.errors?.length) throw new Error(result.errors.map(({ message }) => message).join("; "));
+      if (!result.data) throw new Error("The blog pagination query returned no data");
+      page = result.data;
+    }
+    return page.posts || { nodes: [], pageInfo: { hasNextPage: false } };
+  });
+  const localizedPosts = filterLocalizedBlogNodes(nodes, languageCode);
+  const posts = localizedPosts.map(mapBlogPost);
   return {
     posts,
     categories: restTerms?.[0]
       || mapListingTerms(filterLocalizedBlogNodes(data.categories?.nodes || [], languageCode)),
     tags: restTerms?.[1]
       || mapListingTerms(filterLocalizedBlogNodes(data.tags?.nodes || [], languageCode)),
-    authors: mapAuthors(filterLocalizedBlogNodes(data.posts?.nodes || [], languageCode)),
+    authors: mapAuthors(localizedPosts),
     comments:
       data.comments?.nodes.flatMap((comment) => {
         const post = comment.commentedOn?.node;
@@ -336,7 +353,7 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
           postUri: post.uri,
         }];
       }).slice(0, 4) || [],
-    hasMorePosts: data.posts?.pageInfo.hasNextPage || false,
+    hasMorePosts: hasMore,
   };
 }
 

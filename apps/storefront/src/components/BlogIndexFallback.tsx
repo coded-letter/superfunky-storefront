@@ -25,7 +25,6 @@ export function BlogIndexFallback() {
         <PaginablePostGrid
           title="All posts"
           posts={data.posts}
-          pageSize={12}
           cardVariant="default"
           gridVariant="standard"
         />

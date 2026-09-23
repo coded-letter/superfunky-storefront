@@ -3,7 +3,8 @@ import { LayoutList, RefreshCw } from "lucide-react";
 import { PostCard, type PostCardData, type PostCardVariant } from "./PostCard";
 import { ViewSwitch } from "../controls/ViewSwitch";
 import { useInfiniteScrollTrigger } from "../hooks/useInfiniteScrollTrigger";
-import { createPaginationSequenceKey } from "../hooks/paginationState";
+import { createPaginationSequenceKey, resolveGridPageSize } from "../hooks/paginationState";
+import { useArchivePagination } from "../state/ArchivePaginationContext";
 import { useT } from "../locale";
 
 export type PostGridVariant = "standard" | "compact" | "list";
@@ -29,13 +30,15 @@ export function PaginablePostGrid({
   title,
   subtitle,
   posts,
-  pageSize = 6,
+  pageSize: configuredPageSize,
   cardVariant = "default",
   gridVariant = "standard",
   toolbarEnd,
   showFilters = true,
 }: PaginablePostGridProps) {
   const t = useT();
+  const settings = useArchivePagination();
+  const pageSize = resolveGridPageSize(configuredPageSize ?? settings.postsPerPage, posts.length, 10);
   const resolvedTitle = title ?? t("filters.default_title_posts");
   const LOAD_MODE_OPTIONS = [
     { value: "pages" as const, label: t("filters.load_mode_pages"), icon: LayoutList },
@@ -122,6 +125,12 @@ export function PaginablePostGrid({
   }, [totalPages]);
 
   const visibleItems = loadMode === "infinite" ? infiniteItems : pageItems;
+
+  if (configuredPageSize === undefined && (settings.isLoading || settings.error)) {
+    return <section className="sf-post-grid" role={settings.error ? "alert" : "status"}>
+      {t(settings.error ? "archive.collection_unavailable" : "loading.post")}
+    </section>;
+  }
 
   return (
     <section ref={sectionRef} className="sf-post-grid grid gap-5 scroll-mt-24">
