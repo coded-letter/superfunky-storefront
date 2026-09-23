@@ -1,4 +1,5 @@
 import type { CmsThemeStyles } from "./pages";
+import { splitCustomCss } from "./customCssLayers.mjs";
 
 type MountedStyle = {
   count: number;
@@ -8,6 +9,7 @@ type MountedStyle = {
 const mountedStyles = new Map<string, MountedStyle>();
 const MAX_THEME_FONT_FACES = 8;
 const MAX_WORDPRESS_STYLESHEETS = 2;
+const PAGE_STYLES_SETTLE_TIMEOUT_MS = 2_000;
 const FONT_PROXY_VERSIONS = new Set(["2", "3"]);
 const WORDPRESS_TYPOGRAPHY_PROPERTIES = new Set([
   "column-count",
@@ -634,12 +636,10 @@ export const WORDPRESS_BLOCK_COMPATIBILITY_CSS = `
 export function mountPageStyles(styles: CmsThemeStyles | null | undefined, trustedBackendUrl?: string): () => void {
   const stylesheets = sanitizeWordPressStylesheetUrls(styles?.stylesheets || [], trustedBackendUrl);
   const staticStyleBundle = document.head.querySelector<HTMLLinkElement | HTMLStyleElement>("[data-wordpress-static-style-source]");
-  const staticStyleFailed = staticStyleBundle?.tagName === "LINK"
-    && !staticStyleBundle.sheet;
-  if (staticStyleFailed) staticStyleBundle.remove();
-  // The prerendered link is render-blocking, so a missing sheet by hydration time means
-  // the request failed and runtime styles must take over.
-  const hasStaticStyles = Boolean(staticStyleBundle && !staticStyleFailed);
+  // A missing sheet can mean a request is still pending, not just failed. Keep the
+  // prerendered bundle available while runtime fallback styles load.
+  const hasStaticStyles = Boolean(staticStyleBundle?.sheet);
+  const customCss = splitCustomCss(styles?.customCss || "");
   const keys = hasStaticStyles
     ? []
     : [
@@ -648,13 +648,21 @@ export function mountPageStyles(styles: CmsThemeStyles | null | undefined, trust
         // Core block styles must follow global element defaults so variants such as
         // Button "Outline" can override the generic button background and border.
         ...stylesheets.map(mountStylesheet),
-        mountInlineStyle("wordpress-custom-css", styles?.customCss || ""),
+        mountInlineStyle("wordpress-custom-css", customCss.critical),
         // Always mounted last so block semantics survive Tailwind and theme collisions.
         mountInlineStyle("wordpress-block-compatibility", WORDPRESS_BLOCK_COMPATIBILITY_CSS, true),
       ].filter((key): key is string => Boolean(key));
   orderMountedPageStyles();
+  const deferredTimer = !hasStaticStyles && customCss.deferred
+    ? setTimeout(() => {
+        const key = mountInlineStyle("wordpress-custom-css-deferred", customCss.deferred);
+        if (key) keys.push(key);
+        orderMountedPageStyles();
+      }, 2_000)
+    : null;
 
   return () => {
+    if (deferredTimer !== null) clearTimeout(deferredTimer);
     keys.forEach((key) => {
       const mounted = mountedStyles.get(key);
       if (!mounted) return;
@@ -671,7 +679,7 @@ export function afterMountedPageStylesSettle(onSettled: () => void): () => void 
     document.head.querySelectorAll<HTMLLinkElement>(
       'link[data-wordpress-page-style="wordpress-block-library"]',
     ),
-  ).filter((link) => !link.sheet);
+  ).filter((link) => !link.sheet && link.dataset.wordpressPageStyleSettled !== "true");
   if (!pendingLinks.length) {
     onSettled();
     return () => undefined;
@@ -687,21 +695,30 @@ export function afterMountedPageStylesSettle(onSettled: () => void): () => void 
       link.removeEventListener("load", settle);
       link.removeEventListener("error", settle);
       remaining -= 1;
-      if (active && remaining === 0) onSettled();
+      if (active && remaining === 0) finish();
     };
     link.addEventListener("load", settle);
     link.addEventListener("error", settle);
     if (link.sheet) queueMicrotask(settle);
     return { link, settle };
   });
-
-  return () => {
+  // Compatibility and inline theme CSS already provide a usable first paint;
+  // an unresponsive optional core stylesheet must not hold hydration forever.
+  const timeout = setTimeout(finish, PAGE_STYLES_SETTLE_TIMEOUT_MS);
+  function stop() {
     active = false;
+    clearTimeout(timeout);
     listeners.forEach(({ link, settle }) => {
       link.removeEventListener("load", settle);
       link.removeEventListener("error", settle);
     });
-  };
+  }
+  function finish() {
+    if (!active) return;
+    stop();
+    onSettled();
+  }
+  return stop;
 }
 
 export function sanitizeWordPressStylesheetUrls(urls: string[], trustedBackendUrl?: string): string[] {
@@ -980,6 +997,13 @@ function mountStylesheet(href: string): string {
   link.rel = "stylesheet";
   link.href = href;
   link.dataset.wordpressPageStyle = "wordpress-block-library";
+  const markSettled = () => {
+    link.dataset.wordpressPageStyleSettled = "true";
+    link.removeEventListener("load", markSettled);
+    link.removeEventListener("error", markSettled);
+  };
+  link.addEventListener("load", markSettled);
+  link.addEventListener("error", markSettled);
   document.head.appendChild(link);
   mountedStyles.set(key, { count: 1, element: link });
   return key;
@@ -991,6 +1015,7 @@ function orderMountedPageStyles(): void {
     "wordpress-global-styles": 1,
     "wordpress-block-library": 2,
     "wordpress-custom-css": 3,
+    "wordpress-custom-css-deferred": 3.5,
     "wordpress-block-compatibility": 4,
   };
   const elements = Array.from(document.head.querySelectorAll<HTMLLinkElement | HTMLStyleElement>("[data-wordpress-page-style]"));

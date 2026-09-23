@@ -88,6 +88,12 @@ classes are not Tailwind utilities. They continue to use WordPress global/block 
 and the storefront compatibility CSS. The extractor does not fetch or execute CSS or
 JavaScript from content.
 
+Prerendered WordPress CSS remains in the document throughout hydration, including
+while its stylesheet request is pending. Loaded static CSS or applied cached theme
+styles do not wait for background data revalidation before revealing the storefront.
+If runtime core block styles are needed, their readiness wait is capped at two seconds;
+inline theme/compatibility CSS remains available and late stylesheets can still finish.
+
 ## Native archive pagination
 
 Post grids, the blog index, author archives, and post taxonomy archives inherit
@@ -107,7 +113,7 @@ existing debounced build webhook.
 The same settings are seeded during prerender and revalidated in the browser.
 Both numbered pagination and infinite scrolling use these sizes. The current
 client-side filtering/sorting model requires complete collections: archive loaders
-walk GraphQL cursors (or Woo Store API pages) in batches of at most 100, rather than
+walk GraphQL cursors in batches of 25 (Woo Store API pages stay at 100), rather than
 mistaking one visual page for the whole archive. Broken/repeated cursors, incomplete
 REST pagination, or more than 1,000 batches raise errors instead of silently hiding
 later items. A native `-1` page size displays the complete collection.
@@ -123,6 +129,42 @@ Older themes without the new GraphQL field use WordPress's exposed reading setti
 and 12 products per page with an explicit upgrade warning. Other settings-query
 failures surface an unavailable state rather than silently substituting defaults.
 Use the updated backend theme to synchronize WooCommerce settings accurately.
+
+## Build stability
+
+Custom CSS is critical by default. To opt in to two layers, put
+`/* storefront:deferred */` on its own line **between complete top-level rules**.
+Keep header, promo, hero, fonts, and layout rules above it; place only
+below-the-fold rules after it. Prerender emits a separate non-render-blocking
+stylesheet, activated on window load or after two seconds without waiting for React
+or WordPress. Without JavaScript, a noscript stylesheet preserves the full design.
+The runtime fallback applies the same split; no existing CSS is automatically deferred.
+
+Header promotional HTML preserves classes and safe inline presentation styles in
+both static and React rendering. Its `branding.promoHtml` is included in CMS
+Tailwind extraction. Script/event attributes and unsafe CSS remain blocked.
+CMS `application/ld+json` scripts are parsed as data, never wrapped in JavaScript
+error handlers. Product category/tag/brand archives use `CollectionPage`, not
+`Product` or `ProductGroup` (which describes variants of a single product).
+
+Build-time GraphQL shares the browser's two-request concurrency limit so complete
+archive loading does not saturate WordPress workers. Native display page sizes
+remain independent of these transport batches. Store API requests time out after
+12 seconds instead of leaving a catalog load pending indefinitely.
+CMS class extraction scans two independent inventories at a time and reports
+per-source timings. Route discovery limits rendered page batches to 25 and makes
+at most two 20-second attempts per request, rather than five 60-second attempts.
+
+Prerender fetches only the content seed families required by discovered routes,
+one family at a time. Missing navigation, pagination settings, or required content
+seeds fail the build: Netlify keeps its previous deployment rather than publishing
+HTML containing loading placeholders without the data needed to activate them.
+An optional AI-assistant failure is logged without discarding usable navigation.
+GraphQL schema errors are not retried unchanged.
+
+Optional SEO document mirroring shares a 30-second total network budget across
+feeds, sitemaps, and AI documents. An unavailable backend is logged and existing
+generated output is retained, instead of accumulating a timeout for each document.
 
 ## Public component selectors
 

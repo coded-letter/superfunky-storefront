@@ -10,7 +10,7 @@ import {
 test("dependency-free sitemap discovery uses only core and theme route fields", () => {
   const query = buildRoutesQuery();
 
-  assert.match(query, /contentNodes\(first: 100/);
+  assert.match(query, /contentNodes\(first: 25/);
   assert.match(query, /\.\.\. on Page \{/);
   assert.match(query, /databaseId\s+slug\s+isFrontPage/);
   assert.match(query, /headlessContent/);
@@ -66,9 +66,9 @@ test("core fallback paginates standard routes without the generic connections", 
   const query = buildCoreRoutesQuery({ publicRobots: true, specialPages: true, shopPages: true, seo: true });
 
   for (const connection of ["pages", "posts", "categories", "tags", "users"]) {
-    assert.match(query, new RegExp(`${connection}\\(first: 100`));
+    assert.match(query, new RegExp(`${connection}\\(first: ${connection === "pages" ? 25 : 100}`));
   }
-  assert.match(query, /pages\(first: 100[\s\S]*databaseId\s+slug\s+isFrontPage/);
+  assert.match(query, /pages\(first: 25[\s\S]*databaseId\s+slug\s+isFrontPage/);
   assert.doesNotMatch(query, /contentNodes|terms\(/);
   assert.match(query, /PostTypeSEO|TaxonomySEO/);
   assert.match(query, /isPrivacyPage\s+isShopPage\s+isTermsPage/);

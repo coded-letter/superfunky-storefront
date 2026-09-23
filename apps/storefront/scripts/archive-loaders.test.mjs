@@ -72,7 +72,7 @@ function transport(graphql, rest = () => []) {
 
 function connection(nodes, { query, variables }) {
   assert.match(query, /(?:posts|products)\(first: \$first, after: \$after/);
-  assert.equal(variables.first, 100);
+  assert.equal(variables.first, 25);
   const start = variables.after ? Number(variables.after.slice("cursor:".length)) : 0;
   const end = start + variables.first;
   return { nodes: nodes.slice(start, end), pageInfo: { hasNextPage: end < nodes.length, endCursor: `cursor:${end}` } };
@@ -84,7 +84,7 @@ test("blog indexes fetch every transport page before applying language filtering
   assert.equal(result.posts.length, rawPosts.filter((post) => post.language.code === "EN").length);
   assert.equal(result.posts.at(-1).id, "post-202");
   assert.equal(result.hasMorePosts, false);
-  assert.deepEqual(calls.map(({ variables }) => variables.after), [null, "cursor:100", "cursor:200"]);
+  assert.deepEqual(calls.map(({ variables }) => variables.after), [null, ...Array.from({ length: 8 }, (_, index) => `cursor:${(index + 1) * 25}`)]);
 });
 
 test("post taxonomy archives keep posts beyond the first transport batch", async () => {
@@ -96,7 +96,7 @@ test("post taxonomy archives keep posts beyond the first transport batch", async
   assert.equal(result.posts.length, rawPosts.filter((post) => post.language.code === "EN").length);
   assert.equal(result.posts.at(-1).id, "post-202");
   assert.equal(result.hasMorePosts, false);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 9);
 });
 
 test("author compatibility retries preserve cursors and client-side author/language filtering", async () => {
@@ -113,7 +113,7 @@ test("author compatibility retries preserve cursors and client-side author/langu
   assert.deepEqual(result.posts.map(({ id }) => id), rawPosts
     .filter((post) => post.author.node.slug === "alice" && post.language.code === "EN").map(({ id }) => id));
   assert.deepEqual(calls.filter(({ query }) => !query.includes("authorName: $authorName"))
-    .map(({ variables }) => variables.after), [null, "cursor:100", "cursor:200"]);
+    .map(({ variables }) => variables.after), [null, ...Array.from({ length: 8 }, (_, index) => `cursor:${(index + 1) * 25}`)]);
 });
 
 for (const compatible of [false, true]) {
@@ -136,7 +136,7 @@ for (const compatible of [false, true]) {
     assert.equal(result.hasMoreProducts, false);
     assert.deepEqual(calls.filter(({ query }) => query.includes("products(first:")
       && (!compatible || query.includes("CatalogCompatibleProducts")))
-      .map(({ variables }) => variables.after), [null, "cursor:100", "cursor:200"]);
+      .map(({ variables }) => variables.after), [null, ...Array.from({ length: 8 }, (_, index) => `cursor:${(index + 1) * 25}`)]);
   });
 }
 

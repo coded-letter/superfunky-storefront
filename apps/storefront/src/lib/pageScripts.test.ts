@@ -100,6 +100,38 @@ test("mountCmsScripts rejects HTML responses embedded as inline JavaScript", () 
   }
 });
 
+for (const inert of [false, true]) {
+  test(`CMS Recipe JSON-LD stays parseable data, not wrapped JavaScript (${inert ? "inert" : "direct"})`, () => {
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const recipe = { "@context": "https://schema.org", "@type": "Recipe", name: "Wafle", description: "A &amp; B" };
+    root.innerHTML = `<script data-wp-block-html="js" ${inert
+      ? 'type="text/funkycommerce-cms" data-wp-block-html-type="application/ld+json"'
+      : 'type="application/ld+json"'}>${JSON.stringify(recipe)}</script>`;
+    const cleanup = mountCmsScripts(root);
+    const script = root.querySelector("script")!;
+    assert.equal(script.type, "application/ld+json");
+    assert.deepEqual(JSON.parse(script.textContent!), recipe);
+    assert.doesNotMatch(script.textContent!, /try \{|catch \(|cms-script-error/);
+    cleanup();
+  });
+}
+
+test("invalid JSON-LD is explicitly reported instead of executed", () => {
+  const root = document.querySelector<HTMLElement>("#root")!;
+  root.innerHTML = '<script data-wp-block-html="js" type="application/ld+json">{broken}</script>';
+  const original = console.error;
+  const errors: unknown[][] = [];
+  console.error = (...args) => errors.push(args);
+  try {
+    const cleanup = mountCmsScripts(root);
+    assert.equal(root.querySelector("script")?.getAttribute("data-funky-cms-rejected"), "true");
+    assert.equal(errors.length, 1);
+    cleanup();
+  } finally {
+    console.error = original;
+  }
+});
+
 test("mountCmsScripts contains inline execution errors and reports them", () => {
   const root = document.querySelector<HTMLElement>("#root")!;
   root.innerHTML = `

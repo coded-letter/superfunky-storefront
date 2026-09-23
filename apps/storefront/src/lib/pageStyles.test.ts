@@ -16,6 +16,49 @@ import { staticStyleSourceHash } from "./staticStyleContract.mjs";
 const bundledCss = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 const photoHeroSource = readFileSync(new URL("../components/HeroMock.tsx", import.meta.url), "utf8");
 const videoHeroSource = readFileSync(new URL("../components/VideoHero.tsx", import.meta.url), "utf8");
+const themeProviderSource = readFileSync(new URL("../state/wordpressThemeStyles.tsx", import.meta.url), "utf8");
+
+test("applied theme CSS does not wait for background data revalidation", () => {
+  assert.match(themeProviderSource, /Boolean\(data\) && appliedData === data/);
+  assert.doesNotMatch(themeProviderSource, /\bisLoading\b|\bisRevalidating\b/);
+});
+
+test("unresponsive CMS stylesheet readiness is bounded without cancelling its download", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const dom = new JSDOM('<html><head><link rel="stylesheet" href="/pending.css" data-wordpress-page-style="wordpress-block-library"></head><body></body></html>');
+  Object.assign(globalThis, { document: dom.window.document });
+  try {
+    let calls = 0;
+    const stop = afterMountedPageStylesSettle(() => { calls += 1; });
+    context.mock.timers.tick(1_999);
+    assert.equal(calls, 0);
+    context.mock.timers.tick(1);
+    assert.equal(calls, 1);
+    const link = document.querySelector("link")!;
+    assert.equal(link.isConnected, true);
+    link.dispatchEvent(new dom.window.Event("load"));
+    assert.equal(calls, 1);
+    stop();
+  } finally {
+    dom.window.close();
+  }
+});
+
+test("stylesheet wait cleanup cancels both the readiness deadline and event listeners", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const dom = new JSDOM('<html><head><link rel="stylesheet" href="/pending.css" data-wordpress-page-style="wordpress-block-library"></head><body></body></html>');
+  Object.assign(globalThis, { document: dom.window.document });
+  try {
+    let calls = 0;
+    const stop = afterMountedPageStylesSettle(() => { calls += 1; });
+    stop();
+    context.mock.timers.tick(2_000);
+    document.querySelector("link")!.dispatchEvent(new dom.window.Event("error"));
+    assert.equal(calls, 0);
+  } finally {
+    dom.window.close();
+  }
+});
 
 test("page style readiness waits for every CMS stylesheet chunk", () => {
   const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>");
@@ -380,6 +423,34 @@ test("mounts core block styles after global defaults and before editor custom CS
   dom.window.close();
 });
 
+test("a failed shared core stylesheet does not block subsequent readiness checks", () => {
+  const dom = new JSDOM("<html><head></head><body></body></html>");
+  Object.assign(globalThis, { document: dom.window.document });
+  const cleanup = mountPageStyles({
+    customCss: "",
+    fontFaceStyles: "",
+    globalStyles: "",
+    stylesheets: ["https://v3.superfunky.pro/wp-includes/css/dist/block-library/style.min.css?ver=7.0.2"],
+    colors: [],
+    fontFamilies: [],
+    fontSizes: [],
+    gradients: [],
+    spacingSizes: [],
+    contentSize: "",
+    wideSize: "",
+  }, "https://v3.superfunky.pro/graphql");
+  try {
+    document.querySelector("link")!.dispatchEvent(new dom.window.Event("error"));
+    let settled = false;
+    const stop = afterMountedPageStylesSettle(() => { settled = true; });
+    assert.equal(settled, true);
+    stop();
+  } finally {
+    cleanup();
+    dom.window.close();
+  }
+});
+
 test("keeps the loaded prerendered WordPress style bundle authoritative during hydration", () => {
   const styles = {
     customCss: ".editor-rule{color:red}",
@@ -416,7 +487,7 @@ test("keeps the loaded prerendered WordPress style bundle authoritative during h
   dom.window.close();
 });
 
-test("mounts runtime fallback styles when the prerendered stylesheet failed to load", () => {
+test("mounts fallback CSS without removing a pending or failed prerendered stylesheet", () => {
   const styles = {
     customCss: ".editor-rule{color:red}",
     fontFaceStyles: "",
@@ -440,9 +511,15 @@ test("mounts runtime fallback styles when the prerendered stylesheet failed to l
   assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-global-styles"]'));
   assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-custom-css"]'));
   assert.ok(document.querySelector('style[data-wordpress-page-style="wordpress-block-compatibility"]'));
-  assert.equal(document.querySelector("link[data-wordpress-static-style-source]"), null);
+  const staticStyleBundle = document.querySelector("link[data-wordpress-static-style-source]");
+  assert.ok(staticStyleBundle);
+  Object.defineProperty(staticStyleBundle, "sheet", { value: {} });
+  staticStyleBundle.dispatchEvent(new dom.window.Event("load"));
+  const cleanupAfterLoad = mountPageStyles(styles, "https://v3.superfunky.pro/graphql");
 
+  cleanupAfterLoad();
   cleanup();
+  assert.equal(document.querySelector("link[data-wordpress-static-style-source]"), staticStyleBundle);
   dom.window.close();
 });
 

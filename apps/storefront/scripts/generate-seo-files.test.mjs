@@ -20,6 +20,33 @@ async function withOutputDirectory(run) {
   }
 }
 
+test("an offline backend cannot multiply the SEO stage budget across every document", async () => {
+  await withOutputDirectory(async (outputDirectory) => {
+    let requests = 0;
+    const started = performance.now();
+    const warnings = [];
+    await generateSeoFiles({
+      graphqlEndpoint: "https://cms.example.com/graphql",
+      outputDirectory,
+      budgetMs: 40,
+      timeoutMs: 5_000,
+      retryDelay: async () => {},
+      warn: (message) => warnings.push(message),
+      fetchImpl: (_url, { signal }) => new Promise((_resolve, reject) => {
+        requests += 1;
+        const timer = setTimeout(() => reject(new Error("test request exceeded budget")), 1_000);
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        }, { once: true });
+      }),
+    });
+    assert.equal(requests, 1);
+    assert.ok(performance.now() - started < 500);
+    assert.ok(warnings.some((message) => message.includes("Keeping existing build output.")));
+  });
+});
+
 test("retries a transient product feed failure and writes only the canonical XML document", async () => {
   await withOutputDirectory(async (outputDirectory) => {
     let productFeedAttempts = 0;

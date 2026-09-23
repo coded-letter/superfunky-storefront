@@ -3,7 +3,7 @@ import type { ArchivePageSizes } from "@funky/ui";
 import type { GraphqlFieldFallbackRequester } from "./graphqlFieldFallback.ts";
 
 export const ARCHIVE_SETTINGS_CACHE_KEY = "archive-settings:v1";
-export const ARCHIVE_BATCH_SIZE = 100;
+export const ARCHIVE_BATCH_SIZE = 25;
 
 type ArchiveBatchPageInfo = {
   hasNextPage: boolean;
@@ -51,9 +51,12 @@ export async function fetchRestArchiveNodes<TNode>(endpoint: string, request: ty
   const nodes: TNode[] = [];
   for (let page = 1; page <= 1_000; page += 1) {
     const url = new URL(endpoint);
-    url.searchParams.set("per_page", String(ARCHIVE_BATCH_SIZE));
+    url.searchParams.set("per_page", "100");
     url.searchParams.set("page", String(page));
-    const response = await request(url, { headers: { Accept: "application/json" } });
+    const response = await request(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(12_000),
+    });
     if (response.status === 404 && page === 1) return [];
     if (!response.ok) throw new Error(`WooCommerce Store API catalog failed with status ${response.status}`);
     const payload: unknown = await response.json();

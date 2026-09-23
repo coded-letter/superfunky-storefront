@@ -258,7 +258,16 @@ export async function fetchCmsTailwindDocuments(endpoint, fetchImpl = fetch, sto
   const request = (query, variables) => requestCmsGraphql(endpoint, query, variables, fetchImpl, storefrontOrigin);
   // Core connections avoid plugin failures in WordPress's generic contentNodes resolver.
   const productFallback = (optional) => fetchStoreProducts(endpoint, fetchImpl, storefrontOrigin, addDocument, optional);
-  for (const source of SOURCES) await fetchConnection(source, request, addDocument, productFallback);
+  // Match the storefront's two-worker budget without serializing independent inventories.
+  for (let index = 0; index < SOURCES.length; index += 2) {
+    const results = await Promise.allSettled(SOURCES.slice(index, index + 2).map(async (source) => {
+      const startedAt = performance.now();
+      await fetchConnection(source, request, addDocument, productFallback);
+      console.log(`[cms-tailwind] ${source.root} extracted in ${((performance.now() - startedAt) / 1000).toFixed(1)}s.`);
+    }));
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
+  }
   await fetchChrome(request, addDocument, languages);
   return documents;
 }
