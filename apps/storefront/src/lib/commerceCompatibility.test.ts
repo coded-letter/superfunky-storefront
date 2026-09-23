@@ -84,7 +84,7 @@ test("single-locale catalogs merge current Store API products with GraphQL produ
   const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
   assert.match(source, /const storeApiProducts = configuredLanguageCodes\.length <= 1/);
   assert.match(source, /\.\.\.storeApiProducts\.filter/);
-  assert.match(source, /wc\/store\/v1\/products\?per_page=100/);
+  assert.match(source, /fetchRestArchiveNodes<StoreApiCatalogProduct>\(endpoint\)/);
 });
 
 test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {

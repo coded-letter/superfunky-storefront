@@ -26,7 +26,7 @@ import {
   shouldPreferCoreGraphqlQueries,
 } from "./profileGraphqlCompatibility.ts";
 import { htmlToPlainText } from "./htmlText.ts";
-import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, getArchivePageSize } from "./archiveSettings.ts";
+import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches } from "./archiveSettings.ts";
 
 export type PostTaxonomy = "category" | "tag";
 export type TaxonomyIdentifierType = "URI" | "SLUG";
@@ -354,7 +354,6 @@ export async function getPostTaxonomyArchive(
   expectedLanguageCode = "en",
 ): Promise<CmsPostArchive | null> {
   const query = taxonomy === "category" ? CATEGORY_ARCHIVE_QUERY : TAG_ARCHIVE_QUERY;
-  const targetCount = await getArchivePageSize();
   const initialQuery = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
     ? createCorePostArchiveQuery(query)
     : query;
@@ -376,7 +375,7 @@ export async function getPostTaxonomyArchive(
     return data;
   };
 
-  const initialData = await loadArchivePage(Math.min(targetCount, ARCHIVE_BATCH_SIZE), null);
+  const initialData = await loadArchivePage(ARCHIVE_BATCH_SIZE, null);
   if (!initialData.archive) {
     if (idType === "URI") {
       const slug = taxonomySlugFromUri(identifier);
@@ -389,7 +388,7 @@ export async function getPostTaxonomyArchive(
 
   let firstPageData: TaxonomyArchiveResult | null = initialData;
   const { nodes: posts, hasMore } = await fetchArchiveNodesInBatches<RawBlogPost>(
-    targetCount,
+    -1,
     async (first, after) => {
       const pageData = firstPageData || await loadArchivePage(first, after);
       firstPageData = null;

@@ -3014,11 +3014,13 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
     { getCommerceCatalog },
     { getBlogData, getBlogSummaryData },
     { getCommunityData, getCommunityFeedData },
+    { ARCHIVE_SETTINGS_CACHE_KEY, getArchiveSettings },
   ] = await Promise.all([
     import("../src/lib/navigation.ts"),
     import("../src/lib/commerce.ts"),
     import("../src/lib/blog.ts"),
     import("../src/lib/community.ts"),
+    import("../src/lib/archiveSettings.ts"),
   ]);
   const assetsByLanguage = new Map();
 
@@ -3050,6 +3052,16 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
               }]
             : []),
         ],
+      },
+      {
+        name: "archiveSettings",
+        enabled: true,
+        load: () => getArchiveSettings(),
+        entries: (value) => [{
+          cacheKey: ARCHIVE_SETTINGS_CACHE_KEY,
+          value,
+          dependencies: ["config:storefront"],
+        }],
       },
       {
         name: "commerce",
@@ -3209,7 +3221,7 @@ function staticHydrationUrlsForRoute(route, renderedMarkup) {
   if (!assets) return [];
   const localeAssets = [...staticHydrationAssets.values()];
   const requirements = resolveBackendDataRequirements(backendProfile, route.path, renderedMarkup);
-  const urls = localeAssets.map(({ navigation }) => navigation);
+  const urls = localeAssets.flatMap(({ navigation, archiveSettings }) => [navigation, archiveSettings]);
   if (requirements.commerce) {
     urls.push(...localeAssets.map(({ commerce }) => commerce));
   }

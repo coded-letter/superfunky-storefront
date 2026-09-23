@@ -182,7 +182,6 @@ function PostTaxonomyArchive({
           key={archive.id}
           title={isTag ? t("archive.tagged_title", { name: archive.name }) : t("archive.posts_title", { name: archive.name })}
           posts={archive.posts}
-          pageSize={6}
           cardVariant="default"
           gridVariant="standard"
         />

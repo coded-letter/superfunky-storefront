@@ -10,7 +10,7 @@ export function createCompatibleAuthorArchiveQuery(query: string): string {
     removeGraphqlFieldSelections(query, "storefrontDescription"),
   )
     .replace(/^[\t ]*\$(?:authorName|language):[^\n]+\n/gm, "")
-    .replace(/posts\(first:\s*100,\s*where:\s*\{[^{}]*\}\)/g, "posts(first: 100)");
+    .replace(/posts\((first:\s*(?:\d+|\$first)(?:,\s*after:\s*\$after)?),\s*where:\s*\{[^{}]*\}\)/g, "posts($1)");
   return removeGraphqlFieldSelections(
     removeGraphqlFieldSelections(compatibleQuery, "content"),
     "seo",

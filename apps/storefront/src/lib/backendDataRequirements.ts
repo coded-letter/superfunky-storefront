@@ -44,6 +44,7 @@ export function canUseHomepageBlogSummary(pathname: string, renderedMarkup: stri
   if (!renderedMarkup.trim()) return false;
   return !readShortcodeMarkers(renderedMarkup).some(({ name, type }) =>
     (name === "categories" && type === "post")
+    || (name === "grid" && ["post", "community-article"].includes(type))
     || ["authors", "comments", "tags", "post_archive", "funkycommerce_blog", "reading_list", "funkycommerce_reading_list"].includes(name),
   );
 }

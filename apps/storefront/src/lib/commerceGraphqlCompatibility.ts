@@ -225,11 +225,12 @@ export async function requestCommerceWithFallbackChain<T>(
 export async function requestCompatibleCatalog<T extends Record<string, unknown>>(
   request: CommerceGraphqlRequester,
   operations: readonly { field: keyof T; query: string }[],
+  variables: Record<string, unknown> = {},
 ): Promise<T> {
   const result: Partial<T> = {};
 
   const resolved = await Promise.all(operations.map(async ({ field, query }) => {
-    const response = await request<Pick<T, typeof field>>(query, {});
+    const response = await request<Pick<T, typeof field>>(query, variables);
     if (
       isMissingProductRootSchemaError(response.errors)
       || (
@@ -265,7 +266,7 @@ export async function requestCatalogWithFallback<T extends Record<string, unknow
 ): Promise<{ data: T; usesCompatibilityFallback: boolean }> {
   if (preferCompatible) {
     return {
-      data: await requestCompatibleCatalog<T>(request, compatibleOperations),
+      data: await requestCompatibleCatalog<T>(request, compatibleOperations, variables),
       usesCompatibilityFallback: true,
     };
   }
@@ -277,7 +278,7 @@ export async function requestCatalogWithFallback<T extends Record<string, unknow
   if (isMissingProductRootSchemaError(response.errors) || shouldRetry(response.errors)) {
     if (!(import.meta.env?.PROD ?? false)) recordCompatibilityRetry();
     return {
-      data: await requestCompatibleCatalog<T>(request, compatibleOperations),
+      data: await requestCompatibleCatalog<T>(request, compatibleOperations, variables),
       usesCompatibilityFallback: true,
     };
   }
