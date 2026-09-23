@@ -28,7 +28,7 @@ const WordPressThemeStylesContext = createContext<WordPressThemeStylesContextVal
 });
 
 export function WordPressThemeStylesProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
-  const { data, isLoading, isRevalidating, error } = useIncrementalData(
+  const { data, error } = useIncrementalData(
     "wordpress-theme-styles:v5",
     getWordPressThemeStyles,
     enabled,
@@ -60,7 +60,8 @@ export function WordPressThemeStylesProvider({ children, enabled = true }: { chi
 
   const ready = !enabled
     || hasLoadedStaticStyleSeed
-    || (!isLoading && !isRevalidating && (Boolean(error) || (Boolean(data) && appliedData === data)));
+    || Boolean(error)
+    || (Boolean(data) && appliedData === data);
   const value = useMemo(() => ({ data, ready }), [data, ready]);
 
   return <WordPressThemeStylesContext.Provider value={value}>{children}</WordPressThemeStylesContext.Provider>;

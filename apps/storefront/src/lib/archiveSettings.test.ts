@@ -89,7 +89,9 @@ test("complete archives retain every item beyond the first visual and transport 
   assert.equal(result.nodes.length, 237);
   assert.equal(result.nodes.at(-1), 236);
   assert.equal(result.hasMore, false);
-  assert.deepEqual(calls, [[100, null], [100, "100"], [100, "200"]]);
+  assert.equal(ARCHIVE_BATCH_SIZE, 25);
+  assert.deepEqual(calls, Array.from({ length: 10 }, (_, index) =>
+    [25, index === 0 ? null : String(index * 25)]));
 });
 
 test("archive batching rejects cursor cycles instead of looping or showing duplicate pages", async () => {
@@ -130,31 +132,31 @@ test("archive batching loads multiple cursor pages up to the requested total", a
   const calls: { first: number; after: string | null }[] = [];
   const pages = [
     {
-      nodes: Array.from({ length: 100 }, (_, index) => index + 1),
+      nodes: Array.from({ length: 25 }, (_, index) => index + 1),
       pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
     },
     {
-      nodes: Array.from({ length: 100 }, (_, index) => index + 101),
+      nodes: Array.from({ length: 25 }, (_, index) => index + 26),
       pageInfo: { hasNextPage: true, endCursor: "cursor-2" },
     },
     {
-      nodes: Array.from({ length: 50 }, (_, index) => index + 201),
+      nodes: Array.from({ length: 10 }, (_, index) => index + 51),
       pageInfo: { hasNextPage: true, endCursor: "cursor-3" },
     },
   ];
   let pageIndex = 0;
 
-  const result = await fetchArchiveNodesInBatches(250, async (first, after) => {
+  const result = await fetchArchiveNodesInBatches(60, async (first, after) => {
     calls.push({ first, after });
     return pages[pageIndex++]!;
   });
 
-  assert.equal(result.nodes.length, 250);
+  assert.equal(result.nodes.length, 60);
   assert.equal(result.hasMore, true);
   assert.deepEqual(calls, [
     { first: ARCHIVE_BATCH_SIZE, after: null },
     { first: ARCHIVE_BATCH_SIZE, after: "cursor-1" },
-    { first: 50, after: "cursor-2" },
+    { first: 10, after: "cursor-2" },
   ]);
 });
 

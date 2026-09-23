@@ -41,18 +41,25 @@ export async function fetchDocument(path, {
   maxAttempts = 3,
   retryDelay = defaultRetryDelay,
   timeoutMs = 15_000,
+  signal,
   warn = console.warn,
 }) {
   let lastError;
   let attemptsMade = 0;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (signal?.aborted) {
+      lastError = signal.reason;
+      break;
+    }
     attemptsMade = attempt;
     try {
       const response = await fetchImpl(new URL(path, backendOrigin), {
         headers: { "User-Agent": "FunkyCommerce-Static-SEO/1.0" },
         redirect: "follow",
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+          : AbortSignal.timeout(timeoutMs),
       });
       if (response.status === 404) return null;
       if (!response.ok) {
@@ -65,7 +72,7 @@ export async function fetchDocument(path, {
       lastError = error;
     }
 
-    if (attempt < maxAttempts) await retryDelay(attempt);
+    if (attempt < maxAttempts && !signal?.aborted) await retryDelay(attempt);
   }
 
   warn(
@@ -228,6 +235,7 @@ export async function generateSeoFiles({
   maxAttempts = 3,
   retryDelay = defaultRetryDelay,
   timeoutMs = 15_000,
+  budgetMs = 30_000,
   warn = console.warn,
 } = {}) {
   if (!graphqlEndpoint) {
@@ -237,12 +245,14 @@ export async function generateSeoFiles({
 
   const backendOrigin = new URL(graphqlEndpoint).origin;
   const frontendOrigin = siteUrl ? new URL(siteUrl).origin : null;
+  const signal = AbortSignal.timeout(budgetMs);
   const fetchFromBackend = (path) => fetchDocument(path, {
     backendOrigin,
     fetchImpl,
     maxAttempts,
     retryDelay,
     timeoutMs,
+    signal,
     warn,
   });
   await mkdir(outputDirectory, { recursive: true });

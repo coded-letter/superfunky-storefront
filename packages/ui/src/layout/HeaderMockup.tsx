@@ -285,7 +285,7 @@ export function HeaderMockup({
   const [isScrolled, setIsScrolled] = useState(
     () => typeof window !== "undefined" && window.scrollY > 4,
   );
-  const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml);
+  const safeAnnouncementHtml = sanitizeStorefrontHtml(announcementHtml, true);
   const isAnnouncementBarShown = showAnnouncementBar && Boolean(safeAnnouncementHtml) && isAnnouncementVisible;
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
@@ -533,6 +533,7 @@ export function HeaderMockup({
           >
             <SafeHtmlContent
               html={safeAnnouncementHtml}
+              preservePresentation
               className="[&_a]:font-semibold [&_a]:text-inherit [&_a]:underline [&_ol]:m-0 [&_p]:m-0 [&_ul]:m-0"
             />
           </div>

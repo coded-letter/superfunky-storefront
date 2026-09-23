@@ -116,17 +116,22 @@ test("network failures retry and then fail rather than generating the baseline",
     attempts += 1;
     return new Response("", { status: 403 });
   }), /HTTP 403/);
-  assert.equal(attempts, 3);
+  assert.equal(attempts, 6);
 });
 
 test("excessive pagination fails instead of emitting a truncated inventory", async () => {
   let pages = 0;
-  await assert.rejects(fetchCmsTailwindDocuments(endpoint, async () => Response.json({
+  await assert.rejects(fetchCmsTailwindDocuments(endpoint, async (_url, init) => {
+    if (JSON.parse(init.body).query.includes("posts(first:")) {
+      return Response.json({ data: { posts: emptyConnection } });
+    }
+    return Response.json({
     data: { pages: {
       nodes: [{ id: "page", content: "", headlessContent: "" }],
       pageInfo: { hasNextPage: true, endCursor: String(++pages) },
     } },
-  })), /pagination exceeded 100 pages/);
+    });
+  }), /pagination exceeded 100 pages/);
   assert.equal(pages, 100);
 });
 

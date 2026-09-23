@@ -107,7 +107,7 @@ function ProductTaxonomyArchive({ archive }: { archive: CmsProductArchive }) {
             : undefined}
         twitterTitle={archive.seo.twitterTitle || undefined}
         twitterDescription={archive.seo.twitterDescription || undefined}
-        schema={{ pageType: archive.seo.pageType || "CollectionPage" }}
+        schema={{ pageType: "CollectionPage" }}
         breadcrumbs={archive.seo.breadcrumbs}
       />
       <div className={isFullBleed ? "absolute left-0 top-4 z-20 text-white [&_a]:text-white/80 [&_span]:text-white/70" : ""}>
