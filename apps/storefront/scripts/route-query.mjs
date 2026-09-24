@@ -119,6 +119,7 @@ export function buildConfiguredFrontPageQuery({
 }
 
 export function buildRoutesQuery({
+  connections = ["contentNodes", "terms", "users"],
   commerce = false,
   multilingual = false,
   publicRobots = false,
@@ -127,6 +128,12 @@ export function buildRoutesQuery({
   translations = multilingual,
   seo = false,
 } = {}) {
+  const selectedConnections = new Set(connections);
+  const variables = [
+    selectedConnections.has("contentNodes") ? "$contentAfter: String" : "",
+    selectedConnections.has("terms") ? "$termAfter: String" : "",
+    selectedConnections.has("users") ? "$userAfter: String" : "",
+  ].filter(Boolean).join(", ");
   const publicRobotsField = publicRobots
     ? "funkycommercePublicRobots { noindex nofollow }"
     : "";
@@ -189,14 +196,17 @@ export function buildRoutesQuery({
         }
       `
     : "";
+  const usesImageFragment = selectedConnections.has("contentNodes")
+    || (selectedConnections.has("terms") && (commerce || seo))
+    || (selectedConnections.has("users") && seo);
 
   return `
-    query StorefrontBuildRoutes($contentAfter: String, $termAfter: String, $userAfter: String) {
+    query StorefrontBuildRoutes(${variables}) {
       readingSettings {
         showOnFront
         pageOnFront
       }
-      contentNodes(first: 100, after: $contentAfter) {
+      ${selectedConnections.has("contentNodes") ? `contentNodes(first: 25, after: $contentAfter) {
         nodes {
           uri
           __typename
@@ -217,8 +227,8 @@ export function buildRoutesQuery({
           ${coreLanguageFields}
         }
         pageInfo { hasNextPage endCursor }
-      }
-      terms(first: 100, after: $termAfter) {
+      }` : ""}
+      ${selectedConnections.has("terms") ? `terms(first: 25, after: $termAfter) {
         nodes {
           uri
           __typename
@@ -227,18 +237,19 @@ export function buildRoutesQuery({
           ${productTaxonomyFields}
         }
         pageInfo { hasNextPage endCursor }
-      }
-      users(first: 100, after: $userAfter) {
+      }` : ""}
+      ${selectedConnections.has("users") ? `users(first: 25, after: $userAfter) {
         nodes {
           uri
           name
           ${seo ? USER_SEO_FIELDS : ""}
         }
         pageInfo { hasNextPage endCursor }
-      }
+      }` : ""}
     }
-    ${ROUTE_IMAGE_FRAGMENT}
-    ${seo ? `${POST_TYPE_SEO_FRAGMENT}\n${TAXONOMY_SEO_FRAGMENT}` : ""}
+    ${usesImageFragment ? ROUTE_IMAGE_FRAGMENT : ""}
+    ${seo && selectedConnections.has("contentNodes") ? POST_TYPE_SEO_FRAGMENT : ""}
+    ${seo && selectedConnections.has("terms") ? TAXONOMY_SEO_FRAGMENT : ""}
   `;
 }
 
@@ -274,7 +285,7 @@ export function buildCoreRoutesQuery({
         showOnFront
         pageOnFront
       }
-      ${selectedConnections.has("pages") ? `pages(first: 100, after: $pageAfter) {
+      ${selectedConnections.has("pages") ? `pages(first: 25, after: $pageAfter) {
         nodes {
           uri
           __typename
@@ -300,7 +311,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("posts") ? `posts(first: 100, after: $postAfter) {
+      ${selectedConnections.has("posts") ? `posts(first: 25, after: $postAfter) {
         nodes {
           uri
           __typename
@@ -314,7 +325,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("categories") ? `categories(first: 100, after: $categoryAfter) {
+      ${selectedConnections.has("categories") ? `categories(first: 25, after: $categoryAfter) {
         nodes {
           uri
           __typename
@@ -323,7 +334,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("tags") ? `tags(first: 100, after: $tagAfter) {
+      ${selectedConnections.has("tags") ? `tags(first: 25, after: $tagAfter) {
         nodes {
           uri
           __typename
@@ -332,7 +343,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("users") ? `users(first: 100, after: $userAfter) {
+      ${selectedConnections.has("users") ? `users(first: 25, after: $userAfter) {
         nodes {
           uri
           name

@@ -52,6 +52,7 @@ test("all static logo variants preserve React geometry and accessibility", () =>
   assert.match(prerenderSource, /logoVariant === "text"/);
   assert.match(prerenderSource, /logoVariant !== "image"/);
   assert.match(prerenderSource, /class="storefront-static-brand-logo"/);
+  assert.match(prerenderSource, /class="storefront-static-brand group"/);
   assert.match(prerenderSource, /hasBrandText \? "" : escapeAttribute\(chromeConfig\.storeName\)/);
   assert.match(prerenderSource, /staticHeaderIcon\("sparkles", "", "sparkles"\)/);
   assert.match(indexSource, /\.storefront-static-brand-logo \{[\s\S]*max-width: 12rem;[\s\S]*width: auto;/);

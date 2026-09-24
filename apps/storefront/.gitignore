@@ -4,3 +4,4 @@ dist
 .env
 .env.local
 .tailwind
+/public/.well-known/funkycommerce-tailwind-index.json

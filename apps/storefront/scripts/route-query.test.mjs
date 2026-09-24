@@ -10,7 +10,7 @@ import {
 test("dependency-free sitemap discovery uses only core and theme route fields", () => {
   const query = buildRoutesQuery();
 
-  assert.match(query, /contentNodes\(first: 100/);
+  assert.match(query, /contentNodes\(first: 25/);
   assert.match(query, /\.\.\. on Page \{/);
   assert.match(query, /databaseId\s+slug\s+isFrontPage/);
   assert.match(query, /headlessContent/);
@@ -66,9 +66,9 @@ test("core fallback paginates standard routes without the generic connections", 
   const query = buildCoreRoutesQuery({ publicRobots: true, specialPages: true, shopPages: true, seo: true });
 
   for (const connection of ["pages", "posts", "categories", "tags", "users"]) {
-    assert.match(query, new RegExp(`${connection}\\(first: 100`));
+    assert.match(query, new RegExp(`${connection}\\(first: 25`));
   }
-  assert.match(query, /pages\(first: 100[\s\S]*databaseId\s+slug\s+isFrontPage/);
+  assert.match(query, /pages\(first: 25[\s\S]*databaseId\s+slug\s+isFrontPage/);
   assert.doesNotMatch(query, /contentNodes|terms\(/);
   assert.match(query, /PostTypeSEO|TaxonomySEO/);
   assert.match(query, /isPrivacyPage\s+isShopPage\s+isTermsPage/);
@@ -78,8 +78,26 @@ test("core fallback paginates standard routes without the generic connections", 
 test("core fallback can isolate a connection when combined resolvers fail", () => {
   const query = buildCoreRoutesQuery({ connections: ["posts"] });
 
-  assert.match(query, /posts\(first: 100/);
+  assert.match(query, /posts\(first: 25/);
   for (const connection of ["pages", "categories", "tags", "users"]) {
-    assert.doesNotMatch(query, new RegExp(`${connection}\\(first: 100`));
+    assert.doesNotMatch(query, new RegExp(`${connection}\\(first: 25`));
   }
+});
+
+test("generic route discovery can isolate one bounded connection", () => {
+  const query = buildRoutesQuery({ connections: ["terms"], commerce: true });
+
+  assert.match(query, /query StorefrontBuildRoutes\(\$termAfter: String\)/);
+  assert.match(query, /terms\(first: 25/);
+  assert.doesNotMatch(query, /contentNodes\(first:/);
+  assert.doesNotMatch(query, /users\(first:/);
+  assert.doesNotMatch(query, /\$contentAfter|\$userAfter|StorefrontPostTypeRouteSeo/);
+});
+
+test("isolated SEO taxonomy discovery emits its referenced image fragment", () => {
+  const query = buildRoutesQuery({ connections: ["terms"], seo: true });
+
+  assert.match(query, /fragment StorefrontRouteImage on MediaItem/);
+  assert.match(query, /fragment StorefrontTaxonomyRouteSeo on TaxonomySEO/);
+  assert.match(query, /opengraphImage \{ \.\.\.StorefrontRouteImage \}/);
 });

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-cms-tailwind-content.mjs --contract-only",
+    "prebuild": "node scripts/generate-cms-tailwind-content.mjs",
     "build": "vite build && node scripts/audit-performance-budget.mjs && node --experimental-strip-types scripts/prerender.mjs",
     "postbuild": "node scripts/generate-seo-files.mjs && node scripts/audit-public-copy.mjs",
     "audit:csp": "node scripts/audit-csp.mjs",

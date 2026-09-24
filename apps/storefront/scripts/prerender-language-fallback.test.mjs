@@ -27,7 +27,7 @@ test("prerender retries commerce route discovery without multilingual WooCommerc
   );
   assert.match(
     prerenderSource,
-    /WooCommerce multilingual route metadata is unavailable[\s\S]*?buildRoutesQuery\(\{[\s\S]*?commerce: false/,
+    /WooCommerce multilingual route metadata is unavailable[\s\S]*?discoverGenericRouteNodesIndividually\(\s*\{[\s\S]*?commerce: false/,
   );
   assert.match(
     prerenderSource,
