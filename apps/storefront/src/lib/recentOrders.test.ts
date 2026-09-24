@@ -43,10 +43,8 @@ test("recent orders expose public product links and only reserve chatbot space w
   assert.match(storefrontStyles, /\.storefront-recent-orders \{[\s\S]*bottom: max\(1rem,/);
   assert.match(storefrontStyles, /\[data-chatbot-offset="true"\] \{[\s\S]*bottom: max\(5\.5rem,/);
   assert.match(storefrontStyles, /\.storefront-recent-orders__product/);
-  assert.match(prerenderSource, /const storefrontConfig = navigation\.storefrontConfig/);
-  assert.match(prerenderSource, /const recentOrders = \{ data: \{ storefrontConfig \} \}/);
-  assert.match(prerenderSource, /recentOrdersConfig\?\.quietSeconds/);
-  assert.match(prerenderSource, /recentOrdersConfig\?\.openLinksInNewTab/);
+  assert.match(prerenderSource, /STATIC_RECENT_ORDERS_LEGACY_QUERY/);
+  assert.match(prerenderSource, /legacy storefront recent-order controls/);
   for (const setting of [
     "recent_orders_enabled",
     "recent_orders_item_count",

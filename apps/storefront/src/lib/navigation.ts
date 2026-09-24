@@ -823,12 +823,6 @@ const LOCALIZED_NAVIGATION_MENUS_QUERY = /* GraphQL */ `
   }
 `;
 
-const STATIC_NAVIGATION_MENUS_QUERY = /* GraphQL */ `
-  query StorefrontStaticNavigationMenus {
-    funkycommerceStaticNavigation
-  }
-`;
-
 const STOREFRONT_RADIO_QUERY = /* GraphQL */ `
   query StorefrontRadio($language: String) {
     storefrontConfig: funkycommerceStorefrontConfig(language: $language) {
@@ -1200,56 +1194,13 @@ export async function getStorefrontLanguages(): Promise<LanguageOption[]> {
   return languages.length ? languages : getStorefrontConfigLanguages();
 }
 
-export async function getNavigationMenuData(
-  requestTimeoutMs?: number,
-  preferStaticNavigation = false,
-): Promise<NavigationQueryResult> {
-  if (preferStaticNavigation) {
-    const staticResponse = await graphqlRequest<{ funkycommerceStaticNavigation?: string | null }>(
-      STATIC_NAVIGATION_MENUS_QUERY,
-      undefined,
-      undefined,
-      requestTimeoutMs,
-    );
-    if (!staticResponse.errors?.length && typeof staticResponse.data?.funkycommerceStaticNavigation === "string") {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(staticResponse.data.funkycommerceStaticNavigation);
-      } catch {
-        throw new Error("Static navigation returned invalid JSON");
-      }
-      const payload = parsed as { schemaVersion?: unknown; menus?: NavigationQueryResult["menus"] };
-      if (payload.schemaVersion !== 1 || !Array.isArray(payload.menus?.nodes)) {
-        throw new Error("Static navigation returned an unsupported payload");
-      }
-      return {
-        ...EMPTY_NAVIGATION_RESULT,
-        menus: payload.menus,
-      };
-    }
-    if (
-      staticResponse.errors?.length
-      && !hasOnlyMissingGraphqlFields(staticResponse.errors, ["funkycommerceStaticNavigation"])
-    ) {
-      throw new Error(staticResponse.errors.map(({ message }) => message).join("; "));
-    }
-  }
-  let response = await graphqlRequest<NavigationQueryResult>(
-    LOCALIZED_NAVIGATION_MENUS_QUERY,
-    undefined,
-    undefined,
-    requestTimeoutMs,
-  );
+async function getNavigationMenuData(): Promise<NavigationQueryResult> {
+  let response = await graphqlRequest<NavigationQueryResult>(LOCALIZED_NAVIGATION_MENUS_QUERY);
   if (
     hasOnlyMenuSchemaCompatibilityErrors(response.errors)
     || hasOnlyKnownNavigationResolverErrors(response.errors)
   ) {
-    response = await graphqlRequest<NavigationQueryResult>(
-      COMPATIBLE_NAVIGATION_QUERY,
-      undefined,
-      undefined,
-      requestTimeoutMs,
-    );
+    response = await graphqlRequest<NavigationQueryResult>(COMPATIBLE_NAVIGATION_QUERY);
   }
   if (response.errors?.length) {
     throw new Error(response.errors.map(({ message }) => message).join("; "));
@@ -1304,57 +1255,16 @@ export async function getAiAssistantConfiguration(
   };
 }
 
-export async function getNavigationData(
-  languageCode: string,
-  menuRequestTimeoutMs?: number,
-  preferStaticNavigation = false,
-  knownLanguages?: LanguageOption[],
-  serializeRequests = false,
-): Promise<CmsNavigationData> {
+export async function getNavigationData(languageCode: string): Promise<CmsNavigationData> {
   const variables = { language: languageCode.toLowerCase() };
-  let navigationResponse;
-  let menuData;
-  let runtimeResponse;
-  let uiStringsResponse;
-  let radioResponse;
-  let languages;
-  if (serializeRequests) {
-    navigationResponse = await graphqlRequest<NavigationQueryResult>(
-      NAVIGATION_QUERY,
-      variables,
-      undefined,
-      menuRequestTimeoutMs,
-    );
-    menuData = await getNavigationMenuData(menuRequestTimeoutMs, preferStaticNavigation);
-    runtimeResponse = await graphqlRequest<StorefrontRuntimeQueryResult>(
-      STOREFRONT_RUNTIME_QUERY,
-      variables,
-      undefined,
-      menuRequestTimeoutMs,
-    );
-    uiStringsResponse = await graphqlRequest<StorefrontUiStringsQueryResult>(
-      STOREFRONT_UI_STRINGS_QUERY,
-      variables,
-      undefined,
-      menuRequestTimeoutMs,
-    );
-    radioResponse = await graphqlRequest<StorefrontRadioQueryResult>(
-      STOREFRONT_RADIO_QUERY,
-      variables,
-      undefined,
-      menuRequestTimeoutMs,
-    );
-    languages = knownLanguages ?? await getStorefrontLanguages();
-  } else {
-    [navigationResponse, menuData, runtimeResponse, uiStringsResponse, radioResponse, languages] = await Promise.all([
-      graphqlRequest<NavigationQueryResult>(NAVIGATION_QUERY, variables),
-      getNavigationMenuData(menuRequestTimeoutMs, preferStaticNavigation),
-      graphqlRequest<StorefrontRuntimeQueryResult>(STOREFRONT_RUNTIME_QUERY, variables),
-      graphqlRequest<StorefrontUiStringsQueryResult>(STOREFRONT_UI_STRINGS_QUERY, variables),
-      graphqlRequest<StorefrontRadioQueryResult>(STOREFRONT_RADIO_QUERY, variables),
-      knownLanguages ? Promise.resolve(knownLanguages) : getStorefrontLanguages(),
-    ]);
-  }
+  let [navigationResponse, menuData, runtimeResponse, uiStringsResponse, radioResponse, languages] = await Promise.all([
+    graphqlRequest<NavigationQueryResult>(NAVIGATION_QUERY, variables),
+    getNavigationMenuData(),
+    graphqlRequest<StorefrontRuntimeQueryResult>(STOREFRONT_RUNTIME_QUERY, variables),
+    graphqlRequest<StorefrontUiStringsQueryResult>(STOREFRONT_UI_STRINGS_QUERY, variables),
+    graphqlRequest<StorefrontRadioQueryResult>(STOREFRONT_RADIO_QUERY, variables),
+    getStorefrontLanguages(),
+  ]);
 
   let compatibleNavigationQuery =
     omitUnsupportedLayoutFields(NAVIGATION_QUERY, navigationResponse.errors)
@@ -1363,12 +1273,7 @@ export async function getNavigationData(
     omitUnsupportedNavigationLeafFields(compatibleNavigationQuery, navigationResponse.errors)
     ?? compatibleNavigationQuery;
   if (compatibleNavigationQuery !== NAVIGATION_QUERY) {
-    navigationResponse = await graphqlRequest<NavigationQueryResult>(
-      compatibleNavigationQuery,
-      variables,
-      undefined,
-      serializeRequests ? menuRequestTimeoutMs : undefined,
-    );
+    navigationResponse = await graphqlRequest<NavigationQueryResult>(compatibleNavigationQuery, variables);
   }
 
   if (isNavigationCompatibilityError(navigationResponse.errors)) {
@@ -1377,8 +1282,6 @@ export async function getNavigationData(
     const brandingFallback = await graphqlRequest<CompatibleBrandingQueryResult>(
       COMPATIBLE_BRANDING_QUERY,
       { language: languageCode.toLowerCase() },
-      undefined,
-      serializeRequests ? menuRequestTimeoutMs : undefined,
     );
     if (
       brandingFallback.errors?.length
@@ -1413,12 +1316,7 @@ export async function getNavigationData(
     throw new Error(uiStringsResponse.errors.map(({ message }) => message).join("; "));
   }
   if (isNavigationCompatibilityError(radioResponse.errors)) {
-    radioResponse = await graphqlRequest<StorefrontRadioQueryResult>(
-      LEGACY_STOREFRONT_RADIO_QUERY,
-      variables,
-      undefined,
-      serializeRequests ? menuRequestTimeoutMs : undefined,
-    );
+    radioResponse = await graphqlRequest<StorefrontRadioQueryResult>(LEGACY_STOREFRONT_RADIO_QUERY, variables);
   }
   if (isNavigationCompatibilityError(radioResponse.errors)) {
     radioResponse = { data: null, errors: undefined };

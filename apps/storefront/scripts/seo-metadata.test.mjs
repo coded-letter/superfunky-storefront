@@ -108,10 +108,7 @@ test("controlled crawler files remain exact and product feed uses its canonical 
 });
 
 test("prerender authenticates route discovery and preserves stable routes during optional discovery failures", async () => {
-  const [prerender, routeDiscovery] = await Promise.all([
-    readFile(new URL("scripts/prerender.mjs", appRoot), "utf8"),
-    readFile(new URL("scripts/route-discovery.mjs", appRoot), "utf8"),
-  ]);
+  const prerender = await readFile(new URL("scripts/prerender.mjs", appRoot), "utf8");
 
   assert.match(prerender, /\{ Origin: graphqlRequestOrigin \}/);
   assert.match(prerender, /process\.env\.VITE_GRAPHQL_ENDPOINT\?\.trim\(\)\s*\|\| "https:\/\/dev\.superfunky\.pro\/graphql"/);
@@ -128,6 +125,6 @@ test("prerender authenticates route discovery and preserves stable routes during
   assert.match(prerender, /if \(response\.status === 404\) return \[\]/);
   assert.match(prerender, /Optional community detail route discovery unavailable; using stable community directory routes/);
   assert.doesNotMatch(prerender, /Community route discovery failed; refusing to generate a partial sitemap/);
-  assert.match(routeDiscovery, /endCursor === cursors\[cursorName\]/);
+  assert.match(prerender, /endCursor === cursors\[cursorName\]/);
   assert.doesNotMatch(prerender, /CMS route discovery skipped:/);
 });
