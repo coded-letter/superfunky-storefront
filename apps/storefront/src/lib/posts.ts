@@ -86,7 +86,7 @@ type PostByUriResult = {
     slug: string | null;
     uri: string | null;
     title: string | null;
-    content: string | null;
+    content?: string | null;
     headlessContent?: string | null;
     excerpt: string | null;
     date: string | null;
@@ -126,6 +126,9 @@ type PostByUriResult = {
   } | null;
 };
 
+const POST_RENDERED_CONTENT_FIELDS = `      content(format: RENDERED)
+      headlessContent`;
+
 const POST_BY_URI_QUERY = /* GraphQL */ `
   query StorefrontPostByUri($uri: ID!) {
     post(id: $uri, idType: URI) {
@@ -137,8 +140,7 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
         code
       }
       title
-      content(format: RENDERED)
-      headlessContent
+${POST_RENDERED_CONTENT_FIELDS}
       excerpt(format: RENDERED)
       date
       modified
@@ -328,14 +330,25 @@ const POST_COMMENTS_QUERY = /* GraphQL */ `
   }
 `;
 
-export async function getPostByUri(uri: string): Promise<CmsPost | null> {
+export async function getPostByUri(
+  uri: string,
+  renderedContent?: (id: string) => { content: string | null; headlessContent?: string | null },
+  requestTimeoutMs?: number,
+): Promise<CmsPost | null> {
+  const requestPostGraphql = <T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ) => graphqlRequest<T>(query, variables, undefined, requestTimeoutMs);
   const response = await requestPostWithSlugFallback(
     uri,
     (identifier, idType) => {
       const sourceQuery = idType === "URI" ? POST_BY_URI_QUERY : POST_BY_SLUG_QUERY;
-      const query = createProfilePostQuery(sourceQuery, STOREFRONT_BACKEND_PROFILE);
+      const query = createProfilePostQuery(
+        renderedContent ? sourceQuery.replace(POST_RENDERED_CONTENT_FIELDS, "") : sourceQuery,
+        STOREFRONT_BACKEND_PROFILE,
+      );
       return requestGraphqlWithCompatibility<PostByUriResult>(
-        graphqlRequest,
+        requestPostGraphql,
         query,
         { uri: identifier },
         POST_COMPATIBILITY_RULES,
@@ -355,7 +368,61 @@ export async function getPostByUri(uri: string): Promise<CmsPost | null> {
     return null;
   }
 
-  const post = await loadRemainingPostComments(data.post);
+  return mapPostDetail(data.post, uri, renderedContent);
+}
+
+export async function getPostsByUris(
+  uris: readonly string[],
+  renderedContent: (id: string) => { content: string | null; headlessContent?: string | null },
+): Promise<Map<string, CmsPost>> {
+  const results = new Map<string, CmsPost>();
+  const uniqueUris = [...new Set(uris)];
+  const source = createProfilePostQuery(
+    POST_BY_URI_QUERY.replace(POST_RENDERED_CONTENT_FIELDS, ""),
+    STOREFRONT_BACKEND_PROFILE,
+  );
+  const selection = source.slice(source.indexOf("{") + 1, source.lastIndexOf("}"));
+
+  // Two detail selections amortize WordPress startup without a large render query.
+  for (let offset = 0; offset < uniqueUris.length; offset += 2) {
+    const batch = uniqueUris.slice(offset, offset + 2);
+    const query = `query StorefrontBuildPostDetails(${batch.map((_, index) => `$uri${index}: ID!`).join(", ")}) {
+      ${batch.map((_, index) => selection
+        .replace(/\bpost\(id:/, `post${index}: post(id:`)
+        .replace(/\$uri\b/g, `$uri${index}`)).join("\n")}
+    }`;
+    const { data, errors } = await requestGraphqlWithCompatibility<Record<string, PostByUriResult["post"]>>(
+      graphqlRequest,
+      query,
+      Object.fromEntries(batch.map((uri, index) => [`uri${index}`, uri])),
+      POST_COMPATIBILITY_RULES,
+    );
+    if (errors?.length) {
+      throw new Error(`Post detail batch ${batch.join(", ")} failed: ${errors.map(({ message }) => message).join("; ")}`);
+    }
+    if (!data) throw new Error(`Post detail batch ${batch.join(", ")} returned no data`);
+
+    for (const [index, uri] of batch.entries()) {
+      const key = `post${index}`;
+      if (!Object.prototype.hasOwnProperty.call(data, key)) throw new Error(`Post detail batch omitted ${uri}`);
+      const post = data[key]
+        ? await mapPostDetail(data[key], uri, renderedContent)
+        : await getPostByUri(uri, renderedContent);
+      if (!post) throw new Error(`No post data returned for discovered route ${uri}`);
+      results.set(uri, post);
+    }
+  }
+  return results;
+}
+
+async function mapPostDetail(
+  rawPost: NonNullable<PostByUriResult["post"]>,
+  uri: string,
+  renderedContent?: (id: string) => { content: string | null; headlessContent?: string | null },
+): Promise<CmsPost> {
+  const post = await loadRemainingPostComments(
+    renderedContent ? { ...rawPost, ...renderedContent(rawPost.id) } : rawPost,
+  );
   const author = post.author?.node;
   const contentText = htmlToText(post.content || "");
   const wordCount = contentText ? contentText.split(/\s+/).length : 0;

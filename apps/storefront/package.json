@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-cms-tailwind-content.mjs",
-    "build": "vite build && node scripts/audit-cms-tailwind.mjs && node scripts/audit-performance-budget.mjs && node --experimental-strip-types scripts/prerender.mjs",
+    "prebuild": "node scripts/generate-cms-tailwind-content.mjs --contract-only",
+    "build": "vite build && node scripts/audit-performance-budget.mjs && node --experimental-strip-types scripts/prerender.mjs",
     "postbuild": "node scripts/generate-seo-files.mjs && node scripts/audit-public-copy.mjs",
     "audit:csp": "node scripts/audit-csp.mjs",
-    "audit:cms-tailwind": "node scripts/generate-cms-tailwind-content.mjs",
+    "generate:tailwind-contract": "node scripts/generate-cms-tailwind-content.mjs --contract-only",
     "audit:public-copy": "node scripts/audit-public-copy.mjs",
     "audit:performance": "node scripts/audit-performance-budget.mjs",
     "preview": "vite preview"

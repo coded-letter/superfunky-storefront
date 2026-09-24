@@ -9,7 +9,10 @@ import { requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
 import { BLOG_DATA_COMPATIBILITY_RULES } from "./blogGraphqlCompatibility.ts";
 import {
   BLOG_POST_CARD_FIELDS,
+  createBlogPostCardQuery,
   mapBlogPost,
+  mapBlogPosts,
+  type BuildPostContentGetter,
   type RawBlogPost,
   type RawBlogTerm,
 } from "./postArchives.ts";
@@ -278,13 +281,18 @@ const BLOG_AUTHOR_DIRECTORY_QUERY = /* GraphQL */ `
   }
 `;
 
-export async function getBlogData(languageCode: string, backendLanguageCode: string): Promise<CmsBlogData> {
+export async function getBlogData(
+  languageCode: string,
+  backendLanguageCode: string,
+  renderedContent?: BuildPostContentGetter,
+): Promise<CmsBlogData> {
   const usesBlogRestTerms = STOREFRONT_BACKEND_PROFILE === "blog";
+  const cardQuery = createBlogPostCardQuery(BLOG_DATA_QUERY, renderedContent);
   const query = usesBlogRestTerms
     ? createCoreBlogQuery(BLOG_SUMMARY_QUERY)
     : shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
-      ? createCoreBlogQuery(BLOG_DATA_QUERY)
-      : BLOG_DATA_QUERY;
+      ? createCoreBlogQuery(cardQuery)
+      : cardQuery;
   const [response, restTerms] = await Promise.all([
     requestGraphqlWithCompatibility<BlogDataResult>(
       graphqlRequest,
@@ -324,7 +332,7 @@ export async function getBlogData(languageCode: string, backendLanguageCode: str
     return page.posts || { nodes: [], pageInfo: { hasNextPage: false } };
   });
   const localizedPosts = filterLocalizedBlogNodes(nodes, languageCode);
-  const posts = localizedPosts.map(mapBlogPost);
+  const posts = mapBlogPosts(localizedPosts, renderedContent);
   return {
     posts,
     categories: restTerms?.[0]

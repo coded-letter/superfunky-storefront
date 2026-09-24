@@ -78,6 +78,7 @@ const USER_SEO_FIELDS = `
 `;
 
 export function buildConfiguredFrontPageQuery({
+  renderedContent = true,
   multilingual = false,
   publicRobots = false,
   specialPages = false,
@@ -104,8 +105,7 @@ export function buildConfiguredFrontPageQuery({
         isPrivacyPage
         ${shopPages ? "isShopPage" : ""}
         ${specialPages ? "isTermsPage" : ""}
-        content(format: RENDERED)
-        headlessContent
+        ${renderedContent ? "content(format: RENDERED)\n        headlessContent" : ""}
         headlessShortcodes
         ${publicRobots ? "funkycommercePublicRobots { noindex nofollow }" : ""}
         ${languageFields}
@@ -119,6 +119,7 @@ export function buildConfiguredFrontPageQuery({
 }
 
 export function buildRoutesQuery({
+  renderedContent = true,
   commerce = false,
   multilingual = false,
   publicRobots = false,
@@ -155,8 +156,7 @@ export function buildRoutesQuery({
           isPrivacyPage
           ${shopPages ? "isShopPage" : ""}
           ${specialPages ? "isTermsPage" : ""}
-          content(format: RENDERED)
-          headlessContent
+          ${renderedContent ? "content(format: RENDERED)\n          headlessContent" : ""}
           headlessShortcodes
           ${multilingual
     ? "language { code }\n          translations { databaseId uri language { code } }"
@@ -191,12 +191,15 @@ export function buildRoutesQuery({
     : "";
 
   return `
-    query StorefrontBuildRoutes($contentAfter: String, $termAfter: String, $userAfter: String) {
+    query StorefrontBuildRoutes(
+      $contentAfter: String, $termAfter: String, $userAfter: String,
+      $skipContentNodes: Boolean! = false, $skipTerms: Boolean! = false, $skipUsers: Boolean! = false
+    ) {
       readingSettings {
         showOnFront
         pageOnFront
       }
-      contentNodes(first: 25, after: $contentAfter) {
+      contentNodes(first: ${renderedContent ? 25 : 100}, after: $contentAfter) @skip(if: $skipContentNodes) {
         nodes {
           uri
           __typename
@@ -218,7 +221,7 @@ export function buildRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }
-      terms(first: 100, after: $termAfter) {
+      terms(first: 100, after: $termAfter) @skip(if: $skipTerms) {
         nodes {
           uri
           __typename
@@ -228,7 +231,7 @@ export function buildRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }
-      users(first: 100, after: $userAfter) {
+      users(first: 100, after: $userAfter) @skip(if: $skipUsers) {
         nodes {
           uri
           name
@@ -243,6 +246,7 @@ export function buildRoutesQuery({
 }
 
 export function buildCoreRoutesQuery({
+  renderedContent = true,
   connections = ["pages", "posts", "categories", "tags", "users"],
   multilingual = false,
   publicRobots = false,
@@ -252,6 +256,9 @@ export function buildCoreRoutesQuery({
   seo = false,
 } = {}) {
   const selectedConnections = new Set(connections);
+  const cursorNames = { pages: "pageAfter", posts: "postAfter", categories: "categoryAfter", tags: "tagAfter", users: "userAfter" };
+  const variables = [...selectedConnections].map((name) =>
+    `$${cursorNames[name]}: String, $skip${name[0].toUpperCase()}${name.slice(1)}: Boolean! = false`).join("\n");
   const languageField = multilingual ? "language { code }" : "";
   const pageLanguageFields = multilingual
     ? "language { code }\n          translations { databaseId uri }"
@@ -264,17 +271,13 @@ export function buildCoreRoutesQuery({
 
   return `
     query StorefrontCoreBuildRoutes(
-      $pageAfter: String
-      $postAfter: String
-      $categoryAfter: String
-      $tagAfter: String
-      $userAfter: String
+      ${variables}
     ) {
       readingSettings {
         showOnFront
         pageOnFront
       }
-      ${selectedConnections.has("pages") ? `pages(first: 25, after: $pageAfter) {
+      ${selectedConnections.has("pages") ? `pages(first: ${renderedContent ? 25 : 100}, after: $pageAfter) @skip(if: $skipPages) {
         nodes {
           uri
           __typename
@@ -288,8 +291,7 @@ export function buildCoreRoutesQuery({
           isPrivacyPage
           ${shopPages ? "isShopPage" : ""}
           ${specialPages ? "isTermsPage" : ""}
-          content(format: RENDERED)
-          headlessContent
+          ${renderedContent ? "content(format: RENDERED)\n          headlessContent" : ""}
           headlessShortcodes
           ${publicRobotsField}
           ${multilingual
@@ -300,7 +302,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("posts") ? `posts(first: 100, after: $postAfter) {
+      ${selectedConnections.has("posts") ? `posts(first: 100, after: $postAfter) @skip(if: $skipPosts) {
         nodes {
           uri
           __typename
@@ -314,7 +316,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("categories") ? `categories(first: 100, after: $categoryAfter) {
+      ${selectedConnections.has("categories") ? `categories(first: 100, after: $categoryAfter) @skip(if: $skipCategories) {
         nodes {
           uri
           __typename
@@ -323,7 +325,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("tags") ? `tags(first: 100, after: $tagAfter) {
+      ${selectedConnections.has("tags") ? `tags(first: 100, after: $tagAfter) @skip(if: $skipTags) {
         nodes {
           uri
           __typename
@@ -332,7 +334,7 @@ export function buildCoreRoutesQuery({
         }
         pageInfo { hasNextPage endCursor }
       }` : ""}
-      ${selectedConnections.has("users") ? `users(first: 100, after: $userAfter) {
+      ${selectedConnections.has("users") ? `users(first: 100, after: $userAfter) @skip(if: $skipUsers) {
         nodes {
           uri
           name
