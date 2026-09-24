@@ -1,5 +1,5 @@
 const MAX_CLASS_TOKEN_LENGTH = 160;
-const MAX_CLASS_COUNT = 5_000;
+const MAX_CLASS_COUNT = 12_000;
 
 const ALLOWED_VARIANTS = new Set([
   "sm",
@@ -77,7 +77,7 @@ const UTILITY_FAMILIES = [
 
 const SIMPLE_UTILITY = /^!?-?[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\/(?:\d{1,3}|\d+))?$/;
 const ARBITRARY_PATTERNS = [
-  /^(?:bg|border|caret|decoration|fill|placeholder|stroke|text)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
+  /^(?:bg|border|caret|decoration|fill|from|placeholder|stroke|text|to|via)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
   /^(?:bottom|gap|h|inset|left|m|mb|min-h|min-w|ml|mr|mt|mx|my|p|pb|pl|pr|pt|px|py|right|top|w|max-h|max-w)-\[-?\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw|ch)\]$/,
   /^rounded(?:-[trbl]{1,2})?-\[\d+(?:\.\d+)?(?:px|rem|em|%)\]$/,
   /^opacity-\[(?:0(?:\.\d+)?|1(?:\.0+)?)\]$/,
@@ -237,10 +237,7 @@ export function evaluateCmsClassToken(token) {
   if (!SIMPLE_UTILITY.test(base)) {
     return { status: "rejected", reason: "token is not a well-formed Tailwind utility" };
   }
-  if (!STABLE_UTILITY_SET.has(token)) {
-    return { status: "rejected", reason: "utility is outside the stable CMS contract" };
-  }
-  return { status: "accepted" };
+  return STABLE_UTILITY_SET.has(token) ? { status: "accepted" } : { status: "dynamic" };
 }
 
 function decodeClassAttribute(value) {
@@ -259,26 +256,49 @@ function decodeClassAttribute(value) {
 export function extractHtmlClassTokens(html) {
   if (typeof html !== "string" || !html) return [];
   const tokens = [];
-  for (const match of html.matchAll(/\bclass\s*=\s*(["'])(.*?)\1/gis)) {
+  for (const match of html.matchAll(/(?<![\w:-])class\s*=\s*(["'])(.*?)\1/gis)) {
     tokens.push(...decodeClassAttribute(match[2]).split(/\s+/).filter(Boolean));
   }
   return tokens;
 }
 
+export function extractStoredCmsClassTokens(documents) {
+  const tokens = [];
+  for (const document of documents) {
+    if (typeof document !== "string" || !document) continue;
+    tokens.push(...extractHtmlClassTokens(document));
+    for (const match of document.matchAll(/"className"\s*:\s*"((?:\\.|[^"\\])*)"/gs)) {
+      try {
+        const decoded = JSON.parse(`"${match[1]}"`);
+        if (typeof decoded === "string") {
+          tokens.push(...decodeClassAttribute(decoded).split(/\s+/).filter(Boolean));
+        }
+      } catch {
+        // Malformed block JSON is ignored without rendering or repairing content.
+      }
+    }
+  }
+  return tokens;
+}
+
 export function collectCmsTailwindClasses(documents) {
+  return collectCmsTailwindClassesFromTokens(
+    extractStoredCmsClassTokens(documents),
+  );
+}
+
+export function collectCmsTailwindClassesFromTokens(tokens) {
   const classes = new Set(CMS_TAILWIND_STABLE_UTILITIES);
   const dynamic = new Set();
   const rejected = new Map();
 
-  for (const document of documents) {
-    for (const token of extractHtmlClassTokens(document)) {
-      const evaluation = evaluateCmsClassToken(token);
-      if (evaluation.status === "accepted") classes.add(token);
-      if (evaluation.status === "dynamic") dynamic.add(token);
-      if (evaluation.status === "rejected") rejected.set(token, evaluation.reason);
-      if (classes.size > MAX_CLASS_COUNT) {
-        throw new Error(`CMS Tailwind class limit exceeded (${MAX_CLASS_COUNT}). Reduce the utility set before rebuilding.`);
-      }
+  for (const token of tokens) {
+    const evaluation = evaluateCmsClassToken(token);
+    if (evaluation.status === "accepted" || evaluation.status === "dynamic") classes.add(token);
+    if (evaluation.status === "dynamic") dynamic.add(token);
+    if (evaluation.status === "rejected") rejected.set(token, evaluation.reason);
+    if (classes.size > MAX_CLASS_COUNT) {
+      throw new Error(`CMS Tailwind class limit exceeded (${MAX_CLASS_COUNT}). Reduce the utility set before rebuilding.`);
     }
   }
 
@@ -291,7 +311,7 @@ export function collectCmsTailwindClasses(documents) {
 
 export function buildTailwindContentSource(classes) {
   return [
-    "<!-- Generated stable CMS Tailwind contract. Do not edit. -->",
+    "<!-- Generated CMS Tailwind contract and static manifest input. Do not edit. -->",
     `<div class="${classes.join(" ")}"></div>`,
     "",
   ].join("\n");

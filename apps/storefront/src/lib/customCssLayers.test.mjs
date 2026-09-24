@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
-import { splitCustomCss, activateDeferredThemeStyles } from "./customCssLayers.mjs";
+import {
+  activateDeferredThemeStyles,
+  escapeInlineCss,
+  splitCustomCss,
+} from "./customCssLayers.mjs";
 
 test("custom CSS stays critical unless the editor explicitly separates complete rules", () => {
   assert.deepEqual(splitCustomCss(".hero {color:red}"), { critical: ".hero {color:red}", deferred: "" });
@@ -20,4 +24,11 @@ test("deferred CSS activates within two seconds without waiting for React or the
   context.mock.timers.tick(2_000);
   assert.equal(link.media, "all");
   dom.window.close();
+});
+
+test("critical CSS cannot terminate its inline style element", () => {
+  assert.equal(
+    escapeInlineCss(".hero::after{content:'</STYLE><script>alert(1)</script>'}"),
+    ".hero::after{content:'<\\/style><script>alert(1)</script>'}",
+  );
 });

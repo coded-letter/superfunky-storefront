@@ -9,6 +9,7 @@ import {
   sanitizeWordPressStylesheetUrls,
   WORDPRESS_BLOCK_COMPATIBILITY_CSS,
 } from "../src/lib/pageStyles.ts";
+import { escapeInlineCss, splitCustomCss } from "../src/lib/customCssLayers.mjs";
 import { staticStyleSourceHash } from "../src/lib/staticStyleContract.mjs";
 import { withStorefrontEditorPolicy } from "./security-policy.mjs";
 import { normalizeStaticShortcodes } from "../src/lib/staticShortcodeMarkup.mjs";
@@ -690,6 +691,40 @@ class GraphqlResponseError extends Error {
   }
 }
 
+class GraphqlHttpError extends Error {
+  constructor(message, retryable) {
+    super(message);
+    this.name = "GraphqlHttpError";
+    this.retryable = retryable;
+  }
+}
+
+const GRAPHQL_REQUEST_COOLDOWN_MS = 250;
+const STATIC_CONTENT_REQUEST_COOLDOWN_MS = 1_000;
+let graphqlRequestQueue = Promise.resolve();
+let graphqlTransportFailure = null;
+
+function isBackendTimeoutError(error) {
+  return error?.name === "TimeoutError"
+    || error?.name === "AbortError"
+    || /timed out|aborted|circuit is open/i.test(error instanceof Error ? error.message : String(error));
+}
+
+async function withSerializedGraphqlRequest(run) {
+  const previous = graphqlRequestQueue;
+  let release;
+  graphqlRequestQueue = new Promise((resolveQueue) => {
+    release = resolveQueue;
+  });
+  await previous;
+  try {
+    return await run();
+  } finally {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, GRAPHQL_REQUEST_COOLDOWN_MS));
+    release();
+  }
+}
+
 async function requestGraphql(
   query,
   variables,
@@ -697,14 +732,20 @@ async function requestGraphql(
   {
     optionalField,
     optionalRootField,
-    attempts = 3,
+    attempts = 2,
     timeoutMs = 20_000,
   } = {},
 ) {
+  if (graphqlTransportFailure) {
+    throw new Error(
+      `GraphQL backend circuit is open after ${graphqlTransportFailure.operationLabel} timed out.`,
+      { cause: graphqlTransportFailure.error },
+    );
+  }
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(graphqlEndpoint, {
+      const response = await withSerializedGraphqlRequest(() => fetch(graphqlEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -712,8 +753,13 @@ async function requestGraphql(
         },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!response.ok) throw new Error(`${operationLabel} failed with status ${response.status}`);
+      }));
+      if (!response.ok) {
+        throw new GraphqlHttpError(
+          `${operationLabel} failed with status ${response.status}`,
+          response.status === 429 || response.status >= 500,
+        );
+      }
 
       const payload = await response.json();
       if (payload.errors?.length) {
@@ -731,6 +777,14 @@ async function requestGraphql(
       return payload;
     } catch (error) {
       lastError = error;
+      const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+      if (timedOut) {
+        graphqlTransportFailure = { operationLabel, error };
+      }
+      const retryable = error instanceof GraphqlHttpError && error.retryable;
+      if (timedOut || error instanceof GraphqlResponseError || !retryable) {
+        throw error;
+      }
       if (attempt < attempts) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 500));
       }
@@ -1127,7 +1181,7 @@ async function discoverRouteNodes(query, connections, operationLabel) {
       query,
       cursors,
       operationLabel,
-      { attempts: 5, timeoutMs: 60_000 },
+      { attempts: 2, timeoutMs: 60_000 },
     );
     readingSettings ||= payload.data?.readingSettings;
 
@@ -1264,10 +1318,27 @@ async function discoverCmsRoutes({
     { responseName: "terms", cursorName: "termAfter", routeConnectionName: "terms" },
     { responseName: "users", cursorName: "userAfter", routeConnectionName: "users" },
   ];
+  const discoverGenericRouteNodesIndividually = async (queryOptions, operationLabel) => {
+    const discoveredNodes = [];
+    let readingSettings;
+    for (const connection of routeConnections) {
+      const result = await discoverRouteNodes(
+        buildRoutesQuery({
+          ...queryOptions,
+          connections: [connection.responseName],
+        }),
+        [connection],
+        `${operationLabel} ${connection.responseName}`,
+      );
+      discoveredNodes.push(...result.discoveredNodes);
+      readingSettings ||= result.readingSettings;
+    }
+    return { discoveredNodes, readingSettings };
+  };
   let discovery;
   try {
-    discovery = await discoverRouteNodes(
-      buildRoutesQuery({
+    discovery = await discoverGenericRouteNodesIndividually(
+      {
         commerce: commerceRoutesAvailable,
         multilingual,
         publicRobots: publicRobotsSupported,
@@ -1275,8 +1346,7 @@ async function discoverCmsRoutes({
         shopPages: shopPagesSupported,
         translations: configuredLanguageCodes.length > 1,
         seo: seoSupported,
-      }),
-      routeConnections,
+      },
       "WPGraphQL route discovery",
     );
   } catch (error) {
@@ -1299,8 +1369,8 @@ async function discoverCmsRoutes({
         `[prerender] ${compatibilityReason}; retrying route discovery without commerce metadata.`,
       );
       try {
-        discovery = await discoverRouteNodes(
-          buildRoutesQuery({
+        discovery = await discoverGenericRouteNodesIndividually(
+          {
             commerce: false,
             multilingual,
             publicRobots: publicRobotsSupported,
@@ -1308,8 +1378,7 @@ async function discoverCmsRoutes({
             shopPages: shopPagesSupported,
             translations: configuredLanguageCodes.length > 1,
             seo: seoSupported,
-          }),
-          routeConnections,
+          },
           "WPGraphQL route discovery without commerce metadata",
         );
       } catch (compatibilityError) {
@@ -1390,7 +1459,7 @@ async function discoverCmsRoutes({
         }),
         { databaseId: readingSettings.pageOnFront },
         "WPGraphQL configured front page discovery",
-        { attempts: 5, timeoutMs: 60_000 },
+        { attempts: 2, timeoutMs: 60_000 },
       );
       configuredFrontPage = payload.data?.page;
       if (
@@ -1867,6 +1936,9 @@ async function renderRoute(route) {
       `\n    ${seoHead}${heroPreload}${earlyPreloadHints ? `\n    ${earlyPreloadHints}` : ""}`,
     );
   const staticHead = [
+    staticStyleAsset?.criticalCss?.trim()
+      ? `<style data-wordpress-critical-style="${escapeAttribute(staticStyleAsset.sourceHash)}">${escapeInlineCss(staticStyleAsset.criticalCss)}</style>`
+      : "",
     staticStyleAsset
       ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.href)}" data-wordpress-static-style-source="${escapeAttribute(staticStyleAsset.sourceHash)}" />`
       : "",
@@ -1956,7 +2028,7 @@ function renderStaticChrome(route, chromeConfig = staticChromeConfigurationForRo
     ? `<span><strong class="funky-brand-heading">${escapeAttribute(chromeConfig.storeName)}</strong><small>${escapeAttribute(chromeConfig.tagline)}</small></span>`
     : "";
   const brand = chromeConfig.showHeaderLogo
-    ? `<a class="storefront-static-brand" href="${escapeAttribute(homePath)}"${!hasBrandText && !chromeConfig.logoUrl ? ` aria-label="${escapeAttribute(chromeConfig.storeName)}"` : ""}>${logoMedia}${logoText}</a>`
+    ? `<a class="storefront-static-brand group" href="${escapeAttribute(homePath)}"${!hasBrandText && !chromeConfig.logoUrl ? ` aria-label="${escapeAttribute(chromeConfig.storeName)}"` : ""}>${logoMedia}${logoText}</a>`
     : '<span class="storefront-static-brand-placeholder" aria-hidden="true"></span>';
   const homeLabel = route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home";
   const searchPlaceholder = route.lang === "pl"
@@ -2758,6 +2830,12 @@ function serializePaymentGatewaySeed(cache) {
 
 async function buildStaticStyleAsset(styles) {
   if (!graphqlEndpoint) return null;
+  if (graphqlTransportFailure) {
+    throw new Error(
+      `GraphQL backend circuit is open after ${graphqlTransportFailure.operationLabel} timed out.`,
+      { cause: graphqlTransportFailure.error },
+    );
+  }
   const stylesheets = sanitizeWordPressStylesheetUrls(styles.stylesheets, graphqlEndpoint);
   const sourceHash = staticStyleSourceHash({
     fontFaceStyles: styles.fontFaceStyles,
@@ -2792,6 +2870,7 @@ async function buildStaticStyleAsset(styles) {
   return {
     href: `/assets/${filename}`,
     sourceHash,
+    criticalCss: splitCustomCss(styles.customCss).critical,
     fontAssets: localized.fontAssets,
     preloadAssets: localized.preloadAssets,
   };
@@ -2919,42 +2998,41 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
     ));
   const assets = new Map();
 
-  for (let offset = 0; offset < eligibleRoutes.length; offset += 6) {
-    await Promise.all(eligibleRoutes.slice(offset, offset + 6).map(async (route) => {
-      const languageCode = route.lang.toLowerCase();
-      const backendLanguageCode = languageMap.get(languageCode) || languageCode.toUpperCase();
-      const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
-      let cacheKey = "";
-      let value = null;
-      try {
-        if (productTypes.has(route.type)) {
-          cacheKey = `product:${routeUri}`;
-          value = await getProductByUriOrSlug(routeUri);
-        } else if (route.type === "Post") {
-          const postUri = backendPostUriFromStorefrontPath(route.path);
-          cacheKey = `post:${postUri}`;
-          value = await getPostByUri(postUri);
-        } else if (productTaxonomies.has(route.type)) {
-          const taxonomy = productTaxonomies.get(route.type);
-          const identifier = resolveTaxonomyArchiveIdentifier(route.path);
-          cacheKey = `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`;
-          value = await getProductArchive(
-            taxonomy,
-            identifier.identifier,
-            identifier.idType,
-            languageCode,
-            backendLanguageCode,
-          );
-        } else if (postTaxonomies.has(route.type)) {
-          const taxonomy = postTaxonomies.get(route.type);
-          cacheKey = `post-${taxonomy}-archive:URI:${routeUri}:${languageCode}`;
-          value = await getPostTaxonomyArchive(taxonomy, routeUri, "URI", languageCode);
-        } else if (route.type === "User") {
-          const slug = route.path.split("/").filter(Boolean).at(-1) || "";
-          cacheKey = `author:v2:${slug}:${languageCode}:${backendLanguageCode}:${configuredLanguageCodes.join(",")}`;
-          value = await getAuthorArchive(slug, backendLanguageCode, languageCode, configuredLanguageCodes);
-        }
-        if (!cacheKey || !value) return;
+  for (const route of eligibleRoutes) {
+    const languageCode = route.lang.toLowerCase();
+    const backendLanguageCode = languageMap.get(languageCode) || languageCode.toUpperCase();
+    const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
+    let cacheKey = "";
+    let value = null;
+    try {
+      if (productTypes.has(route.type)) {
+        cacheKey = `product:${routeUri}`;
+        value = await getProductByUriOrSlug(routeUri);
+      } else if (route.type === "Post") {
+        const postUri = backendPostUriFromStorefrontPath(route.path);
+        cacheKey = `post:${postUri}`;
+        value = await getPostByUri(postUri);
+      } else if (productTaxonomies.has(route.type)) {
+        const taxonomy = productTaxonomies.get(route.type);
+        const identifier = resolveTaxonomyArchiveIdentifier(route.path);
+        cacheKey = `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`;
+        value = await getProductArchive(
+          taxonomy,
+          identifier.identifier,
+          identifier.idType,
+          languageCode,
+          backendLanguageCode,
+        );
+      } else if (postTaxonomies.has(route.type)) {
+        const taxonomy = postTaxonomies.get(route.type);
+        cacheKey = `post-${taxonomy}-archive:URI:${routeUri}:${languageCode}`;
+        value = await getPostTaxonomyArchive(taxonomy, routeUri, "URI", languageCode);
+      } else if (route.type === "User") {
+        const slug = route.path.split("/").filter(Boolean).at(-1) || "";
+        cacheKey = `author:v2:${slug}:${languageCode}:${backendLanguageCode}:${configuredLanguageCodes.join(",")}`;
+        value = await getAuthorArchive(slug, backendLanguageCode, languageCode, configuredLanguageCodes);
+      }
+      if (cacheKey && value) {
         const routeHash = createHash("sha256").update(`${route.type}:${route.path}`).digest("hex").slice(0, 12);
         const asset = await writeStaticHydrationAsset(
           `route-${languageCode}-${routeHash}`,
@@ -2966,12 +3044,19 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
           generatedAt,
         );
         if (asset) assets.set(route.path, asset);
-      } catch (error) {
-        console.warn(
-          `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    } catch (error) {
+      if (isBackendTimeoutError(error)) {
+        throw new Error(
+          `[hydration] Static-first route seeding stopped after a backend timeout on ${route.path}.`,
+          { cause: error },
         );
       }
-    }));
+      console.warn(
+        `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, STATIC_CONTENT_REQUEST_COOLDOWN_MS));
   }
   return assets;
 }
@@ -2996,6 +3081,9 @@ async function loadStaticHydrationSeed(task, languageCode) {
       return await task.load();
     } catch (error) {
       lastError = error;
+      if (/timed out|aborted/i.test(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
       if (attempt < attempts) {
         console.warn(
           `[hydration] Retrying ${task.name} seed for ${languageCode} after attempt ${attempt}: ${error instanceof Error ? error.message : String(error)}`,
@@ -3112,9 +3200,17 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
       }
     }
-    const contentResults = await Promise.allSettled(
-      contentTasks.map((task) => loadStaticHydrationSeed(task, languageCode)),
-    );
+    const contentResults = [];
+    for (const task of contentTasks) {
+      try {
+        contentResults.push({
+          status: "fulfilled",
+          value: await loadStaticHydrationSeed(task, languageCode),
+        });
+      } catch (reason) {
+        contentResults.push({ status: "rejected", reason });
+      }
+    }
     const results = [navigationResult, ...contentResults];
     const languageAssets = {};
     for (let index = 0; index < results.length; index += 1) {
@@ -3438,6 +3534,10 @@ function renderHeaders() {
     "/manifest.webmanifest",
     "  Cache-Control: public, max-age=0, must-revalidate",
     "",
+    "/.well-known/funkycommerce-tailwind-index.json",
+    "  Content-Type: application/json; charset=UTF-8",
+    "  Cache-Control: public, max-age=0, must-revalidate",
+    "",
     "/.well-known/apple-developer-merchantid-domain-association",
     "  Content-Type: text/plain; charset=UTF-8",
     "  Cache-Control: public, max-age=0, must-revalidate",
@@ -3476,6 +3576,9 @@ let staticChromeConfig = DEFAULT_STATIC_CHROME;
 try {
   staticChromeConfig = await discoverStaticChrome();
 } catch (error) {
+  if (artifactConfig.delivery === "static-first" && isBackendTimeoutError(error)) {
+    throw error;
+  }
   console.warn(
     `Static chrome discovery skipped: ${error instanceof Error ? error.message : String(error)}`,
   );

@@ -46,24 +46,54 @@ webhook after debounced public-content changes and on a configurable WP-Cron int
 
 ## Tailwind utilities in WordPress content
 
-The production build runs `scripts/generate-cms-tailwind-content.mjs --contract-only`
-before Vite. It writes the reviewed, finite CMS utility contract without querying
-WordPress, so publishing content never changes the application CSS or requires a
-storefront rebuild. Run `pnpm --filter @funky/storefront audit:cms-tailwind` separately
-to validate current CMS content and report unsupported tokens.
+Before Vite, the production build runs `scripts/generate-cms-tailwind-content.mjs`.
+WordPress remains passive: content saves perform no Tailwind extraction, indexing,
+aggregation, publication, or cron work. The build uses signed, read-only, bounded source
+queries and performs all extraction and validation in Node.
 
-Editors may use utilities and responsive/state variants present in that stable contract.
-Permitted arbitrary values are compiled into bounded route CSS when WordPress regenerates
-the artifact: numeric dimensions, border radii, opacity, aspect ratios, integer
-stacking/order, and hex colors. Arbitrary selectors, URLs, transforms, shadows, CSS
-declarations, unsupported variants, malformed brackets, excessive output, and non-ASCII
-tokens are rejected. Extend both the JavaScript validator and PHP compiler with tests
-when an editor needs a new finite form; never add a broad regex safelist.
+Each successful deployment publishes
+`/.well-known/funkycommerce-tailwind-index.json`. The next build compares its per-source
+versions with the WordPress inventory, reuses unchanged class shards, fetches at most ten
+changed source bodies per request, and removes deleted or unpublished sources. An
+unchanged warm build uses no content-body request. The index is published only with a
+successful deployment, so failed builds leave production unchanged.
+
+The index also records the extraction-policy revision. A policy upgrade re-reads each
+eligible source once so previously unsupported utilities can be discovered even when the
+CMS content itself has not changed. Inventory pages and source batches are serialized
+with a short cooldown to keep this one-time migration bounded on small backends.
+
+Media attachments are excluded because their stored fields do not render utility classes
+in storefront content. During the explicit first-deployment bootstrap, a validated local
+index resumes a failed later build stage without downloading unchanged source bodies again.
+
+Set `CMS_TAILWIND_BOOTSTRAP=true` only for the first deployment, when production has no
+index yet. Remove the flag after that deployment; a missing production index then fails
+the build rather than silently rebuilding every source.
+
+Inventory pages request at most 100 records. Source responses are capped at ten records,
+512 KiB per source, and 1 MiB total. Requests are sequential and retry once only for
+non-timeout transport, rate-limit, or server failures; timed-out requests never overlap
+with an automatic retry. Successful requests have no artificial delay.
+The build never falls back to crawling GraphQL content.
+
+Editors may use simple utilities from reviewed Tailwind families and supported
+responsive/state variants. Permitted arbitrary values include numeric dimensions,
+border radii, opacity, aspect ratios, integer stacking/order, and hex colors, including
+`from`, `via`, and `to` gradient stops. Arbitrary
+selectors, URLs, transforms, shadows, CSS declarations, unsupported variants, malformed
+brackets, excessive output, and non-ASCII tokens are rejected. Never add a broad regex
+safelist.
 
 WordPress block classes such as `wp-block-*`, `has-*`, `is-layout-*`, and alignment
 classes are not Tailwind utilities. They continue to use WordPress global/block styles
-and the storefront compatibility CSS. The extractor does not fetch or execute CSS or
-JavaScript from content.
+and the storefront compatibility CSS. The production build does not render blocks,
+execute shortcodes, or fetch CSS or JavaScript from CMS content for Tailwind extraction.
+
+The critical portion of backend custom CSS is safely inlined into each prerendered
+document head before the static WordPress stylesheet and before the application module
+can hydrate. The complete generated stylesheet remains the authoritative fallback and
+preserves the existing critical/deferred cascade.
 
 ## Public component selectors
 
@@ -199,8 +229,10 @@ and publish `apps/storefront/dist`; the included `wrangler.jsonc` identifies tha
 directory as the application so Cloudflare does not need to guess between packages.
 
 Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider for normal static
-content generation. Tailwind uses a reviewed local utility contract and does not crawl
-CMS content during builds. To build the reference site, set the endpoint to
+content generation. Tailwind always includes a reviewed local utility contract. Sites
+using the Superfunky Headless theme may additionally configure its credential-free
+`VITE_CMS_TAILWIND_MANIFEST_URL`; the build downloads that static file once and never
+crawls CMS content. To build the reference site, set the GraphQL endpoint to
 `https://dev.superfunky.pro/graphql`. Development uses that reference when omitted.
 Build-hook URLs and provider credentials must never be committed.
 

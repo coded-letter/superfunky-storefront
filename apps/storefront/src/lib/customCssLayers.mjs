@@ -6,6 +6,10 @@ export function splitCustomCss(css = "") {
   return { critical: css.slice(0, marker.index), deferred: css.slice(marker.index + marker[0].length) };
 }
 
+export function escapeInlineCss(css = "") {
+  return css.replace(/<\/style/gi, "<\\/style");
+}
+
 export function activateDeferredThemeStyles(document) {
   const links = document.querySelectorAll("link[data-wordpress-deferred-style]");
   const activate = () => links.forEach((link) => { link.media = "all"; });

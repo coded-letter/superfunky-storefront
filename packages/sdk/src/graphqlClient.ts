@@ -16,8 +16,9 @@ export type GraphqlResponse<T> = {
 };
 
 const IS_SERVER = typeof window === "undefined";
-const MAX_CONCURRENT_GRAPHQL_REQUESTS = IS_SERVER ? 6 : 2;
-const GRAPHQL_REQUEST_TIMEOUT_MS = IS_SERVER ? 12_000 : 60_000;
+const MAX_CONCURRENT_GRAPHQL_REQUESTS = IS_SERVER ? 1 : 2;
+const GRAPHQL_REQUEST_TIMEOUT_MS = 60_000;
+const SERVER_REQUEST_COOLDOWN_MS = 250;
 const NODE_ENV = (
   globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }
 ).process?.env;
@@ -44,12 +45,19 @@ async function acquireGraphqlRequestSlot(): Promise<void> {
 }
 
 function releaseGraphqlRequestSlot(): void {
-  const nextRequest = graphqlRequestQueue.shift();
-  if (nextRequest) {
-    nextRequest();
+  const release = () => {
+    const nextRequest = graphqlRequestQueue.shift();
+    if (nextRequest) {
+      nextRequest();
+      return;
+    }
+    activeGraphqlRequests = Math.max(0, activeGraphqlRequests - 1);
+  };
+  if (IS_SERVER) {
+    setTimeout(release, SERVER_REQUEST_COOLDOWN_MS);
     return;
   }
-  activeGraphqlRequests = Math.max(0, activeGraphqlRequests - 1);
+  release();
 }
 
 export function hasOnlyMissingGraphqlFields(

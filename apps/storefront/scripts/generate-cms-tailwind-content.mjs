@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -5,144 +6,190 @@ import { loadEnv } from "vite";
 
 import {
   buildTailwindContentSource,
-  collectCmsTailwindClasses,
+  collectCmsTailwindClassesFromTokens,
 } from "./cms-tailwind-content.mjs";
+import { buildIncrementalTailwindIndex } from "./cms-tailwind-index.mjs";
 
-const QUERY = /* GraphQL */ `
-  query StorefrontTailwindContent($after: String) {
-    contentNodes(first: 50, after: $after) {
-      nodes {
-        ... on NodeWithContentEditor {
-          content
-        }
-        ... on Page {
-          headlessContent
-        }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-  }
-`;
-
-const MAX_CONTENT_CHARACTERS = 10_000_000;
-const MAX_PAGES = 100;
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+const MAX_MANIFEST_CLASSES = 10_000;
+const MANIFEST_TIMEOUT_MS = 5_000;
 const viteEnvironment = loadEnv("production", process.cwd(), "");
 
-function validateEndpoint(value, label = "VITE_GRAPHQL_ENDPOINT") {
-  const endpoint = new URL(value);
-  const localHttp = endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname);
-  if ((endpoint.protocol !== "https:" && !localHttp) || endpoint.username || endpoint.password) {
-    throw new Error(`${label} must be a credential-free HTTPS URL (or local HTTP URL).`);
+function validateManifestUrl(value) {
+  const manifestUrl = new URL(value);
+  const localHttp = manifestUrl.protocol === "http:"
+    && ["127.0.0.1", "localhost", "::1"].includes(manifestUrl.hostname);
+  if ((manifestUrl.protocol !== "https:" && !localHttp) || manifestUrl.username || manifestUrl.password) {
+    throw new Error("VITE_CMS_TAILWIND_MANIFEST_URL must be a credential-free HTTPS URL (or local HTTP URL).");
   }
-  return endpoint.href;
+  return manifestUrl.href;
 }
 
-async function requestGraphql(endpoint, variables, fetchImpl, storefrontOrigin) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetchImpl(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(storefrontOrigin ? { Origin: storefrontOrigin } : {}),
-        },
-        body: JSON.stringify({ query: QUERY, variables }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      if (payload.errors?.length) throw new Error(payload.errors.map(({ message }) => message).join("; "));
-      if (!payload.data?.contentNodes) throw new Error("response omitted contentNodes");
-      return payload.data.contentNodes;
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 500));
-    }
+export function validateCmsTailwindManifest(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("CMS Tailwind manifest must be a JSON object.");
   }
-  throw new Error(`CMS Tailwind content query failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+  if (payload.schemaVersion !== 1) {
+    throw new Error("CMS Tailwind manifest uses an unsupported schema version.");
+  }
+  if (payload.complete !== true) {
+    throw new Error("CMS Tailwind manifest is not complete.");
+  }
+  if (!Number.isInteger(payload.contentRevision) || payload.contentRevision < 1) {
+    throw new Error("CMS Tailwind manifest contentRevision must be a positive integer.");
+  }
+  if (typeof payload.generatedAt !== "string" || !Number.isFinite(Date.parse(payload.generatedAt))) {
+    throw new Error("CMS Tailwind manifest generatedAt must be an ISO timestamp.");
+  }
+  if (!Number.isInteger(payload.sourceCount) || payload.sourceCount < 0) {
+    throw new Error("CMS Tailwind manifest sourceCount must be a non-negative integer.");
+  }
+  if (!Array.isArray(payload.classes) || payload.classes.length > MAX_MANIFEST_CLASSES) {
+    throw new Error(`CMS Tailwind manifest must contain at most ${MAX_MANIFEST_CLASSES} classes.`);
+  }
+  if (payload.classCount !== payload.classes.length) {
+    throw new Error("CMS Tailwind manifest classCount does not match its classes.");
+  }
+
+  let previous = "";
+  for (const token of payload.classes) {
+    if (
+      typeof token !== "string"
+      || !token
+      || token.length > 160
+      || !/^[\x21-\x7e]+$/.test(token)
+      || (previous && previous >= token)
+    ) {
+      throw new Error("CMS Tailwind manifest classes must be unique, sorted, bounded printable tokens.");
+    }
+    previous = token;
+  }
+
+  const digest = createHash("sha256").update(payload.classes.join("\n")).digest("hex");
+  if (typeof payload.sha256 !== "string" || payload.sha256 !== digest) {
+    throw new Error("CMS Tailwind manifest SHA-256 digest is invalid.");
+  }
+  return {
+    schemaVersion: payload.schemaVersion,
+    complete: payload.complete,
+    contentRevision: payload.contentRevision,
+    generatedAt: payload.generatedAt,
+    sourceCount: payload.sourceCount,
+    classCount: payload.classCount,
+    sha256: payload.sha256,
+    classes: payload.classes,
+  };
 }
 
-export async function fetchCmsTailwindDocuments(endpoint, fetchImpl = fetch, storefrontOrigin) {
-  const documents = [];
-  let contentCharacters = 0;
-  let after = null;
-  let pageCount = 0;
+export async function fetchCmsTailwindManifest(manifestUrl, fetchImpl = fetch) {
+  const response = await fetchImpl(validateManifestUrl(manifestUrl), {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(MANIFEST_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`static manifest returned HTTP ${response.status}`);
 
-  do {
-    pageCount += 1;
-    if (pageCount > MAX_PAGES) throw new Error(`CMS Tailwind pagination exceeded ${MAX_PAGES} pages.`);
-    const connection = await requestGraphql(endpoint, { after }, fetchImpl, storefrontOrigin);
-    for (const node of connection.nodes || []) {
-      for (const content of [node.content, node.headlessContent]) {
-        if (typeof content !== "string" || !content) continue;
-        contentCharacters += content.length;
-        if (contentCharacters > MAX_CONTENT_CHARACTERS) {
-          throw new Error("CMS Tailwind content exceeded the 10 MB extraction limit.");
-        }
-        documents.push(content);
-      }
-    }
+  const declaredLength = Number.parseInt(response.headers.get("content-length") || "", 10);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_MANIFEST_BYTES) {
+    throw new Error("static manifest exceeded the 1 MiB download limit");
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_MANIFEST_BYTES) {
+    throw new Error("static manifest exceeded the 1 MiB download limit");
+  }
 
-    if (!connection.pageInfo?.hasNextPage) break;
-    const nextCursor = connection.pageInfo.endCursor;
-    if (typeof nextCursor !== "string" || !nextCursor || nextCursor === after) {
-      throw new Error("CMS Tailwind pagination returned an invalid cursor.");
-    }
-    after = nextCursor;
-  } while (true);
-
-  return documents;
+  let payload;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error("static manifest was not valid JSON");
+  }
+  return validateCmsTailwindManifest(payload);
 }
 
 export async function generateCmsTailwindContent({
-  endpoint = (process.env.VITE_GRAPHQL_ENDPOINT || viteEnvironment.VITE_GRAPHQL_ENDPOINT)?.trim(),
+  sourceApiUrl = (
+    process.env.CMS_TAILWIND_SOURCE_API_URL
+    || viteEnvironment.CMS_TAILWIND_SOURCE_API_URL
+  )?.trim(),
+  signingSecret = process.env.STOREFRONT_ARTIFACT_SIGNING_SECRET?.trim(),
+  siteUrl = (
+    process.env.VITE_SITE_URL
+    || viteEnvironment.VITE_SITE_URL
+  )?.trim(),
+  allowBootstrap = (
+    process.env.CMS_TAILWIND_BOOTSTRAP
+    || viteEnvironment.CMS_TAILWIND_BOOTSTRAP
+  ) === "true",
+  manifestUrl = (
+    process.env.VITE_CMS_TAILWIND_MANIFEST_URL
+    || viteEnvironment.VITE_CMS_TAILWIND_MANIFEST_URL
+  )?.trim(),
   outputPath = resolve(".tailwind/cms-content.html"),
+  indexOutputPath = resolve("public/.well-known/funkycommerce-tailwind-index.json"),
   fetchImpl = fetch,
-  requireCms = process.env.CMS_TAILWIND_REQUIRED === "true",
-  siteUrl = (process.env.VITE_SITE_URL || viteEnvironment.VITE_SITE_URL)?.trim(),
-  auditCms = true,
+  requireManifest = Boolean(manifestUrl),
+  useManifest = true,
 } = {}) {
-  let documents = [];
-  if (auditCms && endpoint) {
-    const validatedEndpoint = validateEndpoint(endpoint);
-    const storefrontOrigin = siteUrl ? new URL(validateEndpoint(siteUrl, "VITE_SITE_URL")).origin : undefined;
-    try {
-      documents = await fetchCmsTailwindDocuments(validatedEndpoint, fetchImpl, storefrontOrigin);
-    } catch (error) {
-      if (requireCms) throw error;
-      console.warn(
-        `[cms-tailwind] ${error instanceof Error ? error.message : String(error)}; validating the stable contract only.`,
-      );
-    }
+  if (useManifest && sourceApiUrl && manifestUrl) {
+    throw new Error("Configure CMS_TAILWIND_SOURCE_API_URL or VITE_CMS_TAILWIND_MANIFEST_URL, not both.");
   }
-  if (auditCms && !endpoint) {
-    console.warn("[cms-tailwind] VITE_GRAPHQL_ENDPOINT is not configured; validating the stable contract only.");
+  if (useManifest && sourceApiUrl) {
+    const result = await buildIncrementalTailwindIndex({
+      apiUrl: sourceApiUrl,
+      signingSecret,
+      siteUrl,
+      outputPath,
+      indexOutputPath,
+      fetchImpl,
+      allowBootstrap,
+    });
+    for (const { source, token, reason } of result.rejected) {
+      console.warn(`[cms-tailwind] ignored "${token}" from ${source}: ${reason}.`);
+    }
+    console.log(
+      `[cms-tailwind] generated ${result.classes.length} utilities from ${result.index.sourceCount} indexed source(s)`
+      + `; ${result.metrics.changedSources} changed, ${result.metrics.reusedSources} reused,`
+      + ` ${result.metrics.deletedSources} deleted; ${result.metrics.inventoryRequests + result.metrics.sourceRequests} CMS request(s).`,
+    );
+    return { ...result, manifest: null };
   }
 
-  const { classes, dynamic, rejected } = collectCmsTailwindClasses(documents);
+  let manifest = null;
+  if (useManifest && manifestUrl) {
+    try {
+      manifest = await fetchCmsTailwindManifest(manifestUrl, fetchImpl);
+    } catch (error) {
+      if (requireManifest) throw error;
+      console.warn(
+        `[cms-tailwind] ${error instanceof Error ? error.message : String(error)}; using the stable contract only.`,
+      );
+    }
+  } else if (useManifest && requireManifest) {
+    throw new Error("VITE_CMS_TAILWIND_MANIFEST_URL is required but not configured.");
+  }
+
+  const { classes, dynamic, rejected } = collectCmsTailwindClassesFromTokens(manifest?.classes || []);
   for (const { token, reason } of rejected) {
-    console.warn(`[cms-tailwind] ignored malformed Tailwind-like class "${token}": ${reason}.`);
+    console.warn(`[cms-tailwind] ignored manifest class "${token}": ${reason}.`);
   }
 
   await mkdir(resolve(outputPath, ".."), { recursive: true });
   await writeFile(outputPath, buildTailwindContentSource(classes), "utf8");
   console.log(
-    `[cms-tailwind] generated ${classes.length} stable utilities`
-      + (auditCms
-        ? `; audited ${documents.length} CMS content fields, found ${dynamic.length} route-CSS utilities`
-        : " without querying CMS content")
+    `[cms-tailwind] generated ${classes.length} utilities`
+      + (manifest
+        ? ` from static manifest revision ${manifest.contentRevision} (${dynamic.length} CMS-specific)`
+        : " from the stable local contract without a CMS request")
       + (rejected.length ? `; rejected ${rejected.length} unsupported token(s).` : "."),
   );
-  return { classes, dynamic, rejected };
+  return { classes, dynamic, rejected, manifest };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   generateCmsTailwindContent({
-    auditCms: !process.argv.includes("--contract-only"),
+    useManifest: !process.argv.includes("--contract-only"),
   }).catch((error) => {
     console.error(`[cms-tailwind] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
