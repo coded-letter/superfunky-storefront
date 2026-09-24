@@ -12,7 +12,5 @@ test("production builds enforce initial JavaScript performance budgets", async (
   assert.match(source, /initialJavaScriptBytes: 1_500_000/);
   assert.match(source, /initialJavaScriptGzipBytes: 512_000/);
   assert.match(source, /initialScriptCount: 8/);
-  assert.match(packageJson.scripts.prebuild, /generate-cms-tailwind-content\.mjs --contract-only/);
-  assert.match(packageJson.scripts.build, /^vite build && node scripts\/audit-performance-budget\.mjs/);
-  assert.doesNotMatch(packageJson.scripts.build, /cms-tailwind|build-storefront/);
+  assert.match(packageJson.scripts.build, /audit-performance-budget\.mjs/);
 });

@@ -114,7 +114,7 @@ test("prerender authenticates route discovery and preserves stable routes during
   assert.match(prerender, /process\.env\.VITE_GRAPHQL_ENDPOINT\?\.trim\(\)\s*\|\| "https:\/\/dev\.superfunky\.pro\/graphql"/);
   assert.match(prerender, /Optional route SEO discovery unavailable/);
   assert.match(prerender, /Optional public robots discovery unavailable; using core route metadata/);
-  assert.match(prerender, /\{ attempts: 2, timeoutMs: 20_000 \}/);
+  assert.match(prerender, /\{ attempts: 5, timeoutMs: 60_000 \}/);
   assert.match(prerender, /WPGraphQL community member route discovery",\s*\{ attempts: 2, timeoutMs: 10_000 \}/);
   assert.match(prerender, /community tag route discovery`,\s*\{ attempts: 2, timeoutMs: 10_000 \}/);
   assert.match(prerender, /CMS route discovery failed; refusing to generate a partial sitemap/);

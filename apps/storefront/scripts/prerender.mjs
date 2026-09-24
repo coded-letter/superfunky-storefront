@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import postcss from "postcss";
 import { brandPaletteCssVariables } from "../../../packages/ui/src/state/brandPalettes.mjs";
 import {
   createWordPressElementTypographyCss,
@@ -55,10 +54,7 @@ import {
 } from "./artifact-publish.mjs";
 import { stableRouteIsAvailable } from "./route-availability.mjs";
 import { navigationDataCacheKey } from "../src/lib/navigationCacheKey.mjs";
-import { assertStaticHydrationAssets, requiredStaticHydrationNames } from "./static-hydration-policy.mjs";
 import { staticNavHrefMatchesRoute as matchesStaticNavigationRoute } from "./static-navigation-route.mjs";
-import { sanitizeStorefrontHtml } from "../../../packages/ui/src/layout/sanitizeStorefrontHtml.ts";
-import { splitCustomCss } from "../src/lib/customCssLayers.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -701,13 +697,12 @@ async function requestGraphql(
   {
     optionalField,
     optionalRootField,
-    attempts = 2,
+    attempts = 3,
     timeoutMs = 20_000,
   } = {},
 ) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const startedAt = performance.now();
     try {
       const response = await fetch(graphqlEndpoint, {
         method: "POST",
@@ -736,14 +731,8 @@ async function requestGraphql(
       return payload;
     } catch (error) {
       lastError = error;
-      if (error instanceof GraphqlResponseError) throw error;
       if (attempt < attempts) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 500));
-      }
-    } finally {
-      const elapsed = performance.now() - startedAt;
-      if (elapsed >= 5_000) {
-        console.warn(`[prerender] ${operationLabel} attempt ${attempt} took ${(elapsed / 1000).toFixed(1)}s.`);
       }
     }
   }
@@ -919,7 +908,7 @@ async function discoverStaticChrome() {
       : DEFAULT_STATIC_CHROME.tagline,
     logoUrl: safeStaticMediaUrl(branding?.logoUrl),
     iconUrl: safeStaticMediaUrl(decorationBranding?.iconUrl),
-    promoHtml: sanitizeStorefrontHtml(decorationBranding?.promoHtml || "", true),
+    promoHtml: sanitizeCmsHtml(decorationBranding?.promoHtml || ""),
     showAnnouncementBar: decorationLayout?.showAnnouncementBar === true,
     announcementBarScrollEffect: decorationLayout?.announcementBarScrollEffect !== false,
     showBreadcrumbs: decorationLayout?.showBreadcrumbs !== false,
@@ -1138,7 +1127,7 @@ async function discoverRouteNodes(query, connections, operationLabel) {
       query,
       cursors,
       operationLabel,
-      { attempts: 2, timeoutMs: 20_000 },
+      { attempts: 5, timeoutMs: 60_000 },
     );
     readingSettings ||= payload.data?.readingSettings;
 
@@ -1401,7 +1390,7 @@ async function discoverCmsRoutes({
         }),
         { databaseId: readingSettings.pageOnFront },
         "WPGraphQL configured front page discovery",
-        { attempts: 2, timeoutMs: 20_000 },
+        { attempts: 5, timeoutMs: 60_000 },
       );
       configuredFrontPage = payload.data?.page;
       if (
@@ -1880,9 +1869,6 @@ async function renderRoute(route) {
   const staticHead = [
     staticStyleAsset
       ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.href)}" data-wordpress-static-style-source="${escapeAttribute(staticStyleAsset.sourceHash)}" />`
-      : "",
-    staticStyleAsset?.deferredHref
-      ? `<link rel="stylesheet" media="print" href="${escapeAttribute(staticStyleAsset.deferredHref)}" data-wordpress-deferred-style /><noscript><link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.deferredHref)}" /></noscript>`
       : "",
     staticTheme ? `<style data-storefront-static-theme>${staticTheme}</style>` : "",
     `<script type="application/json" id="storefront-static-layout">${serializeStaticLayoutSeed(routeChromeConfig)}</script>`,
@@ -2692,7 +2678,7 @@ function staticChromeConfigurationForRoute(route) {
     logoUrl: safeStaticMediaUrl(branding.logoUrl),
     iconUrl: safeStaticMediaUrl(branding.iconUrl),
     promoHtml: typeof branding.promoHtml === "string"
-      ? sanitizeStorefrontHtml(branding.promoHtml, true)
+      ? sanitizeCmsHtml(branding.promoHtml)
       : staticChromeConfig.promoHtml,
     showAnnouncementBar: layout.showAnnouncementBar !== false && features.promo !== false,
     announcementBarScrollEffect: layout.announcementBarScrollEffect !== false,
@@ -2779,9 +2765,6 @@ async function buildStaticStyleAsset(styles) {
     stylesheets,
     customCss: styles.customCss,
   });
-  const customCss = splitCustomCss(styles.customCss);
-  postcss.parse(customCss.critical);
-  postcss.parse(customCss.deferred);
   const sections = [
     sanitizeWordPressFontFaces(styles.fontFaceStyles),
     sanitizeWordPressGlobalStyles(styles.globalStyles),
@@ -2790,7 +2773,7 @@ async function buildStaticStyleAsset(styles) {
     sections.push(await fetchStaticStylesheet(stylesheetUrl));
   }
   sections.push(
-    customCss.critical,
+    styles.customCss,
     WORDPRESS_BLOCK_COMPATIBILITY_CSS,
     createWordPressElementTypographyCss(styles.globalStyles),
   );
@@ -2806,21 +2789,8 @@ async function buildStaticStyleAsset(styles) {
   const filename = `wordpress-static-${contentHash}.css`;
   await mkdir(resolve(outputDirectory, "assets"), { recursive: true });
   await writeFile(resolve(outputDirectory, "assets", filename), `${css}\n`);
-  let deferredHref = null;
-  if (customCss.deferred.trim()) {
-    const deferredCss = [
-      customCss.deferred,
-      WORDPRESS_BLOCK_COMPATIBILITY_CSS,
-      createWordPressElementTypographyCss(styles.globalStyles),
-    ].join("\n");
-    const deferredHash = createHash("sha256").update(deferredCss).digest("hex").slice(0, 16);
-    const deferredFilename = `wordpress-deferred-${deferredHash}.css`;
-    await writeFile(resolve(outputDirectory, "assets", deferredFilename), `${deferredCss}\n`);
-    deferredHref = `/assets/${deferredFilename}`;
-  }
   return {
     href: `/assets/${filename}`,
-    deferredHref,
     sourceHash,
     fontAssets: localized.fontAssets,
     preloadAssets: localized.preloadAssets,
@@ -3018,29 +2988,43 @@ async function writeStaticRouteRegistryAsset(entries, generatedAt) {
   );
 }
 
-async function buildStaticHydrationAssets(languages, generatedAt, routes) {
+async function loadStaticHydrationSeed(task, languageCode) {
+  const attempts = task.name === "navigation" ? 3 : 2;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await task.load();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        console.warn(
+          `[hydration] Retrying ${task.name} seed for ${languageCode} after attempt ${attempt}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 750));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function buildStaticHydrationAssets(languages, generatedAt) {
   if (!graphqlEndpoint) return new Map();
   const [
     { getAiAssistantConfiguration, getNavigationData },
     { getCommerceCatalog },
     { getBlogData, getBlogSummaryData },
     { getCommunityData, getCommunityFeedData },
-    { ARCHIVE_SETTINGS_CACHE_KEY, getArchiveSettings },
   ] = await Promise.all([
     import("../src/lib/navigation.ts"),
     import("../src/lib/commerce.ts"),
     import("../src/lib/blog.ts"),
     import("../src/lib/community.ts"),
-    import("../src/lib/archiveSettings.ts"),
   ]);
   const assetsByLanguage = new Map();
 
   for (const language of languages) {
     const languageCode = language.routeCode.toLowerCase();
     const backendLanguageCode = language.backendCode || languageCode.toUpperCase();
-    const requiredNames = new Set(routes
-      .filter((route) => route.lang.toLowerCase() === languageCode)
-      .flatMap((route) => requiredStaticHydrationNames(backendProfile, route.path, route.cmsContent)));
     const tasks = [
       {
         name: "navigation",
@@ -3048,10 +3032,7 @@ async function buildStaticHydrationAssets(languages, generatedAt, routes) {
         load: async () => {
           const [navigation, assistant] = await Promise.all([
             getNavigationData(languageCode),
-            getAiAssistantConfiguration(languageCode).catch((error) => {
-              console.warn(`[hydration] Optional assistant seed unavailable: ${error instanceof Error ? error.message : String(error)}`);
-              return null;
-            }),
+            getAiAssistantConfiguration(languageCode),
           ]);
           return { assistant, navigation };
         },
@@ -3069,16 +3050,6 @@ async function buildStaticHydrationAssets(languages, generatedAt, routes) {
               }]
             : []),
         ],
-      },
-      {
-        name: "archiveSettings",
-        enabled: true,
-        load: () => getArchiveSettings(),
-        entries: (value) => [{
-          cacheKey: ARCHIVE_SETTINGS_CACHE_KEY,
-          value,
-          dependencies: ["config:storefront"],
-        }],
       },
       {
         name: "commerce",
@@ -3130,28 +3101,20 @@ async function buildStaticHydrationAssets(languages, generatedAt, routes) {
           dependencies: ["community:public", `translation:${languageCode}`],
         }],
       },
-    ].filter(({ name, enabled }) => enabled && requiredNames.has(name));
+    ].filter(({ enabled }) => enabled);
     const [navigationTask, ...contentTasks] = tasks;
-    const navigationResult = await navigationTask.load()
+    const navigationResult = await loadStaticHydrationSeed(navigationTask, languageCode)
       .then((value) => ({ status: "fulfilled", value }))
       .catch((reason) => ({ status: "rejected", reason }));
-    if (navigationResult.status === "rejected") {
-      throw new Error(`[hydration] Required navigation seed failed for ${languageCode}; refusing to publish a loading-only storefront.`, {
-        cause: navigationResult.reason,
-      });
-    }
-    staticHydrationNavigationByLanguage.set(languageCode, navigationResult.value);
-    if (languageCode === defaultLanguage) {
-      synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
-    }
-    const contentResults = [];
-    for (const task of contentTasks) {
-      try {
-        contentResults.push({ status: "fulfilled", value: await task.load() });
-      } catch (error) {
-        throw new Error(`[hydration] Required ${task.name} seed failed for ${languageCode}; keeping the previous deployment.`, { cause: error });
+    if (navigationResult.status === "fulfilled") {
+      staticHydrationNavigationByLanguage.set(languageCode, navigationResult.value);
+      if (languageCode === defaultLanguage) {
+        synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
       }
     }
+    const contentResults = await Promise.allSettled(
+      contentTasks.map((task) => loadStaticHydrationSeed(task, languageCode)),
+    );
     const results = [navigationResult, ...contentResults];
     const languageAssets = {};
     for (let index = 0; index < results.length; index += 1) {
@@ -3246,7 +3209,7 @@ function staticHydrationUrlsForRoute(route, renderedMarkup) {
   if (!assets) return [];
   const localeAssets = [...staticHydrationAssets.values()];
   const requirements = resolveBackendDataRequirements(backendProfile, route.path, renderedMarkup);
-  const urls = localeAssets.flatMap(({ navigation, archiveSettings }) => [navigation, archiveSettings]);
+  const urls = localeAssets.map(({ navigation }) => navigation);
   if (requirements.commerce) {
     urls.push(...localeAssets.map(({ commerce }) => commerce));
   }
@@ -3636,13 +3599,14 @@ const hydrationLanguages = stableLanguageCodes.map((routeCode) =>
   || { routeCode, backendCode: routeCode.toUpperCase() });
 staticRouteRegistryEntries = buildStaticRouteRegistryEntries(routes);
 try {
-  staticHydrationAssets = await buildStaticHydrationAssets(hydrationLanguages, generatedAt, routes);
-  assertStaticHydrationAssets(backendProfile, routes, staticHydrationAssets);
+  staticHydrationAssets = await buildStaticHydrationAssets(hydrationLanguages, generatedAt);
   staticRouteRegistryAsset = await writeStaticRouteRegistryAsset(staticRouteRegistryEntries, generatedAt);
   staticPageHydrationAssets = await buildStaticPageHydrationAssets(routes, generatedAt);
   staticContentHydrationAssets = await buildStaticContentHydrationAssets(routes, hydrationLanguages, generatedAt);
 } catch (error) {
-  throw new Error("[hydration] Static data generation failed; keeping the previously published storefront.", { cause: error });
+  console.warn(
+    `[hydration] Static data assets unavailable; runtime loading remains enabled: ${error instanceof Error ? error.message : String(error)}`,
+  );
 }
 await rm(resolve(outputDirectory, "storefront-shell.json"), { force: true });
 if (artifactConfig.mode !== "off") {

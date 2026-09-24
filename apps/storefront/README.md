@@ -46,19 +46,24 @@ webhook after debounced public-content changes and on a configurable WP-Cron int
 
 ## Tailwind utilities in WordPress content
 
-Production `prebuild` generates a finite reviewed utility contract locally with
-`scripts/generate-cms-tailwind-content.mjs --contract-only`. It never queries WordPress,
-so CSS preparation cannot delay SSG, consume PHP workers, or leave database work running
-after a client timeout.
+The production build runs `scripts/generate-cms-tailwind-content.mjs --contract-only`
+before Vite. It writes the reviewed, finite CMS utility contract without querying
+WordPress, so publishing content never changes the application CSS or requires a
+storefront rebuild. Run `pnpm --filter @funky/storefront audit:cms-tailwind` separately
+to validate current CMS content and report unsupported tokens.
 
-Editors may use complete utilities and responsive/state variants already present in
-`CMS_TAILWIND_STABLE_UTILITIES`. Classes outside that contract are not discovered or
-compiled from CMS content. Add and review a utility in the contract with tests, or use
-semantic `sf-*` selectors with the existing critical/deferred custom CSS controls.
+Editors may use utilities and responsive/state variants present in that stable contract.
+Permitted arbitrary values are compiled into bounded route CSS when WordPress regenerates
+the artifact: numeric dimensions, border radii, opacity, aspect ratios, integer
+stacking/order, and hex colors. Arbitrary selectors, URLs, transforms, shadows, CSS
+declarations, unsupported variants, malformed brackets, excessive output, and non-ASCII
+tokens are rejected. Extend both the JavaScript validator and PHP compiler with tests
+when an editor needs a new finite form; never add a broad regex safelist.
 
 WordPress block classes such as `wp-block-*`, `has-*`, `is-layout-*`, and alignment
 classes are not Tailwind utilities. They continue to use WordPress global/block styles
-and the storefront compatibility CSS.
+and the storefront compatibility CSS. The extractor does not fetch or execute CSS or
+JavaScript from content.
 
 ## Public component selectors
 
@@ -90,10 +95,12 @@ Full returns to the controlled shell-inner cap. WordPress continues to own typog
 colours, block spacing, columns, media height/aspect/object-fit, and bounded widget sizing.
 Homepage application sections and product layouts are outside this CMS scope.
 
-Changing the reviewed contract requires a storefront rebuild. Ordinary CMS content
-publishing does not alter the compiled Tailwind utility set. Keep the site's Netlify
-`WordPress` build hook configured for normal static content updates. Hook URLs stay in
-WordPress and Netlify and must not be committed.
+The generated class set is a build artifact, so publishing or changing a CMS-authored
+utility requires a storefront rebuild. Keep the site's Netlify `WordPress` build hook
+configured in Control Center; public-content saves already trigger that hook after the
+existing one-minute debounce. Hook URLs stay in WordPress and Netlify and must not be
+committed. If an internal preview site is not managed by `sites.json`, configure its
+credential-free `VITE_GRAPHQL_ENDPOINT` directly in the hosting provider.
 
 For Cloudflare Pages deployments of the open-source workspace, build from the
 repository root with `pnpm build` and publish `apps/storefront/dist`. The exported
