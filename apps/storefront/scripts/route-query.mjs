@@ -196,7 +196,7 @@ export function buildRoutesQuery({
         showOnFront
         pageOnFront
       }
-      contentNodes(first: 25, after: $contentAfter) {
+      contentNodes(first: 100, after: $contentAfter) {
         nodes {
           uri
           __typename
@@ -274,7 +274,7 @@ export function buildCoreRoutesQuery({
         showOnFront
         pageOnFront
       }
-      ${selectedConnections.has("pages") ? `pages(first: 25, after: $pageAfter) {
+      ${selectedConnections.has("pages") ? `pages(first: 100, after: $pageAfter) {
         nodes {
           uri
           __typename

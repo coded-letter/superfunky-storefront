@@ -12,7 +12,6 @@ import {
 test("route-specific static hydration accepts every public content cache family", async () => {
   const suffix = Date.now();
   const keys = [
-    "archive-settings:v1",
     `commerce-data:v6:en:EN:${suffix}`,
     `product:/product/example-${suffix}/`,
     `post:/example-${suffix}/`,

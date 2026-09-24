@@ -40,7 +40,6 @@ const hydrationCachePrefixes = [
   "artifact-navigation:v1:",
   "navigation-data:v16:",
   "navigation-assistant:v2:",
-  "archive-settings:v1",
   "storefront-route-registry:v6:",
   "storefront-route-registry:v10:",
   "commerce-data:v4:",

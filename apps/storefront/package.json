@@ -9,7 +9,7 @@
     "build": "vite build && node scripts/audit-performance-budget.mjs && node --experimental-strip-types scripts/prerender.mjs",
     "postbuild": "node scripts/generate-seo-files.mjs && node scripts/audit-public-copy.mjs",
     "audit:csp": "node scripts/audit-csp.mjs",
-    "generate:tailwind-contract": "node scripts/generate-cms-tailwind-content.mjs --contract-only",
+    "audit:cms-tailwind": "node scripts/generate-cms-tailwind-content.mjs",
     "audit:public-copy": "node scripts/audit-public-copy.mjs",
     "audit:performance": "node scripts/audit-performance-budget.mjs",
     "preview": "vite preview"
@@ -39,7 +39,6 @@
     "autoprefixer": "^10.4.20",
     "jsdom": "^26.1.0",
     "postcss": "^8.4.41",
-    "postcss-selector-parser": "^6.1.4",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.0"

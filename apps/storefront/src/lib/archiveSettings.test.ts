@@ -20,6 +20,7 @@ const directorySource = readFileSync(new URL("../pages/ArchiveDirectory.tsx", im
 const authorSource = readFileSync(new URL("../pages/AuthorMockupPage.tsx", import.meta.url), "utf8");
 const communityTagSource = readFileSync(new URL("../pages/CommunityTagArchivePage.tsx", import.meta.url), "utf8");
 const prerenderSource = readFileSync(new URL("../../scripts/prerender.mjs", import.meta.url), "utf8");
+const archiveSettingsStateSource = readFileSync(new URL("../state/archiveSettings.tsx", import.meta.url), "utf8");
 const socialGridSource = readFileSync(
   new URL("../../../../packages/ui/src/social/SocialFeedGrid.tsx", import.meta.url),
   "utf8",
@@ -89,9 +90,7 @@ test("complete archives retain every item beyond the first visual and transport 
   assert.equal(result.nodes.length, 237);
   assert.equal(result.nodes.at(-1), 236);
   assert.equal(result.hasMore, false);
-  assert.equal(ARCHIVE_BATCH_SIZE, 25);
-  assert.deepEqual(calls, Array.from({ length: 10 }, (_, index) =>
-    [25, index === 0 ? null : String(index * 25)]));
+  assert.deepEqual(calls, [[100, null], [100, "100"], [100, "200"]]);
 });
 
 test("archive batching rejects cursor cycles instead of looping or showing duplicate pages", async () => {
@@ -132,31 +131,31 @@ test("archive batching loads multiple cursor pages up to the requested total", a
   const calls: { first: number; after: string | null }[] = [];
   const pages = [
     {
-      nodes: Array.from({ length: 25 }, (_, index) => index + 1),
+      nodes: Array.from({ length: 100 }, (_, index) => index + 1),
       pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
     },
     {
-      nodes: Array.from({ length: 25 }, (_, index) => index + 26),
+      nodes: Array.from({ length: 100 }, (_, index) => index + 101),
       pageInfo: { hasNextPage: true, endCursor: "cursor-2" },
     },
     {
-      nodes: Array.from({ length: 10 }, (_, index) => index + 51),
+      nodes: Array.from({ length: 50 }, (_, index) => index + 201),
       pageInfo: { hasNextPage: true, endCursor: "cursor-3" },
     },
   ];
   let pageIndex = 0;
 
-  const result = await fetchArchiveNodesInBatches(60, async (first, after) => {
+  const result = await fetchArchiveNodesInBatches(250, async (first, after) => {
     calls.push({ first, after });
     return pages[pageIndex++]!;
   });
 
-  assert.equal(result.nodes.length, 60);
+  assert.equal(result.nodes.length, 250);
   assert.equal(result.hasMore, true);
   assert.deepEqual(calls, [
     { first: ARCHIVE_BATCH_SIZE, after: null },
     { first: ARCHIVE_BATCH_SIZE, after: "cursor-1" },
-    { first: 10, after: "cursor-2" },
+    { first: 50, after: "cursor-2" },
   ]);
 });
 
@@ -205,13 +204,14 @@ test("taxonomy archives batch backend pagination and remain publicly indexable",
   assert.doesNotMatch(prerenderSource, /preserveCmsRobots/);
 });
 
-test("native defaults reach archive grids and build-time hydration without hard-coded page sizes", () => {
+test("native defaults reach archive grids without adding a build-time backend dependency", () => {
   for (const source of [productArchivePageSource, postArchivePageSource, authorSource]) {
     assert.doesNotMatch(source, /pageSize=\{\d+\}/);
   }
-  assert.match(prerenderSource, /name: "archiveSettings"/);
-  assert.match(prerenderSource, /cacheKey: ARCHIVE_SETTINGS_CACHE_KEY/);
-  assert.match(prerenderSource, /flatMap\(\(\{ navigation, archiveSettings \}\) => \[navigation, archiveSettings\]\)/);
+  assert.match(archiveSettingsStateSource, /useIncrementalData\(ARCHIVE_SETTINGS_CACHE_KEY, getArchiveSettings, enabled\)/);
+  assert.match(archiveSettingsStateSource, /state\.data \|\| DEFAULT_ARCHIVE_PAGE_SIZES/);
+  assert.doesNotMatch(prerenderSource, /name: "archiveSettings"/);
+  assert.doesNotMatch(prerenderSource, /ARCHIVE_SETTINGS_CACHE_KEY/);
   assert.doesNotMatch(commerceSource + postArchiveSource, /getArchivePageSize/);
 });
 test("multi-column community cards stretch across their grid cells", () => {

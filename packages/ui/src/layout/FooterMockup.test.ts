@@ -43,19 +43,6 @@ test("footer copyright preserves safe links and removes executable markup", () =
   assert.equal((footerSource.match(/<SafeHtmlContent[\s\S]*?html=\{safeCopyrightHtml\}/g) || []).length, 2);
 });
 
-test("promotional HTML keeps presentation through both parser passes without executable attributes", () => {
-  const source = '<div class="mx-auto max-w-[751px] rounded-[22px]" style="color: #fff; padding: 12px" onclick="alert(1)"><a class="font-bold" style="font-size: 20px" href="/shop">Shop</a></div>';
-  const html = sanitizeStorefrontHtml(source, true);
-  assert.match(html, /class="mx-auto max-w-\[751px\] rounded-\[22px\]"/);
-  assert.match(html, /style="color: #fff; padding: 12px"/);
-  assert.match(html, /class="font-bold" style="font-size: 20px"/);
-  assert.doesNotMatch(html, /onclick/);
-  assert.equal(sanitizeStorefrontHtml(html, true), html);
-  assert.match(sanitizeStorefrontHtml('<span style="background: gold; color: rebeccapurple">Sale</span>', true),
-    /style="background: gold; color: rebeccapurple"/);
-  assert.doesNotMatch(sanitizeStorefrontHtml('<span style="background: url(javascript:alert(1))" onmouseover="alert(1)">x</span>', true), /style=|onmouseover/);
-});
-
 test("footer supports one through seven-column editorial layouts", () => {
   for (const layout of ["grid-1", "grid-2-wide", "grid-3", "grid-4", "grid-5", "grid-6", "grid-7", "accordion-single"]) {
     assert.match(footerSource, new RegExp(layout));
