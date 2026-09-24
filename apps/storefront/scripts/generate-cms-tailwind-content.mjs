@@ -10,7 +10,7 @@ export async function generateCmsTailwindContent({
   outputPath = resolve(".tailwind/cms-content.html"),
   config = loadConfig(fileURLToPath(new URL("../tailwind.config.ts", import.meta.url))),
 } = {}) {
-  const result = await compileCmsTailwindClasses([], config);
+  const result = await compileCmsTailwindClasses(config);
   await mkdir(resolve(outputPath, ".."), { recursive: true });
   const temporaryPath = `${outputPath}.${randomUUID()}.tmp`;
   try {

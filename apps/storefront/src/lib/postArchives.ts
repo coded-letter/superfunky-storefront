@@ -31,12 +31,6 @@ import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches } from "./archiveSetting
 export type PostTaxonomy = "category" | "tag";
 export type TaxonomyIdentifierType = "URI" | "SLUG";
 
-/** Build-only snapshot lookup; browser callers omit it to keep querying rendered bodies. */
-export type BuildPostContentGetter = (id: string) => {
-  content: string | null;
-  headlessContent?: string | null;
-};
-
 export type CmsTaxonomyTerm = {
   id: string;
   name: string;
@@ -211,19 +205,6 @@ export const BLOG_POST_CARD_FIELDS = /* GraphQL */ `
   }
 `;
 
-export function createBlogPostCardQuery(query: string, renderedContent?: BuildPostContentGetter): string {
-  return renderedContent
-    ? query.replace(BLOG_POST_CARD_FIELDS, BLOG_POST_CARD_FIELDS.replace("    content(format: RENDERED)\n", ""))
-    : query;
-}
-
-export function mapBlogPosts(posts: RawBlogPost[], renderedContent?: BuildPostContentGetter): PostCardData[] {
-  // Map one restored body at a time instead of retaining all archive bodies.
-  return posts.map((post) => mapBlogPost(
-    renderedContent ? { ...post, content: renderedContent(post.id).content } : post,
-  ));
-}
-
 const SCRIPT_FIELDS = /* GraphQL */ `
   nodes {
     id
@@ -371,23 +352,14 @@ export async function getPostTaxonomyArchive(
   identifier: string,
   idType: TaxonomyIdentifierType,
   expectedLanguageCode = "en",
-  renderedContent?: BuildPostContentGetter,
-  requestTimeoutMs?: number,
 ): Promise<CmsPostArchive | null> {
-  const requestArchiveGraphql = <T>(
-    query: string,
-    variables?: Record<string, unknown>,
-  ) => graphqlRequest<T>(query, variables, undefined, requestTimeoutMs);
-  const query = createBlogPostCardQuery(
-    taxonomy === "category" ? CATEGORY_ARCHIVE_QUERY : TAG_ARCHIVE_QUERY,
-    renderedContent,
-  );
+  const query = taxonomy === "category" ? CATEGORY_ARCHIVE_QUERY : TAG_ARCHIVE_QUERY;
   const initialQuery = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
     ? createCorePostArchiveQuery(query)
     : query;
   const loadArchivePage = async (first: number, after: string | null): Promise<TaxonomyArchiveResult> => {
     const { data, errors } = await requestGraphqlWithCompatibility<TaxonomyArchiveResult>(
-      requestArchiveGraphql,
+      graphqlRequest,
       initialQuery,
       { id: identifier, idType, first, after },
       [MALFORMED_POST_ARCHIVE_RULE, ...BLOG_DATA_COMPATIBILITY_RULES],
@@ -408,14 +380,7 @@ export async function getPostTaxonomyArchive(
     if (idType === "URI") {
       const slug = taxonomySlugFromUri(identifier);
       if (slug) {
-        return getPostTaxonomyArchive(
-          taxonomy,
-          slug,
-          "SLUG",
-          expectedLanguageCode,
-          renderedContent,
-          requestTimeoutMs,
-        );
+        return getPostTaxonomyArchive(taxonomy, slug, "SLUG", expectedLanguageCode);
       }
     }
     return null;
@@ -463,10 +428,9 @@ export async function getPostTaxonomyArchive(
             }]
           : [],
       ) || [],
-    posts: mapBlogPosts(
-      posts.filter((post) => !post.language?.code || post.language.code.toLowerCase() === languageCode),
-      renderedContent,
-    ),
+    posts: posts
+      .filter((post) => !post.language?.code || post.language.code.toLowerCase() === languageCode)
+      .map(mapBlogPost),
     hasMorePosts: hasMore,
     terms,
     seo: mapTaxonomySeo(archive.seo),

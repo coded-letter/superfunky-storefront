@@ -75,20 +75,3 @@ test("rejects non-font responses instead of publishing untrusted bytes", async (
     /not a valid WOFF, WOFF2, OTF, or TTF/,
   );
 });
-
-test("reports the source URL when a WordPress font request fails", async () => {
-  const outputDirectory = await mkdtemp(join(tmpdir(), "storefront-fonts-"));
-  temporaryDirectories.push(outputDirectory);
-  await assert.rejects(
-    localizeStaticFontAssets(
-      '@font-face{font-family:"Body";src:url("https://cms.test/unavailable.woff2")}',
-      {
-        outputDirectory,
-        fetchImpl: async () => {
-          throw new Error("connection reset");
-        },
-      },
-    ),
-    /WordPress font request failed: https:\/\/cms\.test\/unavailable\.woff2/,
-  );
-});

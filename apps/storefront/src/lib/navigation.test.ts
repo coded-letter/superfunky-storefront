@@ -422,7 +422,7 @@ test("does not treat direct LOCATION resolver errors as schema compatibility fai
   );
   assert.match(
     navigationSource,
-    /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)[\s\S]*response = await graphqlRequest<NavigationQueryResult>\([\s\S]*COMPATIBLE_NAVIGATION_QUERY,[\s\S]*requestTimeoutMs,[\s\S]*\);/,
+    /hasOnlyMenuSchemaCompatibilityErrors\(response\.errors\)[\s\S]*hasOnlyKnownNavigationResolverErrors\(response\.errors\)[\s\S]*response = await graphqlRequest<NavigationQueryResult>\(COMPATIBLE_NAVIGATION_QUERY\);/,
   );
 });
 

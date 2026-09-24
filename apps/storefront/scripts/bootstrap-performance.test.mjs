@@ -22,7 +22,6 @@ const savedCollectionSource = await readFile(new URL("../../../packages/ui/src/s
 const storefrontStylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const productCardSource = await readFile(new URL("../../../packages/ui/src/catalog/ProductCard.tsx", import.meta.url), "utf8");
 const staticNavigationRuntimeSource = await readFile(new URL("../src/lib/staticNavigationRuntime.js", import.meta.url), "utf8");
-const navigationSource = await readFile(new URL("../src/lib/navigation.ts", import.meta.url), "utf8");
 const assistantSource = await readFile(new URL("../src/components/AiShoppingAssistant.tsx", import.meta.url), "utf8");
 const cookieConsentSource = await readFile(new URL("../../../packages/ui/src/layout/CookieConsentBanner.tsx", import.meta.url), "utf8");
 
@@ -139,48 +138,6 @@ test("flagship static-first builds emit route-specific hydration for public cont
   assert.match(prerenderSource, /update\(`\$\{process\.env\.COMMIT_REF \|\| ""\}:\$\{process\.env\.DEPLOY_ID \|\| ""\}:\$\{generatedAt\}`\)/);
 });
 
-test("serialized static navigation applies its build timeout to every required request", () => {
-  assert.match(
-    navigationSource,
-    /NAVIGATION_QUERY,\s*variables,\s*undefined,\s*menuRequestTimeoutMs/,
-  );
-  assert.match(
-    navigationSource,
-    /STOREFRONT_RUNTIME_QUERY,\s*variables,\s*undefined,\s*menuRequestTimeoutMs/,
-  );
-  assert.match(
-    navigationSource,
-    /STOREFRONT_UI_STRINGS_QUERY,\s*variables,\s*undefined,\s*menuRequestTimeoutMs/,
-  );
-  assert.match(
-    navigationSource,
-    /STOREFRONT_RADIO_QUERY,\s*variables,\s*undefined,\s*menuRequestTimeoutMs/,
-  );
-});
-
-test("static commerce hydration uses the build-only request timeout", () => {
-  assert.match(
-    prerenderSource,
-    /getCommerceCatalog\([\s\S]*?staticCatalogProductsByLanguage[\s\S]*?undefined,\s*25_000,\s*\)/,
-  );
-});
-
-test("required route hydration consistently uses the build-only request timeout", () => {
-  assert.match(prerenderSource, /getProductByUriOrSlug\([\s\S]*?staticCatalogProductsByLanguage[\s\S]*?undefined,\s*25_000,\s*\)/);
-  assert.match(prerenderSource, /getPostByUri\(postUri,\s*undefined,\s*25_000\)/);
-  assert.match(prerenderSource, /getProductArchive\([\s\S]*?staticCatalogProductsByLanguage[\s\S]*?25_000,\s*\)/);
-  assert.match(prerenderSource, /getPostTaxonomyArchive\([\s\S]*?undefined,\s*25_000\)/);
-  assert.match(prerenderSource, /getAuthorArchive\([\s\S]*?undefined,\s*25_000,\s*\)/);
-});
-
-test("static GraphQL discovery does not retry requests that timed out on the backend", () => {
-  assert.match(
-    prerenderSource,
-    /if \(error instanceof Error && \["AbortError", "TimeoutError"\]\.includes\(error\.name\)\) throw error;/,
-  );
-  assert.doesNotMatch(prerenderSource, /timeoutMs = (?:10_000|20_000)/);
-});
-
 test("route loading covers the viewport while application styles settle", () => {
   assert.match(appSource, /fixed inset-0 z-\[2147483646\] grid min-h-\[100dvh\]/);
   assert.match(appSource, /bg-\[rgb\(var\(--theme-background,250_250_250\)\)\]/);
@@ -226,9 +183,7 @@ test("flagship static navigation supports submenus and breadcrumbs before activa
   assert.match(prerenderSource, /data-static-mobile-expand/);
   assert.match(prerenderSource, /data-static-navigation-runtime/);
   assert.match(prerenderSource, /staticNavigationRuntimeSource/);
-  assert.match(prerenderSource, /getAiAssistantConfiguration\(languageCode\)/);
-  assert.match(prerenderSource, /const \{ navigation, assistant \} = await loadStaticNavigation\(defaultLanguage\)/);
-  assert.doesNotMatch(prerenderSource, /STATIC_(?:HEADER_ASSISTANT|HEADER_CONTROLS|CHROME_DECORATION|LAYOUT_VARIANTS|FOOTER_CREDIT|RECENT_ORDERS)_QUERY/);
+  assert.match(prerenderSource, /STATIC_HEADER_ASSISTANT_QUERY/);
   assert.doesNotMatch(prerenderSource, /storefront-static-control-placeholder/);
   assert.match(prerenderSource, /staticHeaderControl\("assistant"/);
   assert.match(prerenderSource, /renderStaticFloatingControls\(route\)/);

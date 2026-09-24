@@ -46,161 +46,19 @@ webhook after debounced public-content changes and on a configurable WP-Cron int
 
 ## Tailwind utilities in WordPress content
 
-Production `prebuild` generates a finite, reviewed utility contract locally with
+Production `prebuild` generates a finite reviewed utility contract locally with
 `scripts/generate-cms-tailwind-content.mjs --contract-only`. It never queries WordPress,
 so CSS preparation cannot delay SSG, consume PHP workers, or leave database work running
-after a client timeout. `.tailwind/cms-content.html` is an ignored local artifact scanned
-alongside application source.
+after a client timeout.
 
-Editors may use utilities and responsive/state variants present in
-`CMS_TAILWIND_STABLE_UTILITIES`. Classes outside that contract are not compiled
-dynamically. Add a reviewed utility to the contract with tests, use semantic `sf-*`
-selectors with custom CSS, or use the existing critical/deferred CSS controls. Never add
-a broad regex safelist.
-
-Dynamic CMS class discovery is intentionally disabled until WordPress can publish a
-precomputed, versioned class artifact asynchronously. A future implementation must not
-scan CMS content, render blocks, or regenerate an inventory inside a storefront build.
+Editors may use complete utilities and responsive/state variants already present in
+`CMS_TAILWIND_STABLE_UTILITIES`. Classes outside that contract are not discovered or
+compiled from CMS content. Add and review a utility in the contract with tests, or use
+semantic `sf-*` selectors with the existing critical/deferred custom CSS controls.
 
 WordPress block classes such as `wp-block-*`, `has-*`, `is-layout-*`, and alignment
 classes are not Tailwind utilities. They continue to use WordPress global/block styles
-and the storefront compatibility CSS. The extractor does not fetch or execute CSS or
-JavaScript from content.
-
-Prerendered WordPress CSS remains in the document throughout hydration, including
-while its stylesheet request is pending. Loaded static CSS or applied cached theme
-styles do not wait for background data revalidation before revealing the storefront.
-If runtime core block styles are needed, their readiness wait is capped at two seconds;
-inline theme/compatibility CSS remains available and late stylesheets can still finish.
-
-## Native archive pagination
-
-Post grids, the blog index, author archives, and post taxonomy archives inherit
-**Settings > Reading > Blog pages show at most** (`posts_per_page`). Product grids
-and product category/tag/brand archives inherit WooCommerce's effective shop page
-size, including its native rows/columns and `loop_shop_per_page` filter.
-The public `funkycommerceArchiveSettings` GraphQL field supplies both values,
-independently of Layout Studio preferences.
-
-Control Center > Store & Currency > Products per page override defaults to **0**
-(inherit WooCommerce). Existing saved positive overrides remain effective in both
-native and headless mode; set an old override to 0 to follow WooCommerce again.
-Without WooCommerce, the product fallback is 12. Updating Reading, WooCommerce
-rows/columns, or the override invalidates storefront settings and schedules the
-existing debounced build webhook.
-
-The same settings are seeded during prerender and revalidated in the browser.
-Both numbered pagination and infinite scrolling use these sizes. The current
-client-side filtering/sorting model requires complete collections: archive loaders
-walk GraphQL cursors in batches of 25 (Woo Store API pages stay at 100), rather than
-mistaking one visual page for the whole archive. Broken/repeated cursors, incomplete
-REST pagination, or more than 1,000 batches raise errors instead of silently hiding
-later items. A native `-1` page size displays the complete collection.
-
-A `[grid]` without `page_size` (or with `page_size="0"`) inherits the relevant native
-setting. The backend transports this as `data-page-size="0"`, not a fixed 12.
-An explicit positive editorial `page_size` retains its existing 1-48 range in
-both native rendering and the React storefront; related-content sections,
-sliders, and social feeds retain their own sizes. Homepage post grids load full
-archives, not the bounded summaries intended for sliders.
-
-Older themes without the new GraphQL field use WordPress's exposed reading setting
-and 12 products per page with an explicit upgrade warning. Other settings-query
-failures surface an unavailable state rather than silently substituting defaults.
-Use the updated backend theme to synchronize WooCommerce settings accurately.
-
-## Build stability
-
-Custom CSS is critical by default. In **Superfunky → Control Center → Visual & CSS**,
-use **Critical (above-the-fold) CSS** for header, promo, hero, fonts, and initial
-layout rules. Opt in to **Deferred (below-the-fold) CSS** only for complete
-top-level rules that are not needed for the initial viewport; no marker is needed
-in either editor. Existing unmarked CSS stays entirely critical. Legacy CSS using
-`/* storefront:deferred */` on its own line **between complete top-level rules**
-opens in the corresponding editors and is persisted separately on the next save.
-The legacy standalone marker remains supported, including on older themes.
-The theme combines the two fields into the existing `customCss` value using that
-marker, without changing GraphQL. WordPress Additional CSS still precedes the
-theme CSS and is critical unless it explicitly contains the legacy marker.
-
-Rebuild the storefront to publish changes to static pages. Prerender emits a separate non-render-blocking
-stylesheet, activated on window load or after two seconds without waiting for React
-or WordPress. Without JavaScript, a noscript stylesheet preserves the full design.
-The runtime fallback applies the same split; no existing CSS is automatically deferred.
-
-Header promotional HTML preserves classes and safe inline presentation styles in
-both static and React rendering. Tailwind utilities in that HTML must belong to the
-reviewed utility contract. Script/event attributes and unsafe CSS remain blocked.
-CMS `application/ld+json` scripts are parsed as data, never wrapped in JavaScript
-error handlers. Product category/tag/brand archives use `CollectionPage`, not
-`Product` or `ProductGroup` (which describes variants of a single product).
-
-Build-time GraphQL shares the browser's two-request concurrency limit so complete
-archive loading does not saturate WordPress workers. Native display page sizes
-remain independent of these transport batches. Store API requests time out after
-12 seconds instead of leaving a catalog load pending indefinitely.
-CSS contract generation is local and independent from route discovery and hydration.
-Prerender uses the regular SSG content loaders without a preliminary CMS crawl.
-Route discovery makes at most two 20-second attempts per request, rather than five
-60-second attempts.
-Completed route connections are skipped on subsequent pages, so a long content
-inventory does not repeatedly resolve the same terms and authors.
-Navigation loads once per language and supplies both static header/footer settings
-and React hydration, replacing the separate decoration, header controls, assistant,
-footer-credit, layout-variant, and recent-order configuration requests. Single-language
-sites do not request the Polylang REST directory just to choose between languages.
-
-Within one prerender process, public GraphQL reads and WooCommerce/WordPress
-archive REST reads share successful response snapshots. This includes the complete
-Store API product inventory and post term directories previously fetched again for
-each taxonomy. Product taxonomy hydration requests authoritative product IDs and
-pagination, then reuses the already-loaded catalog's complete cards, preserving
-archive order, prices, ratings, galleries and variations without resolving them
-again for every term. A product absent from the snapshot triggers an explicit
-full-archive reload instead of being omitted. Browser archive queries are unchanged.
-Build-time catalog metadata is fetched once, separately from product batches.
-Product batches retain descriptions, ratings, images, variations and prices. The
-initial product batch no longer competes with brand/tag
-directory requests; this keeps each request below the cost of the combined catalog
-query without increasing timeouts.
-Product-detail seeds also reuse catalog cards for the main product and its
-related/upsell/cross-sell relationships, while fetching current relationship IDs,
-parent stock, attributes, SEO and every review. Missing relationships fall back
-explicitly to the full query. Blog, author and post-taxonomy seeds use their normal
-complete content loaders without changing archive filtering or comment content.
-CMS extraction does not retry a timed-out request: cancelling HTTP does not guarantee
-that PHP stopped processing it. Theme 1.2.48+ serves every CMS class source through
-one cached inventory. Older themes fail with an explicit upgrade requirement instead
-of starting the expensive legacy GraphQL rendering crawl.
-Required build-time menu discovery has a separate 25-second ceiling because the
-flagship's otherwise healthy menu resolver can exceed the general 12-second SSG
-request limit. Browser requests and all other server queries retain their
-existing limits, and menu failure still stops publication.
-Theme 1.2.43+ also exposes a bounded direct classic-menu payload for static
-builds, bypassing WPGraphQL's per-menu-item resolver chain. Browser navigation
-is unchanged, and older themes fall back to the existing query. When exactly one
-locale is explicitly configured, prerender uses that contract directly instead
-of probing language plugins.
-Static bootstrap requests run serially on managed builds and reuse the explicit
-single-locale contract, preventing two PHP workers from competing for disk I/O
-on small WordPress hosts. Browser navigation remains parallel.
-Unused GraphQL variables do not invalidate otherwise identical
-reads. Deterministic schema-validation errors are reused across route variables;
-timeouts, resolver errors, HTTP failures, and partial data are not retained.
-Authenticated requests and mutations bypass this cache. Nothing persists into
-another build or changes browser caching.
-
-Prerender fetches only the content seed families required by discovered routes,
-one family at a time. Individual content routes also hydrate one at a time instead
-of starting six overlapping loader trees. Missing navigation, pagination settings,
-or a required route/content seed stops the build immediately: Netlify keeps its previous deployment rather than publishing
-HTML containing loading placeholders without the data needed to activate them.
-An optional AI-assistant failure is logged without discarding usable navigation.
-GraphQL schema errors are not retried unchanged.
-
-Optional SEO document mirroring shares a 30-second total network budget across
-feeds, sitemaps, and AI documents. An unavailable backend is logged and existing
-generated output is retained, instead of accumulating a timeout for each document.
+and the storefront compatibility CSS.
 
 ## Public component selectors
 
@@ -232,19 +90,16 @@ Full returns to the controlled shell-inner cap. WordPress continues to own typog
 colours, block spacing, columns, media height/aspect/object-fit, and bounded widget sizing.
 Homepage application sections and product layouts are outside this CMS scope.
 
-The generated class set is a build artifact, so publishing or changing a CMS-authored
-utility requires a storefront rebuild. Keep the site's Netlify `WordPress` build hook
-configured in Control Center; public-content saves already trigger that hook after the
-existing one-minute debounce. Hook URLs stay in WordPress and Netlify and must not be
-committed. If an internal preview site is not managed by `sites.json`, configure its
-credential-free `VITE_GRAPHQL_ENDPOINT` directly in the hosting provider.
+Changing the reviewed contract requires a storefront rebuild. Ordinary CMS content
+publishing does not alter the compiled Tailwind utility set. Keep the site's Netlify
+`WordPress` build hook configured for normal static content updates. Hook URLs stay in
+WordPress and Netlify and must not be committed.
 
 For Cloudflare Pages deployments of the open-source workspace, build from the
 repository root with `pnpm build` and publish `apps/storefront/dist`. The exported
 root `wrangler.jsonc` identifies that directory as the Pages application. When no
-backend endpoint is configured, development uses the public
-`https://dev.superfunky.pro/graphql` reference backend. Set that endpoint explicitly
-to build the reference site with its CMS-authored utilities.
+backend endpoint is configured, the storefront uses the public
+`https://dev.superfunky.pro/graphql` reference backend.
 
 ## CMS code and bundled behaviors
 
@@ -336,11 +191,11 @@ The repository root is the pnpm workspace. For Cloudflare Pages, use `pnpm build
 and publish `apps/storefront/dist`; the included `wrangler.jsonc` identifies that
 directory as the application so Cloudflare does not need to guess between packages.
 
-Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider so builds can
-compile CMS-authored Tailwind utilities. To build the reference site, set it to
+Configure the public `VITE_GRAPHQL_ENDPOINT` in your hosting provider for normal static
+content generation. Tailwind uses a reviewed local utility contract and does not crawl
+CMS content during builds. To build the reference site, set the endpoint to
 `https://dev.superfunky.pro/graphql`. Development uses that reference when omitted.
-Build-hook URLs and
-provider credentials must never be committed.
+Build-hook URLs and provider credentials must never be committed.
 
 The production generator also consumes the Control Center's public static-generation
 configuration. It creates or removes the sitemap, custom robots file, `llms.txt`,
