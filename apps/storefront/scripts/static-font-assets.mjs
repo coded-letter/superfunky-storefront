@@ -8,6 +8,7 @@ const MAX_FONT_COUNT = 24;
 const MAX_FONT_BYTES = 512_000;
 const MAX_TOTAL_FONT_BYTES = 2_000_000;
 const MAX_PRELOAD_COUNT = 2;
+const FONT_REQUEST_TIMEOUT_MS = 25_000;
 
 function fontFormat(bytes) {
   const prefix = Buffer.from(bytes).subarray(0, 4);
@@ -67,7 +68,12 @@ export async function localizeStaticFontAssets(
   await mkdir(resolve(outputDirectory, "assets", "fonts"), { recursive: true });
 
   for (const sourceUrl of sourceUrls) {
-    const response = await fetchImpl(sourceUrl, { signal: AbortSignal.timeout(10_000) });
+    let response;
+    try {
+      response = await fetchImpl(sourceUrl, { signal: AbortSignal.timeout(FONT_REQUEST_TIMEOUT_MS) });
+    } catch (error) {
+      throw new Error(`WordPress font request failed: ${sourceUrl}`, { cause: error });
+    }
     if (!response.ok) {
       throw new Error(`WordPress font request failed with status ${response.status}: ${sourceUrl}`);
     }

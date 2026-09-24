@@ -238,7 +238,7 @@ export async function compileCmsTailwindClasses(documents, config) {
 
 export function buildTailwindContentSource(classes) {
   return [
-    "<!-- Generated CMS Tailwind inventory. Do not edit. -->",
+    "<!-- Generated stable CMS Tailwind contract. Do not edit. -->",
     `<div class="${classes.join(" ")}"></div>`,
     "",
   ].join("\n");

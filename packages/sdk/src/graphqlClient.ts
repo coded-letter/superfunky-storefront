@@ -81,14 +81,19 @@ export function hasOnlyMissingGraphqlFields(
  * attach it as a Bearer token (e.g. for `login`/`refreshToken` follow-up calls that
  * need an authenticated session) — most calls in this prototype are public queries
  * and don't need one. */
-export async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>, authToken?: string | null): Promise<GraphqlResponse<T>> {
+export async function graphqlRequest<T>(
+  query: string,
+  variables?: Record<string, unknown>,
+  authToken?: string | null,
+  requestTimeoutMs = GRAPHQL_REQUEST_TIMEOUT_MS,
+): Promise<GraphqlResponse<T>> {
   if (!isBackendConfigured || !GRAPHQL_ENDPOINT) {
     return { data: null, errors: [{ message: "No GraphQL endpoint configured (VITE_GRAPHQL_ENDPOINT)" }] };
   }
 
   await acquireGraphqlRequestSlot();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GRAPHQL_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
     const response = await fetch(GRAPHQL_ENDPOINT, {
       method: "POST",
@@ -114,7 +119,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
     return payload;
   } catch (error) {
     const message = error instanceof Error && error.name === "AbortError"
-      ? `GraphQL request timed out after ${GRAPHQL_REQUEST_TIMEOUT_MS / 1000} seconds`
+      ? `GraphQL request timed out after ${requestTimeoutMs / 1000} seconds`
       : error instanceof Error
         ? error.message
         : "GraphQL request failed";

@@ -1,5 +1,11 @@
 import type { PostCardData } from "@funky/ui";
-import { BLOG_POST_CARD_FIELDS, mapBlogPost, type RawBlogPost } from "./postArchives.ts";
+import {
+  BLOG_POST_CARD_FIELDS,
+  createBlogPostCardQuery,
+  mapBlogPosts,
+  type BuildPostContentGetter,
+  type RawBlogPost,
+} from "./postArchives.ts";
 import { graphqlRequest, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import {
   AUTHOR_ARCHIVE_COMPATIBILITY_RULE,
@@ -71,13 +77,20 @@ export async function getAuthorArchive(
   backendLanguageCode: string,
   languageCode = backendLanguageCode,
   configuredLanguageCodes: readonly string[] = [],
+  renderedContent?: BuildPostContentGetter,
+  requestTimeoutMs?: number,
 ): Promise<CmsAuthorArchive | null> {
   const normalizedRequestedLanguageCode = languageCode.toLowerCase();
+  const cardQuery = createBlogPostCardQuery(AUTHOR_ARCHIVE_QUERY, renderedContent);
   const query = shouldPreferCoreContentQueries(STOREFRONT_BACKEND_PROFILE)
-    ? createCompatibleAuthorArchiveQuery(AUTHOR_ARCHIVE_QUERY)
-    : AUTHOR_ARCHIVE_QUERY;
+    ? createCompatibleAuthorArchiveQuery(cardQuery)
+    : cardQuery;
+  const requestAuthorGraphql = <T>(
+    graphqlQuery: string,
+    variables?: Record<string, unknown>,
+  ) => graphqlRequest<T>(graphqlQuery, variables, undefined, requestTimeoutMs);
   const { data, errors } = await requestGraphqlWithCompatibility<AuthorArchiveResult>(
-    graphqlRequest,
+    requestAuthorGraphql,
     query,
     {
       slug,
@@ -99,7 +112,7 @@ export async function getAuthorArchive(
     firstPage = null;
     if (!page) {
       const result = await requestGraphqlWithCompatibility<AuthorArchiveResult>(
-        graphqlRequest,
+        requestAuthorGraphql,
         query,
         { slug, authorName: slug, language: backendLanguageCode, first, after },
         [missingGraphqlFieldRule("storefrontDescription"), AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
@@ -124,10 +137,12 @@ export async function getAuthorArchive(
     // cover image — no separate journal-only cover field.
     coverUrl: data.user.communityCover?.url || null,
     languageCode: normalizedRequestedLanguageCode,
-    posts: nodes
-      .filter((post) => post.author?.node.slug === (data.user?.slug || slug))
-      .filter((post) => matchesAuthorPostLanguage(post, normalizedRequestedLanguageCode, configuredLanguageCodes))
-      .map(mapBlogPost),
+    posts: mapBlogPosts(
+      nodes
+        .filter((post) => post.author?.node.slug === (data.user?.slug || slug))
+        .filter((post) => matchesAuthorPostLanguage(post, normalizedRequestedLanguageCode, configuredLanguageCodes)),
+      renderedContent,
+    ),
   };
 }
 

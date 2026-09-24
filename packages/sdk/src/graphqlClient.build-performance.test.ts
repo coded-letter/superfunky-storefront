@@ -8,6 +8,8 @@ test("build-time hydration is bounded without weakening browser request limits",
   assert.match(source, /const IS_SERVER = typeof window === "undefined"/);
   assert.match(source, /MAX_CONCURRENT_GRAPHQL_REQUESTS = 2/);
   assert.match(source, /GRAPHQL_REQUEST_TIMEOUT_MS = IS_SERVER \? 12_000 : 60_000/);
+  assert.match(source, /requestTimeoutMs = GRAPHQL_REQUEST_TIMEOUT_MS/);
+  assert.match(source, /timed out after \$\{requestTimeoutMs \/ 1000\} seconds/);
 });
 
 test("parallel build callers never occupy more than two backend workers", async () => {

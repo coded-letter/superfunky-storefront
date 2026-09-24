@@ -46,42 +46,21 @@ webhook after debounced public-content changes and on a configurable WP-Cron int
 
 ## Tailwind utilities in WordPress content
 
-The production prebuild queries the configured `VITE_GRAPHQL_ENDPOINT` before Vite
-compiles CSS. It paginates through public pages, posts, community posts, product
-descriptions, media captions/descriptions, taxonomy descriptions, authors, and menus,
-and includes localized announcement/footer HTML. Rendered `headlessContent` includes
-the backend's expanded blocks and templates. Optional plugin fields use explicit schema
-compatibility fallbacks; unavailable product GraphQL connections use the public
-WooCommerce Store API.
+Production `prebuild` generates a finite, reviewed utility contract locally with
+`scripts/generate-cms-tailwind-content.mjs --contract-only`. It never queries WordPress,
+so CSS preparation cannot delay SSG, consume PHP workers, or leave database work running
+after a client timeout. `.tailwind/cms-content.html` is an ignored local artifact scanned
+alongside application source.
 
-Exact HTML class names are decoded, deduplicated, and compiled with the storefront's
-real Tailwind configuration. `.tailwind/cms-content.html` is an ignored, site-specific
-build artifact, scanned alongside application source. The baseline utility inventory
-is additive, not an allowlist ceiling. Responsive fractions, opacity modifiers,
-important/negative utilities, arbitrary transforms, shadows, and calculated radii are
-supported. URLs/resource-loading values, arbitrary selectors/declarations, unsafe
-characters, and invalid tokens are excluded with source-labelled diagnostics. Custom
-WordPress classes remain unchanged. Never add a broad regex safelist.
+Editors may use utilities and responsive/state variants present in
+`CMS_TAILWIND_STABLE_UTILITIES`. Classes outside that contract are not compiled
+dynamically. Add a reviewed utility to the contract with tests, use semantic `sf-*`
+selectors with custom CSS, or use the existing critical/deferred CSS controls. Never add
+a broad regex safelist.
 
-Extraction is bounded to 50 MB of HTML, 100 pages per connection, 10,000 class candidates
-including the baseline, 512 characters per token, and 1 MB of compiled utility CSS.
-Incomplete pagination, required fields, or failed requests fail the build rather than
-reusing a stale inventory. `VITE_SITE_URL` supplies the Origin for protected CMS queries.
-Production builds require an explicit endpoint; `CMS_TAILWIND_OFFLINE=true` is an
-explicit baseline-only demo mode, not a production recovery option.
-
-After Vite, `scripts/audit-cms-tailwind.mjs` verifies that every compiled inventory class
-survived in the initial CSS and reports its compressed size. Those hashed stylesheet
-links are retained by static pages and artifact shells, so utilities do not depend on
-artifact-only route CSS. Run `pnpm --filter @funky/storefront audit:cms-tailwind` to
-regenerate the inventory and diagnose current CMS content without building.
-
-Publishing a new class requires a successful storefront rebuild. Configure the
-debounced public-content build webhook in Control Center, including on artifact-enabled
-sites; published shared blocks/templates, menus, and public Control Center HTML also
-schedule that rebuild. Regenerating a route artifact alone does not compile new utilities.
-Existing compiled classes remain available until the next deployment. For local Vite
-development, regenerate the inventory after CMS changes; Vite watches the generated file.
+Dynamic CMS class discovery is intentionally disabled until WordPress can publish a
+precomputed, versioned class artifact asynchronously. A future implementation must not
+scan CMS content, render blocks, or regenerate an inventory inside a storefront build.
 
 WordPress block classes such as `wp-block-*`, `has-*`, `is-layout-*`, and alignment
 classes are not Tailwind utilities. They continue to use WordPress global/block styles
@@ -132,17 +111,26 @@ Use the updated backend theme to synchronize WooCommerce settings accurately.
 
 ## Build stability
 
-Custom CSS is critical by default. To opt in to two layers, put
-`/* storefront:deferred */` on its own line **between complete top-level rules**.
-Keep header, promo, hero, fonts, and layout rules above it; place only
-below-the-fold rules after it. Prerender emits a separate non-render-blocking
+Custom CSS is critical by default. In **Superfunky → Control Center → Visual & CSS**,
+use **Critical (above-the-fold) CSS** for header, promo, hero, fonts, and initial
+layout rules. Opt in to **Deferred (below-the-fold) CSS** only for complete
+top-level rules that are not needed for the initial viewport; no marker is needed
+in either editor. Existing unmarked CSS stays entirely critical. Legacy CSS using
+`/* storefront:deferred */` on its own line **between complete top-level rules**
+opens in the corresponding editors and is persisted separately on the next save.
+The legacy standalone marker remains supported, including on older themes.
+The theme combines the two fields into the existing `customCss` value using that
+marker, without changing GraphQL. WordPress Additional CSS still precedes the
+theme CSS and is critical unless it explicitly contains the legacy marker.
+
+Rebuild the storefront to publish changes to static pages. Prerender emits a separate non-render-blocking
 stylesheet, activated on window load or after two seconds without waiting for React
 or WordPress. Without JavaScript, a noscript stylesheet preserves the full design.
 The runtime fallback applies the same split; no existing CSS is automatically deferred.
 
 Header promotional HTML preserves classes and safe inline presentation styles in
-both static and React rendering. Its `branding.promoHtml` is included in CMS
-Tailwind extraction. Script/event attributes and unsafe CSS remain blocked.
+both static and React rendering. Tailwind utilities in that HTML must belong to the
+reviewed utility contract. Script/event attributes and unsafe CSS remain blocked.
 CMS `application/ld+json` scripts are parsed as data, never wrapped in JavaScript
 error handlers. Product category/tag/brand archives use `CollectionPage`, not
 `Product` or `ProductGroup` (which describes variants of a single product).
@@ -151,13 +139,61 @@ Build-time GraphQL shares the browser's two-request concurrency limit so complet
 archive loading does not saturate WordPress workers. Native display page sizes
 remain independent of these transport batches. Store API requests time out after
 12 seconds instead of leaving a catalog load pending indefinitely.
-CMS class extraction scans two independent inventories at a time and reports
-per-source timings. Route discovery limits rendered page batches to 25 and makes
-at most two 20-second attempts per request, rather than five 60-second attempts.
+CSS contract generation is local and independent from route discovery and hydration.
+Prerender uses the regular SSG content loaders without a preliminary CMS crawl.
+Route discovery makes at most two 20-second attempts per request, rather than five
+60-second attempts.
+Completed route connections are skipped on subsequent pages, so a long content
+inventory does not repeatedly resolve the same terms and authors.
+Navigation loads once per language and supplies both static header/footer settings
+and React hydration, replacing the separate decoration, header controls, assistant,
+footer-credit, layout-variant, and recent-order configuration requests. Single-language
+sites do not request the Polylang REST directory just to choose between languages.
+
+Within one prerender process, public GraphQL reads and WooCommerce/WordPress
+archive REST reads share successful response snapshots. This includes the complete
+Store API product inventory and post term directories previously fetched again for
+each taxonomy. Product taxonomy hydration requests authoritative product IDs and
+pagination, then reuses the already-loaded catalog's complete cards, preserving
+archive order, prices, ratings, galleries and variations without resolving them
+again for every term. A product absent from the snapshot triggers an explicit
+full-archive reload instead of being omitted. Browser archive queries are unchanged.
+Build-time catalog metadata is fetched once, separately from product batches.
+Product batches retain descriptions, ratings, images, variations and prices. The
+initial product batch no longer competes with brand/tag
+directory requests; this keeps each request below the cost of the combined catalog
+query without increasing timeouts.
+Product-detail seeds also reuse catalog cards for the main product and its
+related/upsell/cross-sell relationships, while fetching current relationship IDs,
+parent stock, attributes, SEO and every review. Missing relationships fall back
+explicitly to the full query. Blog, author and post-taxonomy seeds use their normal
+complete content loaders without changing archive filtering or comment content.
+CMS extraction does not retry a timed-out request: cancelling HTTP does not guarantee
+that PHP stopped processing it. Theme 1.2.48+ serves every CMS class source through
+one cached inventory. Older themes fail with an explicit upgrade requirement instead
+of starting the expensive legacy GraphQL rendering crawl.
+Required build-time menu discovery has a separate 25-second ceiling because the
+flagship's otherwise healthy menu resolver can exceed the general 12-second SSG
+request limit. Browser requests and all other server queries retain their
+existing limits, and menu failure still stops publication.
+Theme 1.2.43+ also exposes a bounded direct classic-menu payload for static
+builds, bypassing WPGraphQL's per-menu-item resolver chain. Browser navigation
+is unchanged, and older themes fall back to the existing query. When exactly one
+locale is explicitly configured, prerender uses that contract directly instead
+of probing language plugins.
+Static bootstrap requests run serially on managed builds and reuse the explicit
+single-locale contract, preventing two PHP workers from competing for disk I/O
+on small WordPress hosts. Browser navigation remains parallel.
+Unused GraphQL variables do not invalidate otherwise identical
+reads. Deterministic schema-validation errors are reused across route variables;
+timeouts, resolver errors, HTTP failures, and partial data are not retained.
+Authenticated requests and mutations bypass this cache. Nothing persists into
+another build or changes browser caching.
 
 Prerender fetches only the content seed families required by discovered routes,
-one family at a time. Missing navigation, pagination settings, or required content
-seeds fail the build: Netlify keeps its previous deployment rather than publishing
+one family at a time. Individual content routes also hydrate one at a time instead
+of starting six overlapping loader trees. Missing navigation, pagination settings,
+or a required route/content seed stops the build immediately: Netlify keeps its previous deployment rather than publishing
 HTML containing loading placeholders without the data needed to activate them.
 An optional AI-assistant failure is logged without discarding usable navigation.
 GraphQL schema errors are not retried unchanged.

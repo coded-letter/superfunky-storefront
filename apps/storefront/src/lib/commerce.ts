@@ -42,6 +42,7 @@ import {
   type RawLocalizedTermTranslation,
 } from "./commerceTaxonomyLanguage.ts";
 import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, fetchRestArchiveNodes } from "./archiveSettings.ts";
+import { removeGraphqlFieldSelections } from "./graphqlFieldFallback.ts";
 
 export type { ProductPriceBehavior, ResolvedProductPriceMode } from "./productPriceMode.ts";
 export { resolveProductPriceMode } from "./productPriceMode.ts";
@@ -285,6 +286,8 @@ type CatalogTagsResult = {
   productTags: { nodes: RawTerm[] } | null;
 };
 
+type ProductRenderedContent = Pick<RawProductDetail, "description" | "shortDescription" | "headlessDescription" | "headlessShortDescription">;
+
 type StoreApiCatalogProduct = {
   id: number;
   name: string;
@@ -358,18 +361,25 @@ type ProductBrandDirectoryResult = {
   } | null;
 };
 
-type ProductResult = { product: RawProductDetail | null };
+type ProductDetailSelection = Omit<RawProductDetail, keyof RawProductCard | "related" | "upsell" | "crossSell"> &
+  Partial<RawProductCard> & Pick<RawProductCard, "id"> & {
+    related: { nodes: ArchiveProduct[] } | null;
+    upsell: { nodes: ArchiveProduct[] } | null;
+    crossSell?: { nodes: ArchiveProduct[] } | null;
+  };
 
 type RawTaxonomySeo = Omit<RawCmsSeo, "schema"> & { schema: { raw: string | null } | null };
 
+type ArchiveProduct = RawProductCard | Pick<RawProductCard, "id">;
+
 type ArchiveResult = {
   archive: (RawTerm & {
-    products?: { nodes: RawProductCard[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
+    products?: { nodes: ArchiveProduct[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
     children?: { nodes: RawTerm[] } | null;
     seo?: RawTaxonomySeo | null;
   }) | null;
   siblings: { nodes: RawTerm[] } | null;
-  localizedProducts?: { nodes: RawProductCard[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
+  localizedProducts?: { nodes: ArchiveProduct[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
 };
 
 const PRODUCT_CONCRETE_FIELDS = /* GraphQL */ `
@@ -707,12 +717,12 @@ const TAXONOMY_SEO_FIELDS = /* GraphQL */ `
 `;
 
 export const CATALOG_QUERY = /* GraphQL */ `
-  query StorefrontCommerceCatalog($language: LanguageCodeFilterEnum!, $first: Int = 100, $after: String) {
-    products(first: $first, after: $after, where: { language: $language }) {
+  query StorefrontCommerceCatalog($language: LanguageCodeFilterEnum!, $first: Int = 100, $after: String, $skipProducts: Boolean! = false, $skipMetadata: Boolean! = false) {
+    products(first: $first, after: $after, where: { language: $language }) @skip(if: $skipProducts) {
       nodes { ...StorefrontProductListCard }
       pageInfo { hasNextPage endCursor }
     }
-    productCategories(first: 50, where: { hideEmpty: true, language: $language }) {
+    productCategories(first: 50, where: { hideEmpty: true, language: $language }) @skip(if: $skipMetadata) {
       nodes {
         ${LOCALIZED_TERM_FIELDS}
         image { id sourceUrl altText title }
@@ -727,7 +737,7 @@ export const CATALOG_QUERY = /* GraphQL */ `
         orderby: COMMENT_DATE
         order: DESC
       }
-    ) {
+    ) @skip(if: $skipMetadata) {
       nodes {
         id
         databaseId
@@ -1081,6 +1091,9 @@ export async function getCommerceCatalog(
   languageCode: string,
   backendLanguageCode: string,
   configuredLanguageCodes: readonly string[] = [],
+  captureProducts?: (products: readonly RawProductCard[]) => void,
+  renderedContent?: (id: string) => ProductRenderedContent,
+  requestTimeoutMs?: number,
 ): Promise<CmsCommerceCatalog> {
   const requestedLanguageCode = languageCode.trim().toLowerCase();
   const languageCodeUsed = requestedLanguageCode;
@@ -1088,25 +1101,45 @@ export async function getCommerceCatalog(
     STOREFRONT_BACKEND_PROFILE,
     configuredLanguageCodes,
   );
+  const prepareQuery = (query: string) => renderedContent
+    ? [PRODUCT_LIST_CARD_FRAGMENT, PRODUCT_LIST_CARD_FRAGMENT_WITHOUT_BRANDS].reduce(
+        (current, fragment) => current.replace(fragment, ["description", "shortDescription"].reduce(removeGraphqlFieldSelections, fragment)),
+        query,
+      )
+    : query;
+  const requestCatalogGraphql = <T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ) => graphqlRequest<T>(query, variables, undefined, requestTimeoutMs);
+  const loadCatalog = (first: number, after: string | null, compatible: boolean, skipProducts = false) =>
+    requestCatalogWithFallback<CatalogResult>(
+      requestCatalogGraphql,
+      prepareQuery(CATALOG_QUERY),
+      { language: backendLanguageCode, first, after, skipProducts, skipMetadata: Boolean(captureProducts) && !skipProducts },
+      COMPATIBLE_CATALOG_OPERATIONS
+        .filter(({ field }) => !captureProducts || (skipProducts ? field !== "products" : field === "products"))
+        .map((operation) => ({ ...operation, query: prepareQuery(operation.query) })),
+      isMissingProductOptionalFieldSchemaError,
+      compatible,
+      prepareQuery(CATALOG_QUERY_WITHOUT_BRANDS),
+    );
+  const metadata = captureProducts
+    ? (await loadCatalog(ARCHIVE_BATCH_SIZE, null, preferCoreQueries, true)).data
+    : null;
+  const firstCatalog = captureProducts
+    ? await loadCatalog(ARCHIVE_BATCH_SIZE, null, preferCoreQueries)
+    : null;
   const [
     {
-      data,
+      data: productData,
       usesCompatibilityFallback: usesSourceLanguageFallback,
     },
     brandData,
     tagData,
   ] = await Promise.all([
-    requestCatalogWithFallback<CatalogResult>(
-      graphqlRequest,
-      CATALOG_QUERY,
-      { language: backendLanguageCode, first: ARCHIVE_BATCH_SIZE, after: null },
-      COMPATIBLE_CATALOG_OPERATIONS,
-      isMissingProductOptionalFieldSchemaError,
-      preferCoreQueries,
-      CATALOG_QUERY_WITHOUT_BRANDS,
-    ),
+    firstCatalog || loadCatalog(ARCHIVE_BATCH_SIZE, null, preferCoreQueries),
     requestCommerceWithFallback<CatalogBrandsResult>(
-      graphqlRequest,
+      requestCatalogGraphql,
       CATALOG_BRANDS_QUERY,
       COMPATIBLE_CATALOG_BRANDS_QUERY,
       { language: backendLanguageCode },
@@ -1114,7 +1147,7 @@ export async function getCommerceCatalog(
       preferCoreQueries,
     ),
     requestCommerceWithFallback<CatalogTagsResult>(
-      graphqlRequest,
+      requestCatalogGraphql,
       CATALOG_TAGS_QUERY,
       COMPATIBLE_CATALOG_TAGS_QUERY,
       { language: backendLanguageCode },
@@ -1122,19 +1155,18 @@ export async function getCommerceCatalog(
       preferCoreQueries,
     ),
   ]);
+  const data = { ...metadata, ...productData };
   let firstPage: CatalogResult | null = data;
   const { nodes: graphqlProducts, hasMore } = await fetchArchiveNodesInBatches<RawProductCard>(-1, async (first, after) => {
-    const page = firstPage || (await requestCatalogWithFallback<CatalogResult>(
-      graphqlRequest,
-      CATALOG_QUERY,
-      { language: backendLanguageCode, first, after },
-      COMPATIBLE_CATALOG_OPERATIONS,
-      isMissingProductOptionalFieldSchemaError,
-      usesSourceLanguageFallback,
-      CATALOG_QUERY_WITHOUT_BRANDS,
-    )).data;
+    const page = firstPage || (await loadCatalog(first, after, usesSourceLanguageFallback)).data;
     firstPage = null;
-    return page.products || { nodes: [], pageInfo: { hasNextPage: false } };
+    if (!page.products) return { nodes: [], pageInfo: { hasNextPage: false } };
+    return {
+      ...page.products,
+      nodes: renderedContent
+        ? page.products.nodes.map((product) => ({ ...product, ...renderedContent(product.id) }))
+        : page.products.nodes,
+    };
   });
   const storeApiProducts = configuredLanguageCodes.length <= 1
     ? await getStoreApiCatalogProducts()
@@ -1150,6 +1182,7 @@ export async function getCommerceCatalog(
       && !graphqlProductKeys.has(`slug:${product.slug}`),
     ),
   ];
+  captureProducts?.(catalogProducts);
 
   return {
     requestedLanguageCode,
@@ -1343,23 +1376,67 @@ export async function getProductBrandDirectory(
 }
 
 /** Accepts either a WooCommerce product slug or a `/product/<slug>/` URI. */
-export async function getProductByUriOrSlug(identifier: string): Promise<CmsProductDetail | null> {
+export async function getProductByUriOrSlug(
+  identifier: string,
+  catalogProducts?: ReadonlyMap<string, RawProductCard>,
+  renderedContent?: (id: string) => ProductRenderedContent,
+  requestTimeoutMs?: number,
+): Promise<CmsProductDetail | null> {
   const slug = productSlugFromIdentifier(identifier);
   if (!slug) return null;
   const primaryQuery = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE)
     ? CORE_PRODUCT_DETAIL_QUERY
     : PRODUCT_DETAIL_QUERY;
-  const data = await requestCommerceWithFallbackChain<ProductResult>(
-    graphqlRequest,
-    primaryQuery === CORE_PRODUCT_DETAIL_QUERY
-      ? [CORE_PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY_WITHOUT_BRANDS]
-      : [PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY_WITHOUT_BRANDS],
+  const queries = primaryQuery === CORE_PRODUCT_DETAIL_QUERY
+    ? [CORE_PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY_WITHOUT_BRANDS]
+    : [PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY, COMPATIBLE_PRODUCT_DETAIL_QUERY_WITHOUT_BRANDS];
+  const data = await requestCommerceWithFallbackChain<{ product: ProductDetailSelection | null }>(
+    <T>(query: string, variables?: Record<string, unknown>) =>
+      graphqlRequest<T>(query, variables, undefined, requestTimeoutMs),
+    queries.map((query) => {
+      const selection = catalogProducts
+        ? query.replace(/fragment StorefrontProductCard on Product\s*\{[\s\S]*$/, `
+          fragment StorefrontProductCard on Product {
+            id
+            ... on VariableProduct { stockStatus stockQuantity backordersAllowed }
+          }
+        `)
+        : query;
+      return renderedContent
+        ? ["description", "shortDescription", "headlessDescription", "headlessShortDescription"].reduce(removeGraphqlFieldSelections, selection)
+        : selection;
+    }),
     { slug },
     isMissingProductOptionalFieldSchemaError,
   );
   if (!data?.product) return getStoreApiProductDetail(slug);
 
-  const product = await loadRemainingProductReviews(data.product);
+  const resolveCard = (node: ArchiveProduct): RawProductCard => {
+    const cached = catalogProducts?.get(node.id);
+    if (cached) return { ...cached, ...node, ...(renderedContent ? renderedContent(node.id) : {}) };
+    if ("__typename" in node) return { ...node, ...(renderedContent ? renderedContent(node.id) : {}) };
+    throw new Error(`Product ${node.id} is missing from this build's catalog snapshot`);
+  };
+  const relatedNodes = [
+    data.product,
+    ...(data.product.related?.nodes || []),
+    ...(data.product.upsell?.nodes || []),
+    ...(data.product.crossSell?.nodes || []),
+  ];
+  if (catalogProducts && relatedNodes.some(({ id }) => !catalogProducts.has(id))) {
+    console.warn(`[hydration] Product ${slug} contains an uncached relationship; loading its full detail query.`);
+    return getProductByUriOrSlug(identifier);
+  }
+  const cardData = resolveCard(data.product);
+  const product = await loadRemainingProductReviews({
+    ...cardData,
+    ...data.product,
+    description: data.product.description ?? cardData.description ?? null,
+    ...(renderedContent ? renderedContent(data.product.id) : {}),
+    related: data.product.related ? { nodes: data.product.related.nodes.map(resolveCard) } : null,
+    upsell: data.product.upsell ? { nodes: data.product.upsell.nodes.map(resolveCard) } : null,
+    crossSell: data.product.crossSell ? { nodes: data.product.crossSell.nodes.map(resolveCard) } : null,
+  });
   const variations = product.variations?.nodes || [];
   const attributes = mapAttributes(product.attributes?.nodes);
   const card = mapProductCard(product);
@@ -1624,16 +1701,23 @@ export async function getProductArchive(
   idType: CommerceTaxonomyIdentifierType = "URI",
   languageCode = COMMERCE_SOURCE_LANGUAGE,
   backendLanguageCode = COMMERCE_SOURCE_LANGUAGE.toUpperCase(),
+  cachedProducts?: ReadonlyMap<string, RawProductCard>,
+  requestTimeoutMs?: number,
 ): Promise<CmsProductArchive | null> {
   const initialFirst = ARCHIVE_BATCH_SIZE;
   const preferCoreQueries = shouldPreferCoreGraphqlQueries(STOREFRONT_BACKEND_PROFILE);
   const compatibleQuery = compatibleArchiveQuery(taxonomy);
   const scopedQueryWithoutBrands = createProductQueryWithoutBrands(archiveQuery(taxonomy));
-  const queries = preferCoreQueries
+  const fullQueries = preferCoreQueries
     ? [compatibleQuery]
     : taxonomy === "brand"
       ? [archiveQuery(taxonomy), scopedQueryWithoutBrands, compatibleLocalizedBrandArchiveQuery(), compatibleQuery]
       : [archiveQuery(taxonomy), scopedQueryWithoutBrands, compatibleQuery];
+  const queries = cachedProducts
+    ? fullQueries.map((query) => query
+        .replace(PRODUCT_LIST_CARD_FRAGMENT, "fragment StorefrontProductListCard on Product { id }")
+        .replace(PRODUCT_LIST_CARD_FRAGMENT_WITHOUT_BRANDS, "fragment StorefrontProductListCard on Product { id }"))
+    : fullQueries;
   const normalizedIdentifier = normalizeProductTaxonomyIdentifier(identifier);
   const identifiers = idType === "URI"
     ? [
@@ -1652,7 +1736,7 @@ export async function getProductArchive(
     data = await requestCommerceWithFallbackChain<ArchiveResult>(
       async <T>(query: string, variables?: Record<string, unknown>) => {
         candidateQuery = query;
-        return graphqlRequest<T>(query, variables);
+        return graphqlRequest<T>(query, variables, undefined, requestTimeoutMs);
       },
       queries,
       {
@@ -1678,15 +1762,20 @@ export async function getProductArchive(
   }
 
   const loadArchivePage = async (first: number, after: string | null): Promise<ArchiveResult> => {
-    const { data, errors } = await graphqlRequest<ArchiveResult>(resolvedQuery, {
-      id: resolvedIdentifier.id,
-      idType: resolvedIdentifier.idType,
-      brandSlug: productSlugFromIdentifier(identifier),
-      taxonomySlug: productSlugFromIdentifier(identifier),
-      language: backendLanguageCode,
-      first,
-      after,
-    });
+    const { data, errors } = await graphqlRequest<ArchiveResult>(
+      resolvedQuery,
+      {
+        id: resolvedIdentifier.id,
+        idType: resolvedIdentifier.idType,
+        brandSlug: productSlugFromIdentifier(identifier),
+        taxonomySlug: productSlugFromIdentifier(identifier),
+        language: backendLanguageCode,
+        first,
+        after,
+      },
+      undefined,
+      requestTimeoutMs,
+    );
     assertNoCommerceGraphqlErrors(errors);
     if (!data) {
       throw new Error(`The ${taxonomy} archive pagination query returned no data`);
@@ -1699,7 +1788,7 @@ export async function getProductArchive(
 
   let firstPageData: ArchiveResult | null = initialData;
   const useLocalizedProducts = Boolean(initialData.localizedProducts?.nodes.length);
-  const { nodes: products, hasMore } = await fetchArchiveNodesInBatches<RawProductCard>(
+  const { nodes: productNodes, hasMore } = await fetchArchiveNodesInBatches<ArchiveProduct>(
     -1,
     async (first, after) => {
       const pageData = firstPageData || await loadArchivePage(first, after);
@@ -1715,6 +1804,29 @@ export async function getProductArchive(
       };
     },
   );
+
+  const products: RawProductCard[] = [];
+  for (const product of productNodes) {
+    if (cachedProducts) {
+      const cached = cachedProducts.get(product.id);
+      if (!cached) {
+        console.warn(`[commerce] ${taxonomy} archive includes a product outside the build catalog snapshot; loading its complete archive.`);
+        return getProductArchive(
+          taxonomy,
+          identifier,
+          idType,
+          languageCode,
+          backendLanguageCode,
+          undefined,
+          requestTimeoutMs,
+        );
+      }
+      products.push(cached);
+    } else {
+      if (!("__typename" in product)) throw new Error(`The ${taxonomy} archive returned an incomplete product card`);
+      products.push(product);
+    }
+  }
 
   const storeApiArchive = await getStoreApiProductArchive(
     taxonomy,
