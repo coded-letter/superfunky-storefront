@@ -82,9 +82,19 @@ test("product detail loading falls back to the Woo Store API when WooGraphQL omi
 
 test("single-locale catalogs merge current Store API products with GraphQL products", () => {
   const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
-  assert.match(source, /const storeApiProducts = configuredLanguageCodes\.length <= 1/);
+  assert.match(source, /const storeApiProducts = configuredLanguageCodes\.length <= 1\s*\?\s*await getOptionalStoreApiCatalogProducts\("catalog"\)/);
   assert.match(source, /\.\.\.storeApiProducts\.filter/);
   assert.match(source, /fetchRestArchiveNodes<StoreApiCatalogProduct>\(endpoint\)/);
+  assert.match(source, /Store API \$\{context\} enrichment failed; preserving authoritative GraphQL data/);
+});
+
+test("successful GraphQL archives survive optional Store API enrichment failures", () => {
+  const source = readFileSync(new URL("./commerce.ts", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /let storeApiArchive: CmsProductArchive \| null = null;[\s\S]*try \{[\s\S]*getStoreApiProductArchive\([\s\S]*catch \(error\) \{[\s\S]*preserving the GraphQL archive/,
+  );
+  assert.match(source, /if \(!initialData\?\.archive[\s\S]*return getStoreApiProductArchive/);
 });
 
 test("nested product category archives preserve the hierarchy for URI lookup and use the leaf slug for products", () => {
