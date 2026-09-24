@@ -1137,7 +1137,7 @@ export async function getCommerceCatalog(
     return page.products || { nodes: [], pageInfo: { hasNextPage: false } };
   });
   const storeApiProducts = configuredLanguageCodes.length <= 1
-    ? await getStoreApiCatalogProducts()
+    ? await getOptionalStoreApiCatalogProducts("catalog")
     : [];
   const graphqlProductKeys = new Set(graphqlProducts.flatMap((product) => [
     product.databaseId ? `id:${product.databaseId}` : "",
@@ -1249,6 +1249,18 @@ async function getStoreApiCatalogProducts(): Promise<RawProductCard[]> {
   if (!endpoint) return [];
   const products = await fetchRestArchiveNodes<StoreApiCatalogProduct>(endpoint);
   return products.map(mapStoreApiCatalogProduct);
+}
+
+async function getOptionalStoreApiCatalogProducts(context: string): Promise<RawProductCard[]> {
+  try {
+    return await getStoreApiCatalogProducts();
+  } catch (error) {
+    console.warn(
+      `[commerce] WooCommerce Store API ${context} enrichment failed; preserving authoritative GraphQL data.`,
+      error,
+    );
+    return [];
+  }
 }
 
 function storefrontPathFromUrl(value: string | undefined, fallback: string): string {
@@ -1716,12 +1728,20 @@ export async function getProductArchive(
     },
   );
 
-  const storeApiArchive = await getStoreApiProductArchive(
-    taxonomy,
-    normalizedIdentifier.slug,
-    identifier,
-    languageCode,
-  );
+  let storeApiArchive: CmsProductArchive | null = null;
+  try {
+    storeApiArchive = await getStoreApiProductArchive(
+      taxonomy,
+      normalizedIdentifier.slug,
+      identifier,
+      languageCode,
+    );
+  } catch (error) {
+    console.warn(
+      `[commerce] WooCommerce Store API ${taxonomy} archive enrichment failed; preserving the GraphQL archive.`,
+      error,
+    );
+  }
   const productKeys = new Set(products.flatMap((product) => [
     product.databaseId ? `id:${product.databaseId}` : "",
     product.slug ? `slug:${product.slug}` : "",

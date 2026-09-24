@@ -372,6 +372,12 @@ test("flagship theme state and React-parity chrome apply before first paint", ()
   assert.match(prerenderSource, /themeMaxWidthPx/);
   assert.match(prerenderSource, /--storefront-static-max-width:\$\{themeMaxWidthPx\}px/);
   assert.match(indexSource, /max-width: var\(--storefront-static-max-width, 1280px\)/);
+  assert.match(
+    storefrontStylesSource,
+    /\.storefront-generated-route \{[\s\S]*max-width: var\(--storefront-static-max-width, 1280px\);[\s\S]*padding-block: clamp\(3rem, 8vw, 7rem\);[\s\S]*width: 100%;/,
+  );
+  const generatedRouteStyles = storefrontStylesSource.match(/\.storefront-generated-route \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(generatedRouteStyles, /calc\(\(100vw - 1280px\) \/ 2\)/);
   assert.match(indexSource, /\.storefront-static-header nav a \{[\s\S]*line-height: 1\.25rem/);
 });
 
