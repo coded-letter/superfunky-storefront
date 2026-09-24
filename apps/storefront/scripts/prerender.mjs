@@ -2098,7 +2098,7 @@ function renderStaticChrome(route, chromeConfig = staticChromeConfigurationForRo
       )
     : "";
   const flowClass = chromeConfig.headerSticky ? "" : " storefront-static-header--flow";
-  return `<header class="storefront-static-header storefront-static-header--${chromeConfig.headerArrangement}${flowClass}" data-static-announcement-scroll="${chromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
+  return `<header id="sf-header" class="storefront-static-header storefront-static-header--${chromeConfig.headerArrangement}${flowClass}" data-static-announcement-scroll="${chromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
     ${announcement}
     <div class="storefront-static-header-main">
       <div class="storefront-static-header-row">
