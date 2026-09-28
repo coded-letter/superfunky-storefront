@@ -263,6 +263,13 @@ export function buildCoreRoutesQuery({
   seo = false,
 } = {}) {
   const selectedConnections = new Set(connections);
+  const variables = [
+    selectedConnections.has("pages") ? "$pageAfter: String" : "",
+    selectedConnections.has("posts") ? "$postAfter: String" : "",
+    selectedConnections.has("categories") ? "$categoryAfter: String" : "",
+    selectedConnections.has("tags") ? "$tagAfter: String" : "",
+    selectedConnections.has("users") ? "$userAfter: String" : "",
+  ].filter(Boolean).join(", ");
   const languageField = multilingual ? "language { code }" : "";
   const pageLanguageFields = multilingual
     ? "language { code }\n          translations { databaseId uri }"
@@ -272,15 +279,20 @@ export function buildCoreRoutesQuery({
     ? "funkycommercePublicRobots { noindex nofollow }"
     : "";
   const taxonomySeoField = seo ? "seo { ...StorefrontTaxonomyRouteSeo }" : "";
+  const usesImageFragment = selectedConnections.has("pages")
+    || selectedConnections.has("posts")
+    || (seo && (
+      selectedConnections.has("categories")
+      || selectedConnections.has("tags")
+      || selectedConnections.has("users")
+    ));
+  const usesPostTypeSeoFragment = seo
+    && (selectedConnections.has("pages") || selectedConnections.has("posts"));
+  const usesTaxonomySeoFragment = seo
+    && (selectedConnections.has("categories") || selectedConnections.has("tags"));
 
   return `
-    query StorefrontCoreBuildRoutes(
-      $pageAfter: String
-      $postAfter: String
-      $categoryAfter: String
-      $tagAfter: String
-      $userAfter: String
-    ) {
+    query StorefrontCoreBuildRoutes(${variables}) {
       readingSettings {
         showOnFront
         pageOnFront
@@ -352,7 +364,8 @@ export function buildCoreRoutesQuery({
         pageInfo { hasNextPage endCursor }
       }` : ""}
     }
-    ${ROUTE_IMAGE_FRAGMENT}
-    ${seo ? `${POST_TYPE_SEO_FRAGMENT}\n${TAXONOMY_SEO_FRAGMENT}` : ""}
+    ${usesImageFragment ? ROUTE_IMAGE_FRAGMENT : ""}
+    ${usesPostTypeSeoFragment ? POST_TYPE_SEO_FRAGMENT : ""}
+    ${usesTaxonomySeoFragment ? TAXONOMY_SEO_FRAGMENT : ""}
   `;
 }

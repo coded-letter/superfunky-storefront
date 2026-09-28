@@ -692,10 +692,11 @@ class GraphqlResponseError extends Error {
 }
 
 class GraphqlHttpError extends Error {
-  constructor(message, retryable) {
+  constructor(message, status) {
     super(message);
     this.name = "GraphqlHttpError";
-    this.retryable = retryable;
+    this.status = status;
+    this.retryable = status === 429 || status >= 500;
   }
 }
 
@@ -757,7 +758,7 @@ async function requestGraphql(
       if (!response.ok) {
         throw new GraphqlHttpError(
           `${operationLabel} failed with status ${response.status}`,
-          response.status === 429 || response.status >= 500,
+          response.status,
         );
       }
 
@@ -1357,8 +1358,8 @@ async function discoverCmsRoutes({
       )
       || (
         !backendLanguageFieldsAvailable
-        && error instanceof Error
-        && /WPGraphQL route discovery failed with status 500/.test(error.message)
+        && error instanceof GraphqlHttpError
+        && error.status >= 500
       )
     );
     if (commerceMetadataUnavailable) {
@@ -1383,8 +1384,8 @@ async function discoverCmsRoutes({
         );
       } catch (compatibilityError) {
         if (
-          !(compatibilityError instanceof Error)
-          || !/WPGraphQL route discovery without commerce metadata failed with status 500/.test(compatibilityError.message)
+          !(compatibilityError instanceof GraphqlHttpError)
+          || compatibilityError.status < 500
         ) {
           throw compatibilityError;
         }

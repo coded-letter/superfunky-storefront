@@ -42,7 +42,7 @@ function endpointUrl(baseUrl, path) {
   return base.href;
 }
 
-async function readBoundedJsonResponse(response, label, maxBytes = MAX_RESPONSE_BYTES) {
+async function readBoundedTextResponse(response, label, maxBytes = MAX_RESPONSE_BYTES) {
   const declaredLength = Number.parseInt(response.headers.get("content-length") || "", 10);
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     throw new Error(`${label} exceeded the ${maxBytes}-byte response limit`);
@@ -51,8 +51,13 @@ async function readBoundedJsonResponse(response, label, maxBytes = MAX_RESPONSE_
   if (bytes.byteLength > maxBytes) {
     throw new Error(`${label} exceeded the ${maxBytes}-byte response limit`);
   }
+  return new TextDecoder().decode(bytes);
+}
+
+async function readBoundedJsonResponse(response, label, maxBytes = MAX_RESPONSE_BYTES) {
+  const responseText = await readBoundedTextResponse(response, label, maxBytes);
   try {
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return JSON.parse(responseText);
   } catch {
     throw new Error(`${label} returned invalid JSON`);
   }
@@ -382,17 +387,31 @@ export async function fetchPreviousTailwindSourceIndex({
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (response.status === 404 && allowBootstrap) return emptyIndex();
-  if (
-    response.ok
-    && allowBootstrap
-    && (response.headers.get("content-type") || "").toLowerCase().includes("text/html")
-  ) {
-    return emptyIndex();
-  }
   if (response.status === 404) {
     throw new Error("previous Tailwind source index is missing; enable CMS_TAILWIND_BOOTSTRAP for the first deployment");
   }
   if (!response.ok) throw new Error(`previous Tailwind source index returned HTTP ${response.status}`);
+  if (allowBootstrap) {
+    const responseText = await readBoundedTextResponse(
+      response,
+      "previous Tailwind source index",
+      MAX_INDEX_BYTES,
+    );
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (
+      contentType.includes("text/html")
+      || /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(responseText)
+    ) {
+      return emptyIndex();
+    }
+    let payload;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      throw new Error("previous Tailwind source index returned invalid JSON");
+    }
+    return validateTailwindSourceIndex(payload);
+  }
   return validateTailwindSourceIndex(
     await readBoundedJsonResponse(response, "previous Tailwind source index", MAX_INDEX_BYTES),
   );

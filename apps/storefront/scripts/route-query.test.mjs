@@ -78,10 +78,28 @@ test("core fallback paginates standard routes without the generic connections", 
 test("core fallback can isolate a connection when combined resolvers fail", () => {
   const query = buildCoreRoutesQuery({ connections: ["posts"] });
 
+  assert.match(query, /query StorefrontCoreBuildRoutes\(\$postAfter: String\)/);
   assert.match(query, /posts\(first: 25/);
   for (const connection of ["pages", "categories", "tags", "users"]) {
     assert.doesNotMatch(query, new RegExp(`${connection}\\(first: 25`));
   }
+  assert.doesNotMatch(
+    query,
+    /\$pageAfter|\$categoryAfter|\$tagAfter|\$userAfter|StorefrontTaxonomyRouteSeo/,
+  );
+});
+
+test("isolated core taxonomy fallback omits unrelated variables and fragments", () => {
+  const query = buildCoreRoutesQuery({ connections: ["categories"], seo: true });
+
+  assert.match(query, /query StorefrontCoreBuildRoutes\(\$categoryAfter: String\)/);
+  assert.match(query, /categories\(first: 25/);
+  assert.match(query, /fragment StorefrontRouteImage on MediaItem/);
+  assert.match(query, /fragment StorefrontTaxonomyRouteSeo on TaxonomySEO/);
+  assert.doesNotMatch(
+    query,
+    /\$pageAfter|\$postAfter|\$tagAfter|\$userAfter|StorefrontPostTypeRouteSeo/,
+  );
 });
 
 test("generic route discovery can isolate one bounded connection", () => {

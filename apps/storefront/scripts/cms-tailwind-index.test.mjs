@@ -147,6 +147,19 @@ test("missing deployed index requires the explicit bootstrap flag", async () => 
 
 });
 
+test("bootstrap treats a mislabeled Netlify SPA fallback as a missing deployed index", async () => {
+  const result = await fetchPreviousTailwindSourceIndex({
+    indexUrl: `${siteUrl}/.well-known/funkycommerce-tailwind-index.json`,
+    allowBootstrap: true,
+    fetchImpl: async () => new Response("<!doctype html><html><body>Storefront</body></html>", {
+      headers: { "content-type": "application/json; charset=UTF-8" },
+    }),
+  });
+
+  assert.equal(result.generatedAt, "1970-01-01T00:00:00.000Z");
+  assert.deepEqual(result.sources, {});
+});
+
 test("bootstrap resumes from a validated local index without refetching source bodies", async () => {
   await withOutput(async ({ outputPath, indexOutputPath }) => {
     const sourceVersion = version("page-7-v1");
