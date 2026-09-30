@@ -54,13 +54,26 @@ test("recognizes only the requested optional field and parent type", () => {
 });
 
 test("recognizes errors caused only by unavailable optional GraphQL types", () => {
-  const commerceTypes = ["Product", "ProductBrand", "ProductCategory", "ProductTag"];
+  const commerceTypes = [
+    "ExternalProduct",
+    "GroupProduct",
+    "Product",
+    "ProductBrand",
+    "ProductCategory",
+    "ProductTag",
+    "SimpleProduct",
+    "VariableProduct",
+  ];
 
   assert.equal(
     hasOnlyUnknownTypes(
       [
         { message: 'Unknown type "Product".' },
         { message: 'Unknown type "ProductCategory". Did you mean "Category"?' },
+        { message: 'Unknown type "ExternalProduct".' },
+        { message: 'Unknown type "GroupProduct".' },
+        { message: 'Unknown type "SimpleProduct".' },
+        { message: 'Unknown type "VariableProduct".' },
       ],
       commerceTypes,
     ),
