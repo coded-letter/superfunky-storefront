@@ -248,7 +248,7 @@ function paymentGatewayAvailability(
     isCryptoAvailable:
       (snapshot?.ids.has("funkycommerce_crypto") ?? false) &&
       cryptoAssets.length > 0,
-    cryptoGatewayTitle: snapshot?.gateways.get("funkycommerce_crypto")?.title || "Superfunky Crypto Wallet",
+    cryptoGatewayTitle: snapshot?.gateways.get("funkycommerce_crypto")?.title || "Crypto Wallet",
     cryptoGatewayDescription:
       snapshot?.gateways.get("funkycommerce_crypto")?.description ||
       "Pay directly with one of the configured store wallets.",

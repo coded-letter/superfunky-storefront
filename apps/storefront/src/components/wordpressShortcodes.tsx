@@ -128,7 +128,7 @@ function VideoHeroShortcode({ attributes }: ShortcodeProps) {
 }
 
 function SpotifyRadioShortcode({ attributes }: ShortcodeProps) {
-  const title = attributes.title || "Superfunky Radio";
+  const title = attributes.title || "Store radio";
   const contentType = oneOf(
     attributes["content-type"],
     ["track", "album", "playlist", "artist", "show", "episode"] as const,

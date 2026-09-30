@@ -32,11 +32,15 @@ test("prerender emits complete CMS metadata in the first document response", asy
     'property="og:image:height"',
     'property="article:published_time"',
     'name="twitter:image:alt"',
+    'name="apple-mobile-web-app-title"',
     'type="application/ld+json"',
     "data-storefront-seo",
   ]) {
     assert.ok(prerender.includes(metadata), `Expected prerender metadata: ${metadata}`);
   }
+  assert.match(prerender, /renderSeoHead\(route, routeChromeConfig\.storeName\)/);
+  assert.match(prerender, /<meta data-storefront-seo name="apple-mobile-web-app-title" content="\$\{escapeAttribute\(siteName\)\}"/);
+  assert.match(prerender, /\.replace\(\/\\s\*<meta name="apple-mobile-web-app-title"/);
   assert.match(prerender, /Cache-Control", "public, max-age=0, must-revalidate"/);
 });
 

@@ -14,7 +14,6 @@ test("product card galleries scroll fixed square thumbnails without compressing 
 
 test("product gallery and lightbox preserve full image aspect ratios", () => {
   assert.match(productGallery, /className="block h-full w-full object-contain"/);
-  assert.match(productImageLightbox, /max-h-\[75vh\] max-w-full select-none/);
-  assert.match(productImageLightbox, /className="block h-auto max-h-\[75vh\] w-auto max-w-full object-contain"/);
+  assert.match(productImageLightbox, /className=\{isVectorImage\s*\?\s*"block h-\[75vh\] w-full max-w-full object-contain"\s*:\s*"block h-auto max-h-\[75vh\] w-auto max-w-full object-contain"\}/);
   assert.doesNotMatch(productImageLightbox, /grid aspect-square w-full select-none/);
 });

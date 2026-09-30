@@ -138,7 +138,7 @@ export function CartDrawer({
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-between">
                     <div>
-                      <p className="m-0 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</p>
+                      <p className="m-0 line-clamp-2 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100 [overflow-wrap:anywhere]">{item.name}</p>
                       {item.variantLabel ? (
                         <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{item.variantLabel}</p>
                       ) : null}

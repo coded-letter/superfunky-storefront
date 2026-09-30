@@ -1931,6 +1931,7 @@ function StripePaymentElement({
 }: {
   onControllerChange: (controller: StripePaymentController | null) => void;
 }) {
+  const t = useT();
   const stripe = useStripe();
   const elements = useElements();
   const selectedPaymentType = useRef("card");
@@ -2025,9 +2026,7 @@ function StripeCardElement({
           Stripe isn't connected yet
         </p>
         <p className="m-0">
-          Configure the Stripe publishable key in the store settings or set{" "}
-          <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">VITE_STRIPE_PUBLISHABLE_KEY</code>{" "}
-          to render the secure card form.
+          Configure Stripe's publishable key in the backend store settings to render the secure card form.
         </p>
       </div>
     );
@@ -2040,7 +2039,7 @@ function StripeCardElement({
       </Elements>
       <p className="m-0 flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
         <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        Powered by Stripe — card details are never stored on our servers.
+        {t("checkout.stripe.security_note")}
       </p>
     </div>
   );

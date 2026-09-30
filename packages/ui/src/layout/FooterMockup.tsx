@@ -180,7 +180,7 @@ const DEFAULT_COLUMNS: FooterColumn[] = [
         href: "#careers",
         children: [
           { label: "Open roles", href: "#careers-open-roles" },
-          { label: "Life at Superfunky", href: "#careers-life" },
+          { label: "Life at our store", href: "#careers-life" },
         ],
       },
       { label: "Wholesale", href: "#wholesale" },
@@ -264,7 +264,7 @@ export function FooterMockup({
   spotifyPlayerProps,
   assistantSpotifyLayout = "side-by-side",
   featureLayout = "separate",
-  projectName = "Superfunky",
+  projectName = "FunkyCommerce",
   logoUrl,
   iconUrl,
   logoVariant = "text-image",
@@ -285,7 +285,7 @@ export function FooterMockup({
   const resolvedNewsletterDescription = newsletterDescription || t("footer.newsletter.description");
   const resolvedPrivacyConsentLabel = privacyConsentLabel || t("footer.newsletter.privacy");
   const resolvedAssistantFrameTitle = assistantFrameTitle || t("footer.assistant.title");
-  const resolvedSpotifyPlayerTitle = spotifyPlayerTitle || t("footer.radio.title");
+  const resolvedSpotifyPlayerTitle = spotifyPlayerTitle || t("footer.radio.title", { brand: projectName || "FunkyCommerce" });
   const resolvedSpotifyPlayerDescription = spotifyPlayerDescription || t("footer.radio.description");
   const [activeAssistantTab, setActiveAssistantTab] = useState<"assistant" | "spotify">("assistant");
   const showNewsletterFeature = showNewsletter

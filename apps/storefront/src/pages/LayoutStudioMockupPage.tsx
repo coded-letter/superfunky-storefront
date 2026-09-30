@@ -1170,7 +1170,7 @@ export function LayoutStudioMockupPage() {
         icon={<CreditCard className="h-4 w-4" aria-hidden="true" />}
         eyebrow="Footer"
         title="Payment icons, one by one"
-        description="Turn each individual payment provider on/off — useful once the real WooCommerce gateway list is known and only a subset should show (for example, hide the Superfunky Crypto Wallet gateway or BLIK outside Poland)."
+        description="Turn each individual payment provider on/off — useful once the real WooCommerce gateway list is known and only a subset should show (for example, hide the custom crypto gateway or BLIK outside Poland)."
       >
         {PAYMENT_METHODS.map((method) => (
           <BoolSwitch

@@ -234,7 +234,7 @@ const DEFAULT_PRIMARY_NAVIGATION: HeaderNavItem[] = [
 export function HeaderMockup({
   announcementHtml = "",
   showAnnouncementBar = true,
-  projectName = "Superfunky",
+  projectName = "FunkyCommerce",
   projectTagline = "Modern storefront mockup",
   logoUrl,
   iconUrl,
@@ -276,7 +276,13 @@ export function HeaderMockup({
   const { themeMaxWidthPx } = useLayoutPreferences();
   const { count: wishlistCount, syncError: wishlistSyncError } = useWishlist();
   const { count: readingListCount, syncError: readingListSyncError } = useReadingList();
-  const { itemCount: cartBadgeCount, toggleDrawer: toggleCartDrawer } = useCart();
+  const {
+    itemCount: cartBadgeCount,
+    toggleDrawer: toggleCartDrawer,
+    isDropdownOpen: isCartDropdownOpen,
+    closeDropdown: closeCartDropdown,
+    toggleDropdown: toggleCartDropdown,
+  } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hasMountedMobileMenu, setHasMountedMobileMenu] = useState(false);
   const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(
@@ -469,14 +475,16 @@ export function HeaderMockup({
     };
   }, [headerHeight, location.pathname, primaryNavigation]);
 
-  const [isCartDropdownOpen, setIsCartDropdownOpen] = useState(false);
   const handleCartTriggerClick = () => {
     if (cartTriggerVariant === "dropdown") {
-      setIsCartDropdownOpen((current) => !current);
+      toggleCartDropdown();
       return;
     }
     toggleCartDrawer();
   };
+  useEffect(() => {
+    if (cartTriggerVariant !== "dropdown") closeCartDropdown();
+  }, [cartTriggerVariant, closeCartDropdown]);
   const hasInlineDesktopNavigation = arrangement === "single-row" || arrangement === "island";
   const desktopNavigation = !hideNavigation ? (
     <nav
@@ -595,7 +603,7 @@ export function HeaderMockup({
             {showSearch && (searchVariant === "expandable" || searchVariant === "overlay") ? (
               <div className="hidden items-center gap-1 lg:flex">
                 {searchVariant === "expandable" ? <div
-                  inert={isSearchExpanded ? undefined : true}
+                  inert={isSearchExpanded ? undefined : ""}
                   className={`transition-[width,opacity] duration-300 ease-in-out ${
                     isSearchExpanded ? "w-72 overflow-visible opacity-100" : "w-0 overflow-hidden opacity-0"
                   }`}
@@ -719,7 +727,7 @@ export function HeaderMockup({
                 {cartTriggerVariant === "dropdown" ? (
                   <CartDropdown
                     isOpen={isCartDropdownOpen}
-                    onClose={() => setIsCartDropdownOpen(false)}
+                    onClose={closeCartDropdown}
                     featuredProducts={cartFeaturedProducts}
                     showPromotedProduct={showCartPromotedProduct}
                     shopPath={specialPagePaths?.shop}
@@ -912,7 +920,7 @@ function MobileDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={t("header.menu.site")}
-        inert={isOpen ? undefined : true}
+        inert={isOpen ? undefined : ""}
         className={`fixed right-0 ${mobileMenuHeight === "content" ? "top-0 max-h-[85vh]" : "inset-y-0"} ${mobileMenuWidth === "full" ? "w-screen max-w-none" : mobileMenuWidth === "wide" ? "w-[min(96vw,32rem)]" : "w-80 max-w-[85vw]"} flex flex-col bg-white shadow-soft-lg transition-transform duration-300 ease-out dark:bg-zinc-950 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}

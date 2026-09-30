@@ -47,7 +47,7 @@ export function CommunityPostMockupPage() {
   const { hasLanguagePreference, languageCode, syncLanguageCode } = useLanguage();
   const creatorContent = useCreatorContent();
   const { data: liveCommunity, viewer, refresh } = useCommunityData();
-  const { discussionLayout } = useLayoutPreferences();
+  const { discussionLayout, showCodeControls } = useLayoutPreferences();
   const [postRevision, setPostRevision] = useState(0);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -112,8 +112,8 @@ export function CommunityPostMockupPage() {
 
   useEffect(() => {
     if (!contentRef.current || !wordpressPost?.contentHtml) return;
-    return mountCmsBehaviors(contentRef.current);
-  }, [wordpressPost?.contentHtml]);
+    return mountCmsBehaviors(contentRef.current, showCodeControls);
+  }, [showCodeControls, wordpressPost?.contentHtml]);
 
   if (!post && isDirectPostLoading) {
     return <ContentLoadingState label={t("loading.community_post")} />;

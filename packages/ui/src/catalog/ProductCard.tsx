@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { ExternalLink, Heart } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { ResponsiveImage } from "../media";
-import { useCart, useSoundUX, useToast, useWishlist } from "../state";
+import { useCart, useLayoutPreferences, useSoundUX, useToast, useWishlist } from "../state";
 import { savedListEntityId } from "../state/savedListSync";
 import { calculateDiscountPercent, useCurrency, useT } from "../locale";
 import { ProductQuickViewModal } from "./ProductQuickViewModal";
@@ -137,7 +137,9 @@ export function ProductCard({
   const { quickViewEnabled } = useContext(ProductCardPreferencesContext);
   const { has, toggle } = useWishlist();
   const { playAction } = useSoundUX();
-  const { addItem, items, openDrawer } = useCart();
+  const { addItem, items, openDrawer, openDropdown } = useCart();
+  const { cartTriggerVariant } = useLayoutPreferences();
+  const openCart = () => (cartTriggerVariant === "dropdown" ? openDropdown() : openDrawer());
   const { showToast } = useToast();
   const wishlistId = savedListEntityId(product);
   const isWishlisted = has(wishlistId);
@@ -304,7 +306,7 @@ export function ProductCard({
     showToast({
       title: t("product.added"),
       description: product.name,
-      action: { label: t("cart.view_cart"), onClick: openDrawer },
+      action: { label: t("cart.view_cart"), onClick: openCart },
     });
   };
 

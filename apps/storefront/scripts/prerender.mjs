@@ -35,6 +35,7 @@ import {
   normalizeLanguageRoutePath,
   prerenderRouteDirectoryPath,
 } from "./route-paths.mjs";
+import { sitemapUrl } from "./sitemap-url.mjs";
 import { backendPostUriFromStorefrontPath } from "../src/lib/postRoutePaths.mjs";
 import { resolveTaxonomyArchiveIdentifier } from "../src/lib/taxonomyRoutes.ts";
 import {
@@ -56,6 +57,7 @@ import {
 import { stableRouteIsAvailable } from "./route-availability.mjs";
 import { navigationDataCacheKey } from "../src/lib/navigationCacheKey.mjs";
 import { staticNavHrefMatchesRoute as matchesStaticNavigationRoute } from "./static-navigation-route.mjs";
+import { validateNetlifyHeaders, validateNetlifyRedirects } from "./netlify-config.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -482,7 +484,7 @@ const DEFAULT_STATIC_CHROME = {
   stylesheets: [],
   colors: [],
   headerControls: DEFAULT_STATIC_HEADER_CONTROLS,
-  themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">superfuky WP theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
+  themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">FunkyCommerce WordPress theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
   showThemeCredit: true,
   recentOrders: {
     enabled: false,
@@ -565,6 +567,8 @@ const DEFAULT_STATIC_GENERATION_CONFIG = {
   aiDefenseTxt: "",
   appleMerchantFile: "",
   redirectRules: "[]",
+  netlifyRedirects: "",
+  netlifyHeaders: "",
   securityHeadersEnabled: true,
   securityHeaders: JSON.stringify(DEFAULT_SECURITY_HEADERS),
   gtmContainerId: "",
@@ -601,10 +605,11 @@ function frontendUrl(value, fallbackPath = "/") {
   }
 }
 
-function renderSeoHead(route) {
+function renderSeoHead(route, configuredSiteName = "FunkyCommerce") {
   const canonical = frontendUrl(route.canonical, route.path);
-  const description = route.description?.trim() || "Explore FunkyCommerce.";
-  const title = route.title?.trim() || "FunkyCommerce";
+  const description = route.description?.trim() || `Explore ${siteName}.`;
+  const title = route.title?.trim() || siteName;
+  const siteName = route.opengraphSiteName?.trim() || configuredSiteName || "FunkyCommerce";
   const robots = route.robots || (route.indexable ? "index, follow" : "noindex, follow");
   const image = route.image;
   const imageType = image?.type || imageTypeFromUrl(image?.url);
@@ -619,7 +624,8 @@ function renderSeoHead(route) {
     `<meta data-storefront-seo property="og:title" content="${escapeAttribute(route.opengraphTitle || title)}" />`,
     `<meta data-storefront-seo property="og:description" content="${escapeAttribute(route.opengraphDescription || description)}" />`,
     canonical ? `<meta data-storefront-seo property="og:url" content="${escapeAttribute(canonical)}" />` : "",
-    `<meta data-storefront-seo property="og:site_name" content="${escapeAttribute(route.opengraphSiteName || "FunkyCommerce")}" />`,
+    `<meta data-storefront-seo property="og:site_name" content="${escapeAttribute(siteName)}" />`,
+    `<meta data-storefront-seo name="apple-mobile-web-app-title" content="${escapeAttribute(siteName)}" />`,
     `<meta data-storefront-seo property="og:locale" content="${escapeAttribute(route.lang || defaultLanguage)}" />`,
     image ? `<meta data-storefront-seo property="og:image" content="${escapeAttribute(image.url)}" />` : "",
     image?.url?.startsWith("https://") ? `<meta data-storefront-seo property="og:image:secure_url" content="${escapeAttribute(image.url)}" />` : "",
@@ -743,6 +749,8 @@ async function requestGraphql(
       { cause: graphqlTransportFailure.error },
     );
   }
+  staticGenerationConfig.netlifyRedirects = validateNetlifyRedirects(staticGenerationConfig.netlifyRedirects);
+  staticGenerationConfig.netlifyHeaders = validateNetlifyHeaders(staticGenerationConfig.netlifyHeaders);
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -1902,7 +1910,7 @@ async function renderRoute(route) {
   const heroPreload = heroImage
     ? `\n    <link rel="preload" as="image" href="${escapeAttribute(optimizedHeroImage)}"${heroImageSrcSet} fetchpriority="high" />`
     : "";
-  const seoHead = renderSeoHead(route);
+  const seoHead = renderSeoHead(route, routeChromeConfig.storeName);
   const staticTheme = renderStaticThemeVariables(
     routeChromeConfig.colors,
     routeChromeConfig.brandPalette,
@@ -1932,6 +1940,7 @@ async function renderRoute(route) {
       `<html lang="${route.lang}"${hasInteractiveStaticChrome ? " data-storefront-flagship" : ""}>`,
     )
     .replace(/\s*<title(?:\s[^>]*)?>.*?<\/title>/, "")
+    .replace(/\s*<meta name="apple-mobile-web-app-title" content=".*?" \/>/, "")
     .replace(
       /\s*<meta name="description" content=".*?" \/>/,
       `\n    ${seoHead}${heroPreload}${earlyPreloadHints ? `\n    ${earlyPreloadHints}` : ""}`,
@@ -1982,7 +1991,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}" data-show-code-controls="${routeChromeConfig.headerControls.layout.showCodeControls === false ? "false" : "true"}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -3485,6 +3494,7 @@ function renderRedirects(appleMerchantFileEnabled) {
     ...opaqueMediaProxy,
     ...mediaDocumentProxy,
     ...rewriteRules,
+    ...staticGenerationConfig.netlifyRedirects.split("\n").filter((line) => line.trim()),
     "/*  /index.html  200",
     "",
   ].join("\n");
@@ -3543,6 +3553,7 @@ function renderHeaders() {
     "  Content-Type: text/plain; charset=UTF-8",
     "  Cache-Control: public, max-age=0, must-revalidate",
     "",
+    ...staticGenerationConfig.netlifyHeaders.split("\n"),
   ].join("\n");
 }
 
@@ -3782,7 +3793,7 @@ await writeFile(
 const sitemapXml = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-  ...sitemapRoutes.map(({ path }) => `  <url><loc>${escapeAttribute(`${sitemapOrigin}${path === "/" ? "" : path}`)}</loc></url>`),
+  ...sitemapRoutes.map(({ path }) => `  <url><loc>${escapeAttribute(sitemapUrl(sitemapOrigin, path))}</loc></url>`),
   "</urlset>",
   "",
 ].join("\n");

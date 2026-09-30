@@ -598,8 +598,10 @@ function mountHomepageLocation(container: HTMLElement): Cleanup {
   const originalLabel = container.getAttribute("aria-label");
   const panel = document.createElement("div");
   panel.className = "cms-home-location-panel";
+  const storeName = document.querySelector<HTMLMetaElement>('meta[property="og:site_name"]')?.content.trim()
+    || "FunkyCommerce";
   const label = document.createElement("strong");
-  label.textContent = "Superfunky";
+  label.textContent = storeName;
   const description = document.createElement("span");
   description.textContent = "The e-commerce theme for modern stores";
   const link = document.createElement("a");
@@ -611,7 +613,7 @@ function mountHomepageLocation(container: HTMLElement): Cleanup {
   container.replaceChildren(panel);
   container.classList.add("cms-home-location");
   container.setAttribute("role", "region");
-  container.setAttribute("aria-label", "Superfunky location");
+  container.setAttribute("aria-label", `${storeName} location`);
 
   return () => {
     container.innerHTML = originalHtml;

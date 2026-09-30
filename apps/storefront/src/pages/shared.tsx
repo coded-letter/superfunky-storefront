@@ -127,14 +127,14 @@ export function InputMock({
    * that visual cue, so we append a `sr-only` "(optional)" to the label instead. */
   optionalHint?: boolean;
 }) {
-  const sharedClassName = `rounded-[var(--theme-radius)] border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 read-only:cursor-not-allowed read-only:bg-zinc-50 read-only:text-zinc-500 dark:read-only:bg-zinc-900 dark:read-only:text-zinc-400 ${
+  const sharedClassName = `w-full min-w-0 rounded-[var(--theme-radius)] border bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:ring-4 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 read-only:cursor-not-allowed read-only:bg-zinc-50 read-only:text-zinc-500 dark:read-only:bg-zinc-900 dark:read-only:text-zinc-400 ${
     error
       ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100 dark:border-rose-500/60 dark:focus:ring-rose-950"
       : "border-zinc-200 focus:border-brand-400 focus:ring-brand-100 dark:border-zinc-700 dark:focus:border-brand-500 dark:focus:ring-brand-950"
   }`;
 
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+    <label className="grid min-w-0 gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200">
       <span>
         {label}
         {required ? <span className="ml-0.5 text-rose-500">*</span> : null}
@@ -187,7 +187,7 @@ export const AUTHORS: Author[] = [
     name: "Elena Marchetti",
     slug: "elena-marchetti",
     role: "Head of Product Design",
-    bio: "Elena leads product design at Superfunky, obsessing over fabric weight and stitch tolerances so nobody else has to.",
+    bio: "Elena leads product design, obsessing over fabric weight and stitch tolerances so nobody else has to.",
   },
   {
     name: "Marcus Webb",
@@ -199,7 +199,7 @@ export const AUTHORS: Author[] = [
     name: "Ingrid Solberg",
     slug: "ingrid-solberg",
     role: "Sustainability Lead",
-    bio: "Ingrid runs sustainability and supply-chain reporting at Superfunky, translating dye-lot paperwork and mill audits into plain language customers can actually use.",
+    bio: "Ingrid runs sustainability and supply-chain reporting, translating dye-lot paperwork and mill audits into plain language customers can actually use.",
   },
 ];
 
@@ -274,6 +274,7 @@ export function OrderSummaryCard({
    * sit inline with a checkout layout variant rather than float alongside it. */
   position?: "sticky" | "static";
 }) {
+  const t = useT();
   return (
     <aside
       className={`h-fit rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 ${
@@ -287,9 +288,10 @@ export function OrderSummaryCard({
           className="mb-4 flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2.5 text-xs font-medium text-brand-700 no-underline transition hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
         >
           <Truck className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            <strong>{freeShippingNotice.remainingLabel}</strong> left to free shipping — {freeShippingNotice.actionLabel ?? "shop more"}
-          </span>
+          <span>{t("cart.free_shipping.notice", {
+            remaining: freeShippingNotice.remainingLabel,
+            action: freeShippingNotice.actionLabel ?? t("cart.continue_shopping"),
+          })}</span>
         </Link>
       ) : null}
       {lineItems ? (
@@ -609,7 +611,7 @@ export const MOCK_PRODUCT_DETAILS: Record<string, ProductDetail> = {
         // Store reply, one level deep — demonstrates a merchant responding directly
         // under a review, the way WooCommerce/WordPress comment threading works.
         id: "rev-1-reply-1",
-        author: "Superfunky Support",
+        author: "Store Support",
         date: "2026-06-03",
         content: "Thanks so much, Priya! Really glad the Navy shade lived up to the photos — happy wearing. 💙",
         parentId: "rev-1",

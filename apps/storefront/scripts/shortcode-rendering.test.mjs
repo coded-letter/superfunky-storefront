@@ -169,7 +169,7 @@ test("hero CTAs support validated target and rel attributes", async () => {
   assert.match(shortcodes, /resolveShortcodeCta\(attributes, "primary"\)/);
   assert.match(shortcodeCta, /\$\{position\}-cta-target/);
   assert.match(shortcodeCta, /\$\{position\}-cta-rel/);
-  assert.match(shortcodeCta, /target === "_blank"[\s\S]*relTokens\.push\("noopener"\)/);
+  assert.match(shortcodeCta, /if \(target === "_blank"\) \{[\s\S]*for \(const token of \["noopener", "noreferrer"\]\)[\s\S]*relTokens\.includes\(token\)[\s\S]*relTokens\.push\(token\)/);
   assert.match(hero, /target=\{cta\.target\}/);
   assert.match(hero, /rel=\{cta\.rel\}/);
 });

@@ -37,9 +37,13 @@ export type CartContextValue = {
   subtotalLabel: string;
   isHydrated: boolean;
   isDrawerOpen: boolean;
+  isDropdownOpen: boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
+  openDropdown: () => void;
+  closeDropdown: () => void;
+  toggleDropdown: () => void;
   addItem: (item: AddCartItemInput, quantity?: number) => void;
   mergeItem: (item: AddCartItemInput, quantity?: number) => void;
   mergeItems: (items: MergeCartItemInput[]) => void;
@@ -55,6 +59,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartLineItem[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const didWarnAboutPersistence = useRef(false);
 
   useEffect(() => {
@@ -92,9 +97,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotalLabel: formatBaseAmount(subtotalAmount),
       isHydrated,
       isDrawerOpen,
+      isDropdownOpen,
       openDrawer: () => setIsDrawerOpen(true),
       closeDrawer: () => setIsDrawerOpen(false),
       toggleDrawer: () => setIsDrawerOpen((value) => !value),
+      openDropdown: () => setIsDropdownOpen(true),
+      closeDropdown: () => setIsDropdownOpen(false),
+      toggleDropdown: () => setIsDropdownOpen((value) => !value),
       addItem: (item, quantity = 1) =>
         setItems((previous) => {
           const existing = previous.find((line) => line.id === item.id);
@@ -123,7 +132,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ),
       clear: () => setItems([]),
     };
-  }, [formatBaseAmount, isHydrated, items, isDrawerOpen]);
+  }, [formatBaseAmount, isHydrated, items, isDrawerOpen, isDropdownOpen]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
