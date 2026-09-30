@@ -23,6 +23,10 @@ test("prerender uses the WordPress site language when Polylang is unavailable", 
 test("prerender retries commerce route discovery without multilingual WooCommerce metadata", () => {
   assert.match(
     prerenderSource,
+    /const COMMERCE_ROUTE_TYPES = \[[\s\S]*?"ExternalProduct"[\s\S]*?"GroupProduct"[\s\S]*?"SimpleProduct"[\s\S]*?"VariableProduct"/,
+  );
+  assert.match(
+    prerenderSource,
     /!backendLanguageFieldsAvailable[\s\S]*?error instanceof GraphqlHttpError[\s\S]*?error\.status >= 500/,
   );
   assert.match(

@@ -82,7 +82,16 @@ const backendProfile = ["shell", "blog", "shop", "full"].includes(configuredBack
   ? configuredBackendProfile
   : "full";
 const commerceRoutesAvailable = backendProfile === "shop" || backendProfile === "full";
-const COMMERCE_ROUTE_TYPES = ["Product", "ProductBrand", "ProductCategory", "ProductTag"];
+const COMMERCE_ROUTE_TYPES = [
+  "ExternalProduct",
+  "GroupProduct",
+  "Product",
+  "ProductBrand",
+  "ProductCategory",
+  "ProductTag",
+  "SimpleProduct",
+  "VariableProduct",
+];
 const expectedLanguages = (process.env.STOREFRONT_EXPECTED_LOCALES || "")
   .split(",")
   .map((locale) => locale.trim().toLowerCase())
