@@ -33,9 +33,22 @@ test("overlay search uses translated labels", () => {
 
 test("expandable search is focusable when open and does not clip its results", () => {
   assert.match(headerSource, /isSearchExpanded \? "w-72 overflow-visible opacity-100"/);
-  assert.match(headerSource, /inert=\{isSearchExpanded \? undefined : true\}/);
+  assert.match(headerSource, /inert=\{isSearchExpanded \? undefined : ""\}/);
+  assert.match(headerSource, /inert=\{isOpen \? undefined : ""\}/);
   assert.match(headerSource, /autoFocus=\{isSearchExpanded\}/);
   assert.match(searchSource, /if \(autoFocus\) inputRef\.current\?\.focus\(\)/);
+});
+
+test("cart dropdown visibility is shared with storefront cart feedback actions", () => {
+  assert.match(headerSource, /isDropdownOpen: isCartDropdownOpen/);
+  assert.match(headerSource, /toggleDropdown: toggleCartDropdown/);
+  assert.match(headerSource, /onClose=\{closeCartDropdown\}/);
+  const productCardSource = readFileSync(new URL("../catalog/ProductCard.tsx", import.meta.url), "utf8");
+  const quickViewSource = readFileSync(new URL("../catalog/ProductQuickViewModal.tsx", import.meta.url), "utf8");
+  for (const source of [productCardSource, quickViewSource]) {
+    assert.match(source, /cartTriggerVariant === "dropdown" \? openDropdown\(\) : openDrawer\(\)/);
+    assert.match(source, /onClick: openCart/);
+  }
 });
 
 test("only the full-width search variant renders the permanent desktop field", () => {

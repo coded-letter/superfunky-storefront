@@ -136,7 +136,7 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
     opengraphModifiedTime: seo.opengraphModifiedTime?.trim() || node?.modified?.trim() || "",
     opengraphPublishedTime: seo.opengraphPublishedTime?.trim() || node?.date?.trim() || "",
     opengraphPublisher: seo.opengraphPublisher?.trim() || "",
-    opengraphSiteName: seo.opengraphSiteName?.trim() || "FunkyCommerce",
+    opengraphSiteName: seo.opengraphSiteName?.trim() || "",
     opengraphTitle: seo.opengraphTitle?.trim() || "",
     opengraphType: isProductArchive ? "website" : seo.opengraphType?.trim() || (type === "Post" ? "article" : type?.includes("Product") ? "product" : "website"),
     twitterDescription: seo.twitterDescription?.trim() || "",

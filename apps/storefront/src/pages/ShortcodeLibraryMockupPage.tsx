@@ -750,14 +750,14 @@ export function ShortcodeLibraryMockupPage() {
               name="spotify-radio"
               attrs={{
                 uri: "https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn",
-                title: "Superfunky Radio",
+                title: "Store radio",
                 description: "Instrumental jazz-hop for browsing.",
                 theme: "auto",
                 height: 400,
               }}
             />
             <p className="m-0 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Spotify radio</p>
-            <SpotifyPlayerMock uri="https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn" title="Superfunky Radio" />
+            <SpotifyPlayerMock uri="https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn" title="Store radio" />
           </div>
         </div>
       </LibrarySection>

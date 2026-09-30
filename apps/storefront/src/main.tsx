@@ -590,7 +590,7 @@ if (prerenderRoot) {
       if (!content || disposed || activationRequested) return;
       void import("./lib/cmsBehaviors").then(({ mountCmsBehaviors }) => {
         if (disposed || activationRequested) return;
-        const cleanup = mountCmsBehaviors(content);
+        const cleanup = mountCmsBehaviors(content, content.dataset.showCodeControls !== "false");
         stopStaticCmsBehaviors = () => {
           disposed = true;
           cleanup();

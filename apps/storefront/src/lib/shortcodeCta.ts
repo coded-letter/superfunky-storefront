@@ -29,7 +29,11 @@ export function resolveShortcodeCta(
     .toLowerCase()
     .split(/\s+/)
     .filter((token) => allowedRel.has(token));
-  if (target === "_blank" && !relTokens.includes("noopener")) relTokens.push("noopener");
+  if (target === "_blank") {
+    for (const token of ["noopener", "noreferrer"]) {
+      if (!relTokens.includes(token)) relTokens.push(token);
+    }
+  }
 
   return {
     label,

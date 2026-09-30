@@ -65,7 +65,7 @@ export type SeoProps = {
   translations?: SeoTranslation[];
 };
 
-const DEFAULT_SITE_NAME = "Superfunky";
+const DEFAULT_SITE_NAME = "FunkyCommerce";
 
 export function Seo({
   title,

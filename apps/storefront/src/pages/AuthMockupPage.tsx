@@ -403,7 +403,7 @@ function RegisterFormMock({
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <InputMock
           label={t("auth.register.first_name")}
           value={values.firstName}

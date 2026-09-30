@@ -17,15 +17,43 @@ import {
   SINGLE_LANGUAGE_SEARCH_QUERY,
 } from "./searchQuery.ts";
 import { searchWordPressRest } from "./searchRest.ts";
+import { createAsyncSearchCache } from "./asyncSearchCache.ts";
 
 export { mapStorefrontSearchResults, SEARCH_QUERY };
 export type { StorefrontSearchQueryResult };
 
-export async function searchStorefront(
+const cachedSearch = createAsyncSearchCache<SearchResultItem[]>({
+  ttlMs: 15_000,
+  maxEntries: 48,
+});
+
+export function searchStorefront(
   query: string,
   backendLanguageCode: string,
   routeLanguageCode: string,
   t: (key: string) => string = (key) => key,
+): Promise<SearchResultItem[]> {
+  const normalizedQuery = query.trim();
+  if (normalizedQuery.length < 2) return Promise.resolve([]);
+  const cacheKey = JSON.stringify([
+    STOREFRONT_BACKEND_PROFILE,
+    backendLanguageCode,
+    routeLanguageCode,
+    normalizedQuery.toLocaleLowerCase(),
+  ]);
+  return cachedSearch(cacheKey, () => fetchStorefrontSearch(
+    normalizedQuery,
+    backendLanguageCode,
+    routeLanguageCode,
+    t,
+  ));
+}
+
+async function fetchStorefrontSearch(
+  query: string,
+  backendLanguageCode: string,
+  routeLanguageCode: string,
+  t: (key: string) => string,
 ): Promise<SearchResultItem[]> {
   if (STOREFRONT_BACKEND_PROFILE === "blog") {
     return searchWordPressRest(query, routeLanguageCode, t, {

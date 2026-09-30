@@ -449,7 +449,7 @@ test("interaction intent prepares code without replacing the SSG document", () =
 
 test("fleet prerendered CMS content mounts lightweight native behaviors while idle", () => {
   assert.match(mainSource, /if \(!isFlagshipStorefront \|\| deferFlagshipHomeHydration\) \{[\s\S]*import\("\.\/lib\/cmsBehaviors"\)/);
-  assert.match(mainSource, /mountCmsBehaviors\(content\)/);
+  assert.match(mainSource, /mountCmsBehaviors\(content, content\.dataset\.showCodeControls !== "false"\)/);
   assert.match(mainSource, /stopStaticCmsBehaviors\(\)/);
   assert.match(mainSource, /Static CMS behaviors could not be loaded/);
 });

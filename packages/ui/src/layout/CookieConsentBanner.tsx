@@ -180,7 +180,7 @@ export function useIsNearPageBottom(thresholdPx = NEAR_BOTTOM_THRESHOLD_PX) {
  * list with provider/lifetime metadata and per-item delete), restyled to match this app's
  * design system instead of the legacy's hardcoded dark theme. */
 export function CookieConsentBanner({
-  providerName = "Superfunky",
+  providerName = "FunkyCommerce",
   privacyPolicyPath = "/privacy-policy",
 }: { providerName?: string; privacyPolicyPath?: string }) {
   const t = useT();

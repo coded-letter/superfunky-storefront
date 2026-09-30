@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { ArrowUp, ChevronUp } from "lucide-react";
 import type { ProductCardData } from "../catalog/ProductCard";
@@ -107,8 +107,11 @@ export function StorefrontChromeMockup(props: StorefrontChromeMockupProps) {
 function RouteScrollReset() {
   const { pathname } = useLocation();
   const { playAction } = useSoundUX();
+  const previousPathname = useRef(pathname);
 
   useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
     playAction("navigation");
   }, [pathname, playAction]);
@@ -250,6 +253,13 @@ function StorefrontChromeShell({
   const spotifyPlaylistUrl = storefrontConfig?.footer?.spotifyPlaylistUrl?.trim() ?? "";
 
   useEffect(() => {
+    const storeName = storefrontConfig?.branding.storeName.trim();
+    if (!storeName) return;
+    const title = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    if (title) title.content = storeName;
+  }, [storefrontConfig?.branding.storeName]);
+
+  useEffect(() => {
     const iconUrl = storefrontConfig?.branding.iconUrl;
     if (!iconUrl) return;
     let icons = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
@@ -384,10 +394,11 @@ function StorefrontChromeShell({
       ) : null}
 
       <CookieConsentBanner
-        providerName={storefrontConfig?.branding.storeName || "Superfunky"}
+        providerName={storefrontConfig?.branding.storeName || "FunkyCommerce"}
         privacyPolicyPath={specialPagePaths?.privacyPolicy}
       />
       <NewsletterSignupPopup
+        brandName={storefrontConfig?.branding.storeName}
         title={storefrontConfig?.footer?.newsletterHeading || undefined}
         description={storefrontConfig?.footer?.newsletterText || undefined}
         privacyConsentLabel={storefrontConfig?.footer?.newsletterPrivacyLabel || undefined}

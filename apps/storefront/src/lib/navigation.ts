@@ -478,8 +478,8 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
   stripePublishableKey: null,
   stripeCustomerPortalUrl: null,
   branding: {
-    storeName: "Superfunky",
-    companyName: "Superfunky",
+    storeName: "FunkyCommerce",
+    companyName: "FunkyCommerce",
     tagline: "Modern storefront mockup",
     logoUrl: null,
     iconUrl: null,
@@ -521,7 +521,7 @@ export const DEFAULT_STOREFRONT_CONFIGURATION: StorefrontConfiguration = {
     spotifyPlayerDescription: "",
     extraHtml: "",
     copyrightText: "",
-    themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">superfuky WP theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
+    themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">FunkyCommerce WordPress theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
     showThemeCredit: true,
   },
   recentOrders: {
