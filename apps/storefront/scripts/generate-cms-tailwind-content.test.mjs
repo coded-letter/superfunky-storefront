@@ -59,6 +59,44 @@ test("fails a required CMS extraction when the query is forbidden", async () => 
   );
 });
 
+test("required extraction fails when the GraphQL endpoint is missing", async () => {
+  await assert.rejects(
+    generateCmsTailwindContent({
+      endpoint: "",
+      requireCms: true,
+    }),
+    /VITE_GRAPHQL_ENDPOINT is required for CMS Tailwind extraction/,
+  );
+});
+
+test("extracts CMS documents larger than the former 10 MB limit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cms-tailwind-large-"));
+  const outputPath = join(directory, "cms-content.html");
+  const content = `<div class="bg-cyan-700">${"x".repeat(10_000_001)}</div>`;
+
+  try {
+    const result = await generateCmsTailwindContent({
+      endpoint: "https://cms.example.com/graphql",
+      outputPath,
+      requireCms: true,
+      includeCmsUtilities: true,
+      fetchImpl: async () => Response.json({
+        data: {
+          contentNodes: {
+            nodes: [{ content: content.replace("bg-cyan-700", "md:text-5xl"), headlessContent: null }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      }),
+    });
+
+    assert.ok(result.classes.includes("md:text-5xl"));
+    assert.match(await readFile(outputPath, "utf8"), /md:text-5xl/);
+  } finally {
+    await rm(directory, { recursive: true });
+  }
+});
+
 test("sends the storefront origin when querying an origin-protected CMS", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cms-tailwind-origin-"));
   const outputPath = join(directory, "cms-content.html");

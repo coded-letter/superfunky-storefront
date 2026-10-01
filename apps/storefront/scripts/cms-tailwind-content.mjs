@@ -75,7 +75,8 @@ const UTILITY_FAMILIES = [
   "z",
 ].sort((left, right) => right.length - left.length);
 
-const SIMPLE_UTILITY = /^!?-?[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\/(?:\d{1,3}|\d+))?$/;
+const SIMPLE_UTILITY = /^!?-?[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:-\d+\.\d+)?(?:\/(?:\d{1,3}|\d+))?$/;
+const SHADOW_VALUE = String.raw`(?:inset_)?-?\d+(?:px)?_-?\d+(?:px)?_-?\d+(?:px)?(?:_-?\d+(?:px)?)?_(?:rgba?\(\d{1,3},\d{1,3},\d{1,3},(?:0|1|0?\.\d+)\)|#[\da-fA-F]{3,8})`;
 const ARBITRARY_PATTERNS = [
   /^(?:bg|border|caret|decoration|fill|placeholder|stroke|text)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
   /^(?:bottom|gap|h|inset|left|m|mb|min-h|min-w|ml|mr|mt|mx|my|p|pb|pl|pr|pt|px|py|right|top|w|max-h|max-w)-\[-?\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw|ch)\]$/,
@@ -83,6 +84,21 @@ const ARBITRARY_PATTERNS = [
   /^opacity-\[(?:0(?:\.\d+)?|1(?:\.0+)?)\]$/,
   /^(?:order|z)-\[-?\d{1,4}\]$/,
   /^aspect-\[\d{1,4}\/\d{1,4}\]$/,
+];
+const DEV_ARBITRARY_PATTERNS = [
+  /^(?:from|to|via)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
+  /^(?:bg|border|caret|decoration|fill|placeholder|ring|stroke|text)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
+  /^(?:blur|backdrop-blur)-\[\d+(?:\.\d+)?(?:px|rem|em)\]$/,
+  /^scale(?:-[xy])?-\[(?:\d+(?:\.\d+)?|\.\d+)\]$/,
+  /^translate-[xy]-\[-?\d+(?:\.\d+)?(?:px|rem|em|%)\]$/,
+  new RegExp(`^shadow-\\[${SHADOW_VALUE}(?:,${SHADOW_VALUE})*\\]$`),
+  /^bg-\[length:\d+(?:\.\d+)?%_\d+(?:\.\d+)?%\]$/,
+  /^bg-\[radial-gradient\(circle_at_\d+%_\d+%,rgba\(\d{1,3},\d{1,3},\d{1,3},(?:0|1|0?\.\d+)\),transparent_\d+%\)\]$/,
+  /^animate-\[[a-zA-Z][\w-]*_\d+(?:\.\d+)?(?:s|ms)_(?:linear|ease(?:-in|-out|-in-out)?)_(?:infinite|\d+)\]$/,
+  /^duration-\[\d+(?:\.\d+)?(?:ms|s)\]$/,
+  /^grid-cols-\[\d+(?:\.\d+)?%_\d+(?:\.\d+)?%\]$/,
+  /^tracking-\[\d+(?:\.\d+)?(?:px|rem|em)\]$/,
+  /^rounded-\[calc\(\d+(?:\.\d+)?rem-\d+px\)\]$/,
 ];
 
 export const CMS_TAILWIND_BASELINE = [
@@ -171,7 +187,8 @@ const DYNAMIC_VARIANTS = new Set([
   "sm", "md", "lg", "xl", "2xl", "dark", "hover", "focus", "focus-within",
   "focus-visible", "active", "disabled", "visited", "checked", "required",
   "invalid", "read-only", "open", "portrait", "landscape", "motion-safe",
-  "motion-reduce", "print",
+  "motion-reduce", "print", "group-hover", "group-focus", "peer-hover",
+  "peer-focus", "peer-checked", "peer-disabled",
 ]);
 
 function utilityFamily(base) {
@@ -199,7 +216,7 @@ function splitVariants(token) {
   return parts;
 }
 
-export function evaluateCmsClassToken(token) {
+export function evaluateCmsClassToken(token, { allowNonStableUtilities = false } = {}) {
   if (!token || token.length > MAX_CLASS_TOKEN_LENGTH) {
     return { status: "rejected", reason: `tokens must contain 1-${MAX_CLASS_TOKEN_LENGTH} characters` };
   }
@@ -222,10 +239,12 @@ export function evaluateCmsClassToken(token) {
   if (!family && !EXACT_UTILITIES.has(normalizedBase)) return { status: "ignored" };
 
   if (base.includes("[") || base.includes("]")) {
-    if (base.startsWith("!")) {
+    if (base.startsWith("!") && !allowNonStableUtilities) {
       return { status: "rejected", reason: "important arbitrary utilities are not supported" };
     }
-    if (!ARBITRARY_PATTERNS.some((pattern) => pattern.test(normalizedBase))) {
+    const isAllowedArbitrary = ARBITRARY_PATTERNS.some((pattern) => pattern.test(normalizedBase))
+      || (allowNonStableUtilities && DEV_ARBITRARY_PATTERNS.some((pattern) => pattern.test(normalizedBase)));
+    if (!isAllowedArbitrary) {
       return { status: "rejected", reason: "arbitrary value is outside the finite allowlist" };
     }
     if (variants.some((variant) => !DYNAMIC_VARIANTS.has(variant))) {
@@ -238,6 +257,7 @@ export function evaluateCmsClassToken(token) {
     return { status: "rejected", reason: "token is not a well-formed Tailwind utility" };
   }
   if (!STABLE_UTILITY_SET.has(token)) {
+    if (allowNonStableUtilities) return { status: "accepted" };
     return { status: "rejected", reason: "utility is outside the stable CMS contract" };
   }
   return { status: "accepted" };
@@ -265,16 +285,22 @@ export function extractHtmlClassTokens(html) {
   return tokens;
 }
 
-export function collectCmsTailwindClasses(documents) {
+export function collectCmsTailwindClasses(
+  documents,
+  { allowNonStableUtilities = false, includeDynamic = false } = {},
+) {
   const classes = new Set(CMS_TAILWIND_STABLE_UTILITIES);
   const dynamic = new Set();
   const rejected = new Map();
 
   for (const document of documents) {
     for (const token of extractHtmlClassTokens(document)) {
-      const evaluation = evaluateCmsClassToken(token);
+      const evaluation = evaluateCmsClassToken(token, { allowNonStableUtilities });
       if (evaluation.status === "accepted") classes.add(token);
-      if (evaluation.status === "dynamic") dynamic.add(token);
+      if (evaluation.status === "dynamic") {
+        dynamic.add(token);
+        if (includeDynamic) classes.add(token);
+      }
       if (evaluation.status === "rejected") rejected.set(token, evaluation.reason);
       if (classes.size > MAX_CLASS_COUNT) {
         throw new Error(`CMS Tailwind class limit exceeded (${MAX_CLASS_COUNT}). Reduce the utility set before rebuilding.`);

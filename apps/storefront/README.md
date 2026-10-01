@@ -11,6 +11,28 @@ Default URL:
 
 `http://127.0.0.1:4173`
 
+## Local development with CMS Tailwind classes
+
+Set `VITE_GRAPHQL_ENDPOINT` and, when required by the backend, `VITE_SITE_URL` in
+`apps/storefront/.env.local`. Then run this from the repository root:
+
+```bash
+pnpm dev:cms
+```
+
+This required one-time extraction must complete before Vite starts. It fails instead of
+silently starting with only stable utilities when the CMS endpoint is missing or the
+query fails. Development extraction includes valid standard CMS utilities and the
+finite development allowlist of safe arbitrary values. Production builds still compile
+only the reviewed stable contract. Extraction accepts up to 100 MB of CMS content and
+100 GraphQL pages per run.
+
+After saving CMS content, run `pnpm --filter @funky/storefront audit:cms-tailwind` from
+a second terminal. Tailwind/Vite watch the generated
+`apps/storefront/.tailwind/cms-content.html` file and refresh compiled CSS when it
+changes. This is manual refresh, not CMS polling; rerun the extraction when content
+changes, and restart Vite if it does not detect a generated-file change.
+
 ## Static production routes
 
 `pnpm run build` creates route-specific HTML entries for stable storefront routes.

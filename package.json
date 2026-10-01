@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @funky/storefront dev",
+    "dev:cms": "pnpm --filter @funky/storefront dev:cms",
     "build": "pnpm --filter @funky/storefront build",
     "preview": "pnpm --filter @funky/storefront preview",
     "test": "node --test scripts/*.test.mjs",

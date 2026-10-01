@@ -27,7 +27,7 @@ const QUERY = /* GraphQL */ `
   }
 `;
 
-const MAX_CONTENT_CHARACTERS = 10_000_000;
+const MAX_CONTENT_CHARACTERS = 100_000_000;
 const MAX_PAGES = 100;
 const viteEnvironment = loadEnv("production", process.cwd(), "");
 
@@ -81,7 +81,7 @@ export async function fetchCmsTailwindDocuments(endpoint, fetchImpl = fetch, sto
         if (typeof content !== "string" || !content) continue;
         contentCharacters += content.length;
         if (contentCharacters > MAX_CONTENT_CHARACTERS) {
-          throw new Error("CMS Tailwind content exceeded the 10 MB extraction limit.");
+          throw new Error("CMS Tailwind content exceeded the 100 MB extraction limit.");
         }
         documents.push(content);
       }
@@ -102,9 +102,11 @@ export async function generateCmsTailwindContent({
   endpoint = (process.env.VITE_GRAPHQL_ENDPOINT || viteEnvironment.VITE_GRAPHQL_ENDPOINT)?.trim(),
   outputPath = resolve(".tailwind/cms-content.html"),
   fetchImpl = fetch,
-  requireCms = process.env.CMS_TAILWIND_REQUIRED === "true",
+  requireCms = process.env.CMS_TAILWIND_REQUIRED === "true" || process.argv.includes("--required"),
   siteUrl = (process.env.VITE_SITE_URL || viteEnvironment.VITE_SITE_URL)?.trim(),
   auditCms = true,
+  includeCmsUtilities = process.env.CMS_TAILWIND_INCLUDE_CMS_UTILITIES === "true"
+    || process.argv.includes("--include-cms-utilities"),
 } = {}) {
   let documents = [];
   if (auditCms && endpoint) {
@@ -120,10 +122,14 @@ export async function generateCmsTailwindContent({
     }
   }
   if (auditCms && !endpoint) {
+    if (requireCms) throw new Error("VITE_GRAPHQL_ENDPOINT is required for CMS Tailwind extraction.");
     console.warn("[cms-tailwind] VITE_GRAPHQL_ENDPOINT is not configured; validating the stable contract only.");
   }
 
-  const { classes, dynamic, rejected } = collectCmsTailwindClasses(documents);
+  const { classes, dynamic, rejected } = collectCmsTailwindClasses(documents, {
+    allowNonStableUtilities: includeCmsUtilities,
+    includeDynamic: includeCmsUtilities,
+  });
   for (const { token, reason } of rejected) {
     console.warn(`[cms-tailwind] ignored malformed Tailwind-like class "${token}": ${reason}.`);
   }
@@ -131,9 +137,9 @@ export async function generateCmsTailwindContent({
   await mkdir(resolve(outputPath, ".."), { recursive: true });
   await writeFile(outputPath, buildTailwindContentSource(classes), "utf8");
   console.log(
-    `[cms-tailwind] generated ${classes.length} stable utilities`
+    `[cms-tailwind] generated ${classes.length} utilities`
       + (auditCms
-        ? `; audited ${documents.length} CMS content fields, found ${dynamic.length} route-CSS utilities`
+        ? `; audited ${documents.length} CMS content fields, found ${dynamic.length} approved arbitrary utilities`
         : " without querying CMS content")
       + (rejected.length ? `; rejected ${rejected.length} unsupported token(s).` : "."),
   );
@@ -143,6 +149,9 @@ export async function generateCmsTailwindContent({
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   generateCmsTailwindContent({
     auditCms: !process.argv.includes("--contract-only"),
+    requireCms: process.env.CMS_TAILWIND_REQUIRED === "true" || process.argv.includes("--required"),
+    includeCmsUtilities: process.env.CMS_TAILWIND_INCLUDE_CMS_UTILITIES === "true"
+      || process.argv.includes("--include-cms-utilities"),
   }).catch((error) => {
     console.error(`[cms-tailwind] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
