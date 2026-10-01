@@ -1987,6 +1987,7 @@ function StripeCardElement({
   currency: string;
   onControllerChange: (controller: StripePaymentController | null) => void;
 }) {
+  const t = useT();
   const publishableKey = getStripePublishableKey();
   const stripePromise = useMemo(() => getStripe(), [publishableKey]);
   const elementOptions = useMemo(
