@@ -13,7 +13,10 @@ import { buildIncrementalTailwindIndex } from "./cms-tailwind-index.mjs";
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_MANIFEST_CLASSES = 10_000;
 const MANIFEST_TIMEOUT_MS = 5_000;
-const viteEnvironment = loadEnv("production", process.cwd(), "");
+const viteEnvironment = {
+  ...loadEnv("production", resolve(process.cwd(), "../.."), ""),
+  ...loadEnv("production", process.cwd(), ""),
+};
 
 function validateManifestUrl(value) {
   const manifestUrl = new URL(value);
@@ -113,7 +116,10 @@ export async function generateCmsTailwindContent({
     process.env.CMS_TAILWIND_SOURCE_API_URL
     || viteEnvironment.CMS_TAILWIND_SOURCE_API_URL
   )?.trim(),
-  signingSecret = process.env.STOREFRONT_ARTIFACT_SIGNING_SECRET?.trim(),
+  signingSecret = (
+    process.env.STOREFRONT_ARTIFACT_SIGNING_SECRET
+    || viteEnvironment.STOREFRONT_ARTIFACT_SIGNING_SECRET
+  )?.trim(),
   siteUrl = (
     process.env.VITE_SITE_URL
     || viteEnvironment.VITE_SITE_URL
@@ -153,6 +159,8 @@ export async function generateCmsTailwindContent({
       indexOutputPath,
       fetchImpl,
       allowBootstrap,
+      includeCmsUtilities,
+      preferLocalIndex: devMode,
     });
     for (const { source, token, reason } of result.rejected) {
       console.warn(`[cms-tailwind] ignored "${token}" from ${source}: ${reason}.`);
@@ -183,7 +191,6 @@ export async function generateCmsTailwindContent({
 
   const { classes, dynamic, rejected } = collectCmsTailwindClassesFromTokens(manifest?.classes || [], {
     allowNonStableUtilities: includeCmsUtilities,
-    includeDynamic: true,
   });
   for (const { token, reason } of rejected) {
     console.warn(`[cms-tailwind] ignored manifest class "${token}": ${reason}.`);

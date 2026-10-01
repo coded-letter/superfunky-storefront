@@ -130,6 +130,69 @@ test("bootstrap fetches bounded source batches and publishes dynamic classes", a
   });
 });
 
+test("development index compiles safe CMS effects into its private local index", async () => {
+  await withOutput(async ({ outputPath }) => {
+    const indexOutputPath = join(dirname(outputPath), "cms-index.json");
+    const sourceVersion = version("page-7-dev");
+    const fetchImpl = async (url, options = {}) => {
+      if (url === `${siteUrl}/.well-known/funkycommerce-tailwind-index.json`) {
+        return new Response("", { status: 404 });
+      }
+      if (url.endsWith("/inventory")) {
+        return jsonResponse({
+          schemaVersion: 1,
+          cursor: 0,
+          nextCursor: 7,
+          hasMore: false,
+          sources: [{ key: "page:7", id: 7, type: "page", version: sourceVersion }],
+        });
+      }
+      assert.deepEqual(JSON.parse(options.body).ids, [7]);
+      return jsonResponse({
+        schemaVersion: 1,
+        sources: [
+          source(
+            7,
+            "page",
+            sourceVersion,
+            '<div class="shadow-[0_0_25px_rgba(0,255,200,0.45)] hover:scale-[1.03] bg-[url(https://example.com/image.png)]"></div>',
+          ),
+        ],
+      });
+    };
+
+    const result = await buildIncrementalTailwindIndex({
+      apiUrl,
+      signingSecret,
+      siteUrl,
+      outputPath,
+      indexOutputPath,
+      fetchImpl,
+      generatedAt: Date.parse("2026-09-24T13:00:00.000Z"),
+      allowBootstrap: true,
+      includeCmsUtilities: true,
+    });
+
+    assert.ok(result.classes.includes("shadow-[0_0_25px_rgba(0,255,200,0.45)]"));
+    assert.ok(result.classes.includes("hover:scale-[1.03]"));
+    assert.ok(!result.classes.includes("bg-[url(https://example.com/image.png)]"));
+    const localIndex = JSON.parse(await readFile(indexOutputPath, "utf8"));
+    assert.deepEqual(
+      localIndex.sources["page:7"].classes,
+      ["hover:scale-[1.03]", "shadow-[0_0_25px_rgba(0,255,200,0.45)]"],
+    );
+    const compiled = await postcss([
+      tailwindcss({
+        content: [{ raw: await readFile(outputPath, "utf8"), extension: "html" }],
+        darkMode: "class",
+      }),
+    ]).process("@tailwind utilities;", { from: undefined });
+    assert.match(compiled.css, /\.shadow-/);
+    assert.match(compiled.css, /\.hover\\:scale-/);
+    assert.doesNotMatch(compiled.css, /example\.com/);
+  });
+});
+
 test("missing deployed index requires the explicit bootstrap flag", async () => {
   await withOutput(async ({ outputPath, indexOutputPath }) => {
     await assert.rejects(

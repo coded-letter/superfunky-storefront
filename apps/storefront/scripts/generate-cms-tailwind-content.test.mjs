@@ -84,7 +84,7 @@ test("one static manifest GET adds CMS-specific utilities to Tailwind content", 
   }
 });
 
-test("required extraction fails when no CMS source or manifest is configured", async () => {
+test("required development extraction fails when no CMS source is configured", async () => {
   await assert.rejects(
     generateCmsTailwindContent({
       sourceApiUrl: "",

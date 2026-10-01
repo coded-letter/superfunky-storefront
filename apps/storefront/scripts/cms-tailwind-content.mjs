@@ -86,8 +86,6 @@ const ARBITRARY_PATTERNS = [
   /^aspect-\[\d{1,4}\/\d{1,4}\]$/,
 ];
 const DEV_ARBITRARY_PATTERNS = [
-  /^(?:from|to|via)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
-  /^(?:bg|border|caret|decoration|fill|placeholder|ring|stroke|text)-\[#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\](?:\/(?:100|\d{1,2}))?$/,
   /^(?:blur|backdrop-blur)-\[\d+(?:\.\d+)?(?:px|rem|em)\]$/,
   /^scale(?:-[xy])?-\[(?:\d+(?:\.\d+)?|\.\d+)\]$/,
   /^translate-[xy]-\[-?\d+(?:\.\d+)?(?:px|rem|em|%)\]$/,
@@ -256,11 +254,8 @@ export function evaluateCmsClassToken(token, { allowNonStableUtilities = false }
   if (!SIMPLE_UTILITY.test(base)) {
     return { status: "rejected", reason: "token is not a well-formed Tailwind utility" };
   }
-  if (!STABLE_UTILITY_SET.has(token)) {
-    if (allowNonStableUtilities) return { status: "accepted" };
-    return { status: "dynamic" };
-  }
-  return { status: "accepted" };
+  if (!STABLE_UTILITY_SET.has(token) && allowNonStableUtilities) return { status: "dynamic" };
+  return STABLE_UTILITY_SET.has(token) ? { status: "accepted" } : { status: "dynamic" };
 }
 
 function decodeClassAttribute(value) {
@@ -304,16 +299,16 @@ export function extractStoredCmsClassTokens(documents) {
   return tokens;
 }
 
-export function collectCmsTailwindClasses(
-  documents,
-  options = {},
-) {
-  return collectCmsTailwindClassesFromTokens(extractStoredCmsClassTokens(documents), options);
+export function collectCmsTailwindClasses(documents, options) {
+  return collectCmsTailwindClassesFromTokens(
+    extractStoredCmsClassTokens(documents),
+    options,
+  );
 }
 
 export function collectCmsTailwindClassesFromTokens(
   tokens,
-  { allowNonStableUtilities = false, includeDynamic = true } = {},
+  { allowNonStableUtilities = false } = {},
 ) {
   const classes = new Set(CMS_TAILWIND_STABLE_UTILITIES);
   const dynamic = new Set();
@@ -321,11 +316,8 @@ export function collectCmsTailwindClassesFromTokens(
 
   for (const token of tokens) {
     const evaluation = evaluateCmsClassToken(token, { allowNonStableUtilities });
-    if (evaluation.status === "accepted") classes.add(token);
-    if (evaluation.status === "dynamic") {
-      dynamic.add(token);
-      if (includeDynamic) classes.add(token);
-    }
+    if (evaluation.status === "accepted" || evaluation.status === "dynamic") classes.add(token);
+    if (evaluation.status === "dynamic") dynamic.add(token);
     if (evaluation.status === "rejected") rejected.set(token, evaluation.reason);
     if (classes.size > MAX_CLASS_COUNT) {
       throw new Error(`CMS Tailwind class limit exceeded (${MAX_CLASS_COUNT}). Reduce the utility set before rebuilding.`);
