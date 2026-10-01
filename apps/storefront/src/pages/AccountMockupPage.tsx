@@ -1643,7 +1643,7 @@ function CommunityPanel() {
 
       {myArticles.length ? (
         <div className="grid gap-2">
-          <PaginablePostGrid title="My articles" posts={myArticles} pageSize={6} cardVariant="minimal" gridVariant="list" />
+          <PaginablePostGrid title="My articles" posts={myArticles} cardVariant="minimal" gridVariant="list" />
           {canPublishArticles ? (
             <div className="flex flex-wrap gap-2">
               {myArticles.map((article) => article.databaseId ? (
@@ -1665,7 +1665,7 @@ function CommunityPanel() {
 
       {myProducts.length ? (
         <div className="grid gap-2">
-          <PaginableProductGrid title="My products" products={myProducts} pageSize={8} cardVariant="default" allowPurchaseActions={false} />
+          <PaginableProductGrid title="My products" products={myProducts} cardVariant="default" allowPurchaseActions={false} />
           {canPublishMarketplace ? (
             <div className="flex flex-wrap gap-2">
               {myProducts.map((product) => product.databaseId ? (

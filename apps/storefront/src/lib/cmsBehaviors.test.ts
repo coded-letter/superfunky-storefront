@@ -88,6 +88,22 @@ test("known docs behavior mounts after render and remounts after a route transit
   routeCleanup();
 });
 
+test("homepage location uses the configured storefront name", () => {
+  const meta = document.createElement("meta");
+  meta.setAttribute("property", "og:site_name");
+  meta.content = "Example Shop";
+  document.head.append(meta);
+  const root = document.querySelector<HTMLElement>("#cms-root")!;
+  root.innerHTML = '<div data-funky-behavior="homepage-location"></div>';
+
+  const cleanup = mountCmsBehaviors(root);
+  const locationPanel = root.querySelector<HTMLElement>(".cms-home-location");
+  assert.equal(locationPanel?.querySelector("strong")?.textContent, "Example Shop");
+  assert.equal(locationPanel?.getAttribute("aria-label"), "Example Shop location");
+
+  cleanup();
+});
+
 test("autoplay CMS videos are resumed on mount and when the page becomes visible", async () => {
   const root = document.querySelector<HTMLElement>("#cms-root")!;
   root.innerHTML = `<video autoplay loop src="https://example.test/uploads/intro.mp4"></video>`;
@@ -164,6 +180,22 @@ test("native and standalone code use local Prism language and color selection", 
   document.documentElement.classList.remove("dark");
 
   cleanup();
+  assert.equal(root.querySelector(".cms-code-controls"), null);
+});
+
+test("global code controls follow the configured setting and can be toggled back on", async () => {
+  const root = document.querySelector<HTMLElement>("#cms-root")!;
+  root.innerHTML = `<pre><code class="language-js">const total = 2;</code></pre>`;
+
+  const disabledCleanup = mountCmsBehaviors(root, false);
+  await waitFor(() => root.querySelector<HTMLElement>("code")?.dataset.cmsHighlighted === "true");
+  assert.equal(root.querySelector(".cms-code-controls"), null);
+  disabledCleanup();
+
+  const enabledCleanup = mountCmsBehaviors(root, true);
+  await waitFor(() => root.querySelector(".cms-code-controls") !== null);
+  assert.equal(root.querySelectorAll(".cms-code-controls").length, 1);
+  enabledCleanup();
   assert.equal(root.querySelector(".cms-code-controls"), null);
 });
 

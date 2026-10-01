@@ -10,7 +10,7 @@ import {
   evaluateCmsClassToken,
 } from "./cms-tailwind-content.mjs";
 
-test("stable CMS utilities are precompiled while arbitrary values are routed to artifact CSS", async () => {
+test("stable and manifest-provided CMS utilities are compiled without accepting unsafe arbitrary values", async () => {
   const fixture = `
     <section class="wp-block-group cms-card bg-cyan-700 md:grid-cols-3 hover:text-fuchsia-600 active:scale-[0.97]">
       <div class="dark:bg-zinc-950"></div>
@@ -27,13 +27,17 @@ test("stable CMS utilities are precompiled while arbitrary values are routed to 
 
   assert.ok(classes.includes("bg-cyan-700"));
   assert.ok(classes.includes("md:grid-cols-3"));
+  assert.ok(classes.includes("hover:text-fuchsia-600"));
+  assert.ok(classes.includes("dark:bg-zinc-950"));
   assert.ok(!classes.includes("active:scale-[0.97]"));
   assert.ok(rejected.some(({ token }) => token === "active:scale-[0.97]"));
-  assert.deepEqual(dynamic, []);
+  assert.deepEqual(dynamic, ["dark:bg-zinc-950", "hover:text-fuchsia-600"]);
   assert.ok(!classes.includes("wp-block-group"));
   assert.ok(!classes.includes("cms-card"));
   assert.match(result.css, /\.bg-cyan-700/);
   assert.match(result.css, /\.md\\:grid-cols-3/);
+  assert.match(result.css, /\.hover\\:text-fuchsia-600:hover/);
+  assert.match(result.css, /\.dark\\:bg-zinc-950/);
   assert.doesNotMatch(result.css, /\.active\\:scale-\\\[0\\\.97\\\]/);
 });
 
@@ -54,8 +58,27 @@ test("unsafe arbitrary values and malformed utility tokens are surfaced and excl
   assert.ok(rejectedTokens.includes("text-red-500;"));
 });
 
+test("extractor ignores data-class and similarly named attributes", () => {
+  const { classes } = collectCmsTailwindClasses([
+    '<div data-class="bg-fuchsia-600" x-bind:class="bg-lime-600" class="bg-orange-600"></div>',
+  ]);
+  assert.ok(classes.includes("bg-orange-600"));
+  assert.ok(!classes.includes("bg-fuchsia-600"));
+  assert.ok(!classes.includes("bg-lime-600"));
+});
+
+test("extractor reads Gutenberg className values without rendering blocks", () => {
+  const { dynamic } = collectCmsTailwindClasses([
+    '<!-- wp:group {"className":"bg-[#ED225D] md:grid-cols-7"} -->',
+  ]);
+  assert.deepEqual(dynamic, ["bg-[#ED225D]", "md:grid-cols-7"]);
+});
+
 test("allows only arbitrary values that the route CSS compiler supports", () => {
   assert.equal(evaluateCmsClassToken("bg-[#ED225D]/30").status, "dynamic");
+  assert.equal(evaluateCmsClassToken("from-[#7C3AED]").status, "dynamic");
+  assert.equal(evaluateCmsClassToken("via-[#ED225D]/30").status, "dynamic");
+  assert.equal(evaluateCmsClassToken("to-[#66E0FF]").status, "dynamic");
   assert.equal(evaluateCmsClassToken("z-[999]").status, "dynamic");
   assert.equal(
     evaluateCmsClassToken("hover:shadow-[0_0_12px_rgba(237,34,93,0.35)]").status,
@@ -64,9 +87,9 @@ test("allows only arbitrary values that the route CSS compiler supports", () => 
   assert.equal(evaluateCmsClassToken("bg-[url(https://example.com/image.png)]").status, "rejected");
 });
 
-test("dev extraction includes valid CMS utilities and approved arbitrary values without changing the stable default", async () => {
-  const fixture = '<div class="md:text-5xl bg-[#ED225D] bg-[url(https://example.com/image.png)]"></div>';
-  const stable = collectCmsTailwindClasses([fixture]);
+test("dev extraction additionally compiles approved CMS effects while rejecting unsafe URLs", async () => {
+  const fixture = '<div class="md:text-5xl shadow-[0_0_12px_rgba(237,34,93,0.35)] bg-[url(https://example.com/image.png)]"></div>';
+  const standard = collectCmsTailwindClasses([fixture]);
   const development = collectCmsTailwindClasses([fixture], {
     allowNonStableUtilities: true,
     includeDynamic: true,
@@ -78,12 +101,13 @@ test("dev extraction includes valid CMS utilities and approved arbitrary values 
     }),
   ]).process("@tailwind utilities;", { from: undefined });
 
-  assert.ok(!stable.classes.includes("md:text-5xl"));
+  assert.ok(standard.classes.includes("md:text-5xl"));
   assert.ok(development.classes.includes("md:text-5xl"));
-  assert.ok(development.classes.includes("bg-[#ED225D]"));
+  assert.ok(!standard.classes.includes("shadow-[0_0_12px_rgba(237,34,93,0.35)]"));
+  assert.ok(development.classes.includes("shadow-[0_0_12px_rgba(237,34,93,0.35)]"));
   assert.ok(!development.classes.includes("bg-[url(https://example.com/image.png)]"));
   assert.match(result.css, /\.md\\:text-5xl/);
-  assert.match(result.css, /\.bg-\\\[\\#ED225D\\\]/);
+  assert.match(result.css, /\.shadow-/);
   assert.doesNotMatch(result.css, /example\.com/);
 });
 
@@ -117,4 +141,27 @@ test("dev extraction compiles common safe CMS effects and important sizing utili
   assert.match(result.css, /\.md\\:grid-cols-/);
   assert.match(result.css, /\.tracking-/);
   assert.match(result.css, /\.group-hover\\:text-/);
+});
+
+test("compiles CMS-authored gradients with arbitrary hexadecimal stops", async () => {
+  const fixture = `
+    <div class="h-2 rounded-full bg-gradient-to-r from-[#7C3AED] to-[#66E0FF]"></div>
+  `;
+  const { classes, dynamic, rejected } = collectCmsTailwindClasses([fixture]);
+  const source = buildTailwindContentSource(classes);
+  const result = await postcss([
+    tailwindcss({
+      content: [{ raw: source, extension: "html" }],
+    }),
+  ]).process("@tailwind utilities;", { from: undefined });
+
+  assert.ok(classes.includes("bg-gradient-to-r"));
+  assert.ok(classes.includes("from-[#7C3AED]"));
+  assert.ok(classes.includes("to-[#66E0FF]"));
+  assert.ok(dynamic.includes("from-[#7C3AED]"));
+  assert.ok(dynamic.includes("to-[#66E0FF]"));
+  assert.deepEqual(rejected, []);
+  assert.match(result.css, /\.bg-gradient-to-r/);
+  assert.match(result.css, /\.from-\\\[\\#7C3AED\\\]/);
+  assert.match(result.css, /\.to-\\\[\\#66E0FF\\\]/);
 });

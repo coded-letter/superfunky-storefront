@@ -1,7 +1,7 @@
 import { loadStripe } from "@stripe/stripe-js/pure";
 import type { Stripe } from "@stripe/stripe-js";
 
-let publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+let publishableKey: string | undefined;
 
 export function setStripePublishableKey(key: string | null | undefined): void {
   if (key && key.startsWith("pk_")) {
@@ -11,8 +11,9 @@ export function setStripePublishableKey(key: string | null | undefined): void {
     }
     return;
   }
-  if (!publishableKey) {
+  if (publishableKey !== undefined) {
     publishableKey = undefined;
+    stripePromise = null;
   }
 }
 

@@ -289,9 +289,10 @@ html[data-storefront-checkout="true"] .storefront-recent-orders {
   display: grid;
   gap: clamp(1.5rem, 4vw, 3rem);
   margin-inline: auto;
-  max-width: 1280px;
+  max-width: var(--storefront-static-max-width, 1280px);
   min-height: min(62vh, 40rem);
-  padding: clamp(3rem, 8vw, 7rem) max(1rem, calc((100vw - 1280px) / 2));
+  padding-block: clamp(3rem, 8vw, 7rem);
+  width: 100%;
 }
 
 .storefront-generated-route__header {

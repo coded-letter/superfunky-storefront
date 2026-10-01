@@ -1,8 +1,11 @@
 import "./styles.css";
+import { activateDeferredThemeStyles } from "./lib/customCssLayers.mjs";
 import { activatePrerenderImages } from "./lib/prerenderImages";
 import { captureInitialCmsPageMarkup } from "./lib/prerenderSnapshot";
 import { installStaticDocumentWarmup } from "./lib/storefrontDocumentWarmup";
 import { startRecentOrdersNotifier } from "./lib/recentOrders";
+
+activateDeferredThemeStyles(document);
 
 let hasMounted = false;
 const initialRoot = document.getElementById("root")!;
@@ -587,7 +590,7 @@ if (prerenderRoot) {
       if (!content || disposed || activationRequested) return;
       void import("./lib/cmsBehaviors").then(({ mountCmsBehaviors }) => {
         if (disposed || activationRequested) return;
-        const cleanup = mountCmsBehaviors(content);
+        const cleanup = mountCmsBehaviors(content, content.dataset.showCodeControls !== "false");
         stopStaticCmsBehaviors = () => {
           disposed = true;
           cleanup();

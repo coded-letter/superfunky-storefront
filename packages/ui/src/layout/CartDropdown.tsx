@@ -82,7 +82,7 @@ export function CartDropdown({
                   {item.imageUrl ? <ResponsiveImage src={item.imageUrl} alt="" sizes="3.5rem" className="h-full w-full object-cover" /> : null}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col justify-between">
-                  <p className="m-0 truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</p>
+                  <p className="m-0 line-clamp-2 break-words text-xs font-semibold text-zinc-900 dark:text-zinc-100 [overflow-wrap:anywhere]">{item.name}</p>
                   <div className="flex items-center justify-between gap-2">
                     <div className="inline-flex items-center gap-1 rounded-full border border-zinc-200 p-0.5 dark:border-zinc-700">
                       <button

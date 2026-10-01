@@ -1,7 +1,6 @@
 import { restUrl } from "@funky/sdk";
 import { getAuthTokenForRequest } from "./auth";
 
-const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim();
 const PUSH_BASE_ENDPOINT = restUrl("funkycommerce/v1/push");
 const PUSH_SUBSCRIBE_ENDPOINT = PUSH_BASE_ENDPOINT ? `${PUSH_BASE_ENDPOINT}/subscribe` : undefined;
 const PUSH_UNSUBSCRIBE_ENDPOINT = PUSH_BASE_ENDPOINT ? `${PUSH_BASE_ENDPOINT}/unsubscribe` : undefined;
@@ -11,7 +10,7 @@ const VAPID_ENDPOINT = PUSH_BASE_ENDPOINT ? `${PUSH_BASE_ENDPOINT}/vapid-public-
 export const isPushSupported =
   typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
-export const isPushBackendConfigured = Boolean(PUSH_SUBSCRIBE_ENDPOINT && (VAPID_PUBLIC_KEY || VAPID_ENDPOINT));
+export const isPushBackendConfigured = Boolean(PUSH_SUBSCRIBE_ENDPOINT && VAPID_ENDPOINT);
 
 export type PushPermission = NotificationPermission | "unsupported";
 
@@ -44,7 +43,6 @@ async function requireSuccessfulResponse(response: Response, fallback: string): 
 }
 
 async function resolveVapidPublicKey(): Promise<string> {
-  if (VAPID_PUBLIC_KEY) return VAPID_PUBLIC_KEY;
   if (!VAPID_ENDPOINT) throw new PushBackendError("The push backend is not configured.");
 
   let response: Response;

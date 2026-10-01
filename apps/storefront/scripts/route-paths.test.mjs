@@ -7,6 +7,18 @@ import {
   prerenderRouteDirectoryPath,
 } from "./route-paths.mjs";
 
+test("product taxonomies emit CollectionPage even when CMS SEO incorrectly requests Product", () => {
+  for (const type of ["ProductCategory", "ProductTag", "ProductBrand"]) {
+    const route = cmsRouteFromNode({
+      __typename: type, name: "Collection", uri: "/product-category/collection/",
+      seo: { opengraphType: "product", schema: { pageType: ["Product"], articleType: ["Product"] } },
+    }, "terms");
+    assert.equal(route.schemaType, "CollectionPage");
+    assert.equal(route.opengraphType, "website");
+  }
+  assert.equal(cmsRouteFromNode({ __typename: "SimpleProduct", title: "Product", uri: "/product/item/" }, "contentNodes").schemaType, "Product");
+});
+
 test("prerender writes encoded localized routes to deployable Unicode directories", () => {
   assert.equal(
     prerenderRouteDirectoryPath(

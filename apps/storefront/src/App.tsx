@@ -33,6 +33,7 @@ import { CreatorContentProvider } from "./state/creatorContent";
 import { BlogDataProvider } from "./state/blogData";
 import { StickyPostsDataProvider } from "./state/stickyPostsData";
 import { NavigationDataProvider, useNavigationData } from "./state/navigationData";
+import { ArchiveSettingsProvider } from "./state/archiveSettings";
 import { CommerceDataProvider } from "./state/commerceData";
 import { CommunityDataProvider, useCommunityData } from "./state/communityData";
 import {
@@ -780,6 +781,7 @@ export function App() {
           <LanguageUrlNormalizer />
           <WordPressThemeStylesProvider enabled={isBackendConfigured}>
             <NavigationDataProvider enabled={isBackendConfigured}>
+              <ArchiveSettingsProvider enabled={isBackendConfigured}>
               <SoundUXBackendSync />
               <LayoutPreferencesBackendSync />
               <LayoutStudioSessionControls />
@@ -890,6 +892,7 @@ export function App() {
                   </Suspense>
                 </RouteDataProviders>
               </ConnectedProductCardPreferences>
+              </ArchiveSettingsProvider>
             </NavigationDataProvider>
           </WordPressThemeStylesProvider>
         </AppStateProvider>

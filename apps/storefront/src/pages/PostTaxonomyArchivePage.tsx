@@ -50,6 +50,7 @@ function PostTaxonomyArchiveLoader({
   const t = useT();
   const descriptionRef = useRef<HTMLDivElement>(null);
   const { configuredLanguageCodes, languageCode } = useLanguage();
+  const { showCodeControls } = useLayoutPreferences();
   const lastResolvedArchive = useRef<CmsPostArchive | null>(null);
   const { data: archive, isLoading, isRevalidating, error } = useIncrementalData(
     `post-${taxonomy}-archive:${idType}:${identifier}:${languageCode}`,
@@ -73,13 +74,13 @@ function PostTaxonomyArchiveLoader({
 
   useEffect(() => {
     if (!archive) return;
-    const unmountBehaviors = descriptionRef.current ? mountCmsBehaviors(descriptionRef.current) : () => undefined;
+    const unmountBehaviors = descriptionRef.current ? mountCmsBehaviors(descriptionRef.current, showCodeControls) : () => undefined;
     const unmountScripts = mountEnqueuedScripts(archive.scripts);
     return () => {
       unmountBehaviors();
       unmountScripts();
     };
-  }, [archive]);
+  }, [archive, showCodeControls]);
 
   if (isLoading) {
     return <ContentLoadingState label={t("loading.post_archive", { taxonomy: t(`archive.taxonomy.${taxonomy}`) })} />;
@@ -182,7 +183,6 @@ function PostTaxonomyArchive({
           key={archive.id}
           title={isTag ? t("archive.tagged_title", { name: archive.name }) : t("archive.posts_title", { name: archive.name })}
           posts={archive.posts}
-          pageSize={6}
           cardVariant="default"
           gridVariant="standard"
         />

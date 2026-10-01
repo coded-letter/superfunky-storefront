@@ -171,7 +171,7 @@ test("supports safe new-tab CTAs for heroes and cinematic sliders", () => {
     label: "Journal",
     href: "/blog",
     target: "_blank",
-    rel: "noopener",
+    rel: "noopener noreferrer",
   });
 });
 

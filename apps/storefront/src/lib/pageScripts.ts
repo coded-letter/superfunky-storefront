@@ -38,6 +38,26 @@ function executeCmsScript(source: HTMLScriptElement): void {
   if (originalType) executable.setAttribute("type", originalType);
   executable.setAttribute(EXECUTED_ATTRIBUTE, "true");
 
+  if (executable.type.trim().toLowerCase() === "application/ld+json") {
+    const raw = source.textContent ?? "";
+    let parsed: unknown;
+    try {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = JSON.parse(decodeHtmlEntities(raw));
+      }
+    } catch (error) {
+      source.setAttribute(REJECTED_ATTRIBUTE, "true");
+      console.error("[CMS content] Invalid JSON-LD structured data.", error);
+      return;
+    }
+    executable.removeAttribute("src");
+    executable.textContent = JSON.stringify(parsed).replace(/</g, "\\u003c");
+    source.replaceWith(executable);
+    return;
+  }
+
   if (source.src && !source.hasAttribute("async")) {
     executable.async = false;
   } else if (!source.src) {

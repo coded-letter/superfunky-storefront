@@ -9,6 +9,7 @@ import {
   sanitizeWordPressStylesheetUrls,
   WORDPRESS_BLOCK_COMPATIBILITY_CSS,
 } from "../src/lib/pageStyles.ts";
+import { escapeInlineCss, splitCustomCss } from "../src/lib/customCssLayers.mjs";
 import { staticStyleSourceHash } from "../src/lib/staticStyleContract.mjs";
 import { withStorefrontEditorPolicy } from "./security-policy.mjs";
 import { normalizeStaticShortcodes } from "../src/lib/staticShortcodeMarkup.mjs";
@@ -34,6 +35,7 @@ import {
   normalizeLanguageRoutePath,
   prerenderRouteDirectoryPath,
 } from "./route-paths.mjs";
+import { sitemapUrl } from "./sitemap-url.mjs";
 import { backendPostUriFromStorefrontPath } from "../src/lib/postRoutePaths.mjs";
 import { resolveTaxonomyArchiveIdentifier } from "../src/lib/taxonomyRoutes.ts";
 import {
@@ -55,6 +57,7 @@ import {
 import { stableRouteIsAvailable } from "./route-availability.mjs";
 import { navigationDataCacheKey } from "../src/lib/navigationCacheKey.mjs";
 import { staticNavHrefMatchesRoute as matchesStaticNavigationRoute } from "./static-navigation-route.mjs";
+import { validateNetlifyHeaders, validateNetlifyRedirects } from "./netlify-config.mjs";
 
 const staticNavigationRuntimeSource = await readFile(
   new URL("../src/lib/staticNavigationRuntime.js", import.meta.url),
@@ -79,7 +82,16 @@ const backendProfile = ["shell", "blog", "shop", "full"].includes(configuredBack
   ? configuredBackendProfile
   : "full";
 const commerceRoutesAvailable = backendProfile === "shop" || backendProfile === "full";
-const COMMERCE_ROUTE_TYPES = ["Product", "ProductBrand", "ProductCategory", "ProductTag"];
+const COMMERCE_ROUTE_TYPES = [
+  "ExternalProduct",
+  "GroupProduct",
+  "Product",
+  "ProductBrand",
+  "ProductCategory",
+  "ProductTag",
+  "SimpleProduct",
+  "VariableProduct",
+];
 const expectedLanguages = (process.env.STOREFRONT_EXPECTED_LOCALES || "")
   .split(",")
   .map((locale) => locale.trim().toLowerCase())
@@ -481,7 +493,7 @@ const DEFAULT_STATIC_CHROME = {
   stylesheets: [],
   colors: [],
   headerControls: DEFAULT_STATIC_HEADER_CONTROLS,
-  themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">superfuky WP theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
+  themeCredit: 'Made with <a href="https://superfunky.pro" target="_blank" rel="noopener noreferrer">FunkyCommerce WordPress theme</a> by <a href="https://codedletter.com" target="_blank" rel="noopener noreferrer">Coded Letter</a>.',
   showThemeCredit: true,
   recentOrders: {
     enabled: false,
@@ -564,6 +576,8 @@ const DEFAULT_STATIC_GENERATION_CONFIG = {
   aiDefenseTxt: "",
   appleMerchantFile: "",
   redirectRules: "[]",
+  netlifyRedirects: "",
+  netlifyHeaders: "",
   securityHeadersEnabled: true,
   securityHeaders: JSON.stringify(DEFAULT_SECURITY_HEADERS),
   gtmContainerId: "",
@@ -600,10 +614,11 @@ function frontendUrl(value, fallbackPath = "/") {
   }
 }
 
-function renderSeoHead(route) {
+function renderSeoHead(route, configuredSiteName = "FunkyCommerce") {
   const canonical = frontendUrl(route.canonical, route.path);
-  const description = route.description?.trim() || "Explore FunkyCommerce.";
-  const title = route.title?.trim() || "FunkyCommerce";
+  const description = route.description?.trim() || `Explore ${siteName}.`;
+  const title = route.title?.trim() || siteName;
+  const siteName = route.opengraphSiteName?.trim() || configuredSiteName || "FunkyCommerce";
   const robots = route.robots || (route.indexable ? "index, follow" : "noindex, follow");
   const image = route.image;
   const imageType = image?.type || imageTypeFromUrl(image?.url);
@@ -618,7 +633,8 @@ function renderSeoHead(route) {
     `<meta data-storefront-seo property="og:title" content="${escapeAttribute(route.opengraphTitle || title)}" />`,
     `<meta data-storefront-seo property="og:description" content="${escapeAttribute(route.opengraphDescription || description)}" />`,
     canonical ? `<meta data-storefront-seo property="og:url" content="${escapeAttribute(canonical)}" />` : "",
-    `<meta data-storefront-seo property="og:site_name" content="${escapeAttribute(route.opengraphSiteName || "FunkyCommerce")}" />`,
+    `<meta data-storefront-seo property="og:site_name" content="${escapeAttribute(siteName)}" />`,
+    `<meta data-storefront-seo name="apple-mobile-web-app-title" content="${escapeAttribute(siteName)}" />`,
     `<meta data-storefront-seo property="og:locale" content="${escapeAttribute(route.lang || defaultLanguage)}" />`,
     image ? `<meta data-storefront-seo property="og:image" content="${escapeAttribute(image.url)}" />` : "",
     image?.url?.startsWith("https://") ? `<meta data-storefront-seo property="og:image:secure_url" content="${escapeAttribute(image.url)}" />` : "",
@@ -690,6 +706,41 @@ class GraphqlResponseError extends Error {
   }
 }
 
+class GraphqlHttpError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "GraphqlHttpError";
+    this.status = status;
+    this.retryable = status === 429 || status >= 500;
+  }
+}
+
+const GRAPHQL_REQUEST_COOLDOWN_MS = 250;
+const STATIC_CONTENT_REQUEST_COOLDOWN_MS = 1_000;
+let graphqlRequestQueue = Promise.resolve();
+let graphqlTransportFailure = null;
+
+function isBackendTimeoutError(error) {
+  return error?.name === "TimeoutError"
+    || error?.name === "AbortError"
+    || /timed out|aborted|circuit is open/i.test(error instanceof Error ? error.message : String(error));
+}
+
+async function withSerializedGraphqlRequest(run) {
+  const previous = graphqlRequestQueue;
+  let release;
+  graphqlRequestQueue = new Promise((resolveQueue) => {
+    release = resolveQueue;
+  });
+  await previous;
+  try {
+    return await run();
+  } finally {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, GRAPHQL_REQUEST_COOLDOWN_MS));
+    release();
+  }
+}
+
 async function requestGraphql(
   query,
   variables,
@@ -697,14 +748,22 @@ async function requestGraphql(
   {
     optionalField,
     optionalRootField,
-    attempts = 3,
+    attempts = 2,
     timeoutMs = 20_000,
   } = {},
 ) {
+  if (graphqlTransportFailure) {
+    throw new Error(
+      `GraphQL backend circuit is open after ${graphqlTransportFailure.operationLabel} timed out.`,
+      { cause: graphqlTransportFailure.error },
+    );
+  }
+  staticGenerationConfig.netlifyRedirects = validateNetlifyRedirects(staticGenerationConfig.netlifyRedirects);
+  staticGenerationConfig.netlifyHeaders = validateNetlifyHeaders(staticGenerationConfig.netlifyHeaders);
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(graphqlEndpoint, {
+      const response = await withSerializedGraphqlRequest(() => fetch(graphqlEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -712,8 +771,13 @@ async function requestGraphql(
         },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!response.ok) throw new Error(`${operationLabel} failed with status ${response.status}`);
+      }));
+      if (!response.ok) {
+        throw new GraphqlHttpError(
+          `${operationLabel} failed with status ${response.status}`,
+          response.status,
+        );
+      }
 
       const payload = await response.json();
       if (payload.errors?.length) {
@@ -731,6 +795,14 @@ async function requestGraphql(
       return payload;
     } catch (error) {
       lastError = error;
+      const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+      if (timedOut) {
+        graphqlTransportFailure = { operationLabel, error };
+      }
+      const retryable = error instanceof GraphqlHttpError && error.retryable;
+      if (timedOut || error instanceof GraphqlResponseError || !retryable) {
+        throw error;
+      }
       if (attempt < attempts) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, attempt * 500));
       }
@@ -1127,7 +1199,7 @@ async function discoverRouteNodes(query, connections, operationLabel) {
       query,
       cursors,
       operationLabel,
-      { attempts: 5, timeoutMs: 60_000 },
+      { attempts: 2, timeoutMs: 60_000 },
     );
     readingSettings ||= payload.data?.readingSettings;
 
@@ -1264,10 +1336,27 @@ async function discoverCmsRoutes({
     { responseName: "terms", cursorName: "termAfter", routeConnectionName: "terms" },
     { responseName: "users", cursorName: "userAfter", routeConnectionName: "users" },
   ];
+  const discoverGenericRouteNodesIndividually = async (queryOptions, operationLabel) => {
+    const discoveredNodes = [];
+    let readingSettings;
+    for (const connection of routeConnections) {
+      const result = await discoverRouteNodes(
+        buildRoutesQuery({
+          ...queryOptions,
+          connections: [connection.responseName],
+        }),
+        [connection],
+        `${operationLabel} ${connection.responseName}`,
+      );
+      discoveredNodes.push(...result.discoveredNodes);
+      readingSettings ||= result.readingSettings;
+    }
+    return { discoveredNodes, readingSettings };
+  };
   let discovery;
   try {
-    discovery = await discoverRouteNodes(
-      buildRoutesQuery({
+    discovery = await discoverGenericRouteNodesIndividually(
+      {
         commerce: commerceRoutesAvailable,
         multilingual,
         publicRobots: publicRobotsSupported,
@@ -1275,8 +1364,7 @@ async function discoverCmsRoutes({
         shopPages: shopPagesSupported,
         translations: configuredLanguageCodes.length > 1,
         seo: seoSupported,
-      }),
-      routeConnections,
+      },
       "WPGraphQL route discovery",
     );
   } catch (error) {
@@ -1287,8 +1375,8 @@ async function discoverCmsRoutes({
       )
       || (
         !backendLanguageFieldsAvailable
-        && error instanceof Error
-        && /WPGraphQL route discovery failed with status 500/.test(error.message)
+        && error instanceof GraphqlHttpError
+        && error.status >= 500
       )
     );
     if (commerceMetadataUnavailable) {
@@ -1299,8 +1387,8 @@ async function discoverCmsRoutes({
         `[prerender] ${compatibilityReason}; retrying route discovery without commerce metadata.`,
       );
       try {
-        discovery = await discoverRouteNodes(
-          buildRoutesQuery({
+        discovery = await discoverGenericRouteNodesIndividually(
+          {
             commerce: false,
             multilingual,
             publicRobots: publicRobotsSupported,
@@ -1308,14 +1396,13 @@ async function discoverCmsRoutes({
             shopPages: shopPagesSupported,
             translations: configuredLanguageCodes.length > 1,
             seo: seoSupported,
-          }),
-          routeConnections,
+          },
           "WPGraphQL route discovery without commerce metadata",
         );
       } catch (compatibilityError) {
         if (
-          !(compatibilityError instanceof Error)
-          || !/WPGraphQL route discovery without commerce metadata failed with status 500/.test(compatibilityError.message)
+          !(compatibilityError instanceof GraphqlHttpError)
+          || compatibilityError.status < 500
         ) {
           throw compatibilityError;
         }
@@ -1390,7 +1477,7 @@ async function discoverCmsRoutes({
         }),
         { databaseId: readingSettings.pageOnFront },
         "WPGraphQL configured front page discovery",
-        { attempts: 5, timeoutMs: 60_000 },
+        { attempts: 2, timeoutMs: 60_000 },
       );
       configuredFrontPage = payload.data?.page;
       if (
@@ -1832,7 +1919,7 @@ async function renderRoute(route) {
   const heroPreload = heroImage
     ? `\n    <link rel="preload" as="image" href="${escapeAttribute(optimizedHeroImage)}"${heroImageSrcSet} fetchpriority="high" />`
     : "";
-  const seoHead = renderSeoHead(route);
+  const seoHead = renderSeoHead(route, routeChromeConfig.storeName);
   const staticTheme = renderStaticThemeVariables(
     routeChromeConfig.colors,
     routeChromeConfig.brandPalette,
@@ -1862,11 +1949,15 @@ async function renderRoute(route) {
       `<html lang="${route.lang}"${hasInteractiveStaticChrome ? " data-storefront-flagship" : ""}>`,
     )
     .replace(/\s*<title(?:\s[^>]*)?>.*?<\/title>/, "")
+    .replace(/\s*<meta name="apple-mobile-web-app-title" content=".*?" \/>/, "")
     .replace(
       /\s*<meta name="description" content=".*?" \/>/,
       `\n    ${seoHead}${heroPreload}${earlyPreloadHints ? `\n    ${earlyPreloadHints}` : ""}`,
     );
   const staticHead = [
+    staticStyleAsset?.criticalCss?.trim()
+      ? `<style data-wordpress-critical-style="${escapeAttribute(staticStyleAsset.sourceHash)}">${escapeInlineCss(staticStyleAsset.criticalCss)}</style>`
+      : "",
     staticStyleAsset
       ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.href)}" data-wordpress-static-style-source="${escapeAttribute(staticStyleAsset.sourceHash)}" />`
       : "",
@@ -1909,7 +2000,7 @@ async function renderRoute(route) {
     rendered = stripBootstrapOverlay(
       rendered.replace(
         '<div id="root"></div>',
-        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
+        `<div id="root"><div data-prerendered-chrome data-static-header-layout="${staticHeaderLayout}" data-recent-orders-enabled="${routeChromeConfig.recentOrders.enabled ? "true" : "false"}" data-recent-orders-count="${routeChromeConfig.recentOrders.itemCount}" data-recent-orders-interval="${routeChromeConfig.recentOrders.intervalSeconds}" data-recent-orders-quiet="${routeChromeConfig.recentOrders.quietSeconds}" data-recent-orders-new-tab="${routeChromeConfig.recentOrders.openLinksInNewTab ? "true" : "false"}">${staticChrome}<main id="prerendered-storefront" aria-label="Storefront content" data-prerender-activation="${prerenderActivationMode}" data-show-code-controls="${routeChromeConfig.headerControls.layout.showCodeControls === false ? "false" : "true"}">${staticBreadcrumbs}<section aria-label="${escapeAttribute(route.title)} content" data-cms-page${generatedRouteSnapshot ? " data-prerendered-cms-snapshot" : ""}><div class="wp-site-blocks entry-content is-layout-flow grid gap-4 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">${routeSnapshot}</div></section></main>${staticFooter}${renderStaticFloatingControls(route)}</div></div>`,
       ),
     );
   }
@@ -1956,7 +2047,7 @@ function renderStaticChrome(route, chromeConfig = staticChromeConfigurationForRo
     ? `<span><strong class="funky-brand-heading">${escapeAttribute(chromeConfig.storeName)}</strong><small>${escapeAttribute(chromeConfig.tagline)}</small></span>`
     : "";
   const brand = chromeConfig.showHeaderLogo
-    ? `<a class="storefront-static-brand" href="${escapeAttribute(homePath)}"${!hasBrandText && !chromeConfig.logoUrl ? ` aria-label="${escapeAttribute(chromeConfig.storeName)}"` : ""}>${logoMedia}${logoText}</a>`
+    ? `<a class="storefront-static-brand group" href="${escapeAttribute(homePath)}"${!hasBrandText && !chromeConfig.logoUrl ? ` aria-label="${escapeAttribute(chromeConfig.storeName)}"` : ""}>${logoMedia}${logoText}</a>`
     : '<span class="storefront-static-brand-placeholder" aria-hidden="true"></span>';
   const homeLabel = route.lang === "pl" ? "Start" : route.lang === "ja" ? "ホーム" : "Home";
   const searchPlaceholder = route.lang === "pl"
@@ -2026,7 +2117,7 @@ function renderStaticChrome(route, chromeConfig = staticChromeConfigurationForRo
       )
     : "";
   const flowClass = chromeConfig.headerSticky ? "" : " storefront-static-header--flow";
-  return `<header class="storefront-static-header storefront-static-header--${chromeConfig.headerArrangement}${flowClass}" data-static-announcement-scroll="${chromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
+  return `<header id="sf-header" class="storefront-static-header storefront-static-header--${chromeConfig.headerArrangement}${flowClass}" data-static-announcement-scroll="${chromeConfig.announcementBarScrollEffect ? "true" : "false"}"${parityAttribute}>
     ${announcement}
     <div class="storefront-static-header-main">
       <div class="storefront-static-header-row">
@@ -2758,6 +2849,12 @@ function serializePaymentGatewaySeed(cache) {
 
 async function buildStaticStyleAsset(styles) {
   if (!graphqlEndpoint) return null;
+  if (graphqlTransportFailure) {
+    throw new Error(
+      `GraphQL backend circuit is open after ${graphqlTransportFailure.operationLabel} timed out.`,
+      { cause: graphqlTransportFailure.error },
+    );
+  }
   const stylesheets = sanitizeWordPressStylesheetUrls(styles.stylesheets, graphqlEndpoint);
   const sourceHash = staticStyleSourceHash({
     fontFaceStyles: styles.fontFaceStyles,
@@ -2792,6 +2889,7 @@ async function buildStaticStyleAsset(styles) {
   return {
     href: `/assets/${filename}`,
     sourceHash,
+    criticalCss: splitCustomCss(styles.customCss).critical,
     fontAssets: localized.fontAssets,
     preloadAssets: localized.preloadAssets,
   };
@@ -2919,42 +3017,41 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
     ));
   const assets = new Map();
 
-  for (let offset = 0; offset < eligibleRoutes.length; offset += 6) {
-    await Promise.all(eligibleRoutes.slice(offset, offset + 6).map(async (route) => {
-      const languageCode = route.lang.toLowerCase();
-      const backendLanguageCode = languageMap.get(languageCode) || languageCode.toUpperCase();
-      const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
-      let cacheKey = "";
-      let value = null;
-      try {
-        if (productTypes.has(route.type)) {
-          cacheKey = `product:${routeUri}`;
-          value = await getProductByUriOrSlug(routeUri);
-        } else if (route.type === "Post") {
-          const postUri = backendPostUriFromStorefrontPath(route.path);
-          cacheKey = `post:${postUri}`;
-          value = await getPostByUri(postUri);
-        } else if (productTaxonomies.has(route.type)) {
-          const taxonomy = productTaxonomies.get(route.type);
-          const identifier = resolveTaxonomyArchiveIdentifier(route.path);
-          cacheKey = `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`;
-          value = await getProductArchive(
-            taxonomy,
-            identifier.identifier,
-            identifier.idType,
-            languageCode,
-            backendLanguageCode,
-          );
-        } else if (postTaxonomies.has(route.type)) {
-          const taxonomy = postTaxonomies.get(route.type);
-          cacheKey = `post-${taxonomy}-archive:URI:${routeUri}:${languageCode}`;
-          value = await getPostTaxonomyArchive(taxonomy, routeUri, "URI", languageCode);
-        } else if (route.type === "User") {
-          const slug = route.path.split("/").filter(Boolean).at(-1) || "";
-          cacheKey = `author:v2:${slug}:${languageCode}:${backendLanguageCode}:${configuredLanguageCodes.join(",")}`;
-          value = await getAuthorArchive(slug, backendLanguageCode, languageCode, configuredLanguageCodes);
-        }
-        if (!cacheKey || !value) return;
+  for (const route of eligibleRoutes) {
+    const languageCode = route.lang.toLowerCase();
+    const backendLanguageCode = languageMap.get(languageCode) || languageCode.toUpperCase();
+    const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
+    let cacheKey = "";
+    let value = null;
+    try {
+      if (productTypes.has(route.type)) {
+        cacheKey = `product:${routeUri}`;
+        value = await getProductByUriOrSlug(routeUri);
+      } else if (route.type === "Post") {
+        const postUri = backendPostUriFromStorefrontPath(route.path);
+        cacheKey = `post:${postUri}`;
+        value = await getPostByUri(postUri);
+      } else if (productTaxonomies.has(route.type)) {
+        const taxonomy = productTaxonomies.get(route.type);
+        const identifier = resolveTaxonomyArchiveIdentifier(route.path);
+        cacheKey = `product-${taxonomy}:v2:${identifier.idType}:${identifier.identifier}:${languageCode}`;
+        value = await getProductArchive(
+          taxonomy,
+          identifier.identifier,
+          identifier.idType,
+          languageCode,
+          backendLanguageCode,
+        );
+      } else if (postTaxonomies.has(route.type)) {
+        const taxonomy = postTaxonomies.get(route.type);
+        cacheKey = `post-${taxonomy}-archive:URI:${routeUri}:${languageCode}`;
+        value = await getPostTaxonomyArchive(taxonomy, routeUri, "URI", languageCode);
+      } else if (route.type === "User") {
+        const slug = route.path.split("/").filter(Boolean).at(-1) || "";
+        cacheKey = `author:v2:${slug}:${languageCode}:${backendLanguageCode}:${configuredLanguageCodes.join(",")}`;
+        value = await getAuthorArchive(slug, backendLanguageCode, languageCode, configuredLanguageCodes);
+      }
+      if (cacheKey && value) {
         const routeHash = createHash("sha256").update(`${route.type}:${route.path}`).digest("hex").slice(0, 12);
         const asset = await writeStaticHydrationAsset(
           `route-${languageCode}-${routeHash}`,
@@ -2966,12 +3063,19 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
           generatedAt,
         );
         if (asset) assets.set(route.path, asset);
-      } catch (error) {
-        console.warn(
-          `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    } catch (error) {
+      if (isBackendTimeoutError(error)) {
+        throw new Error(
+          `[hydration] Static-first route seeding stopped after a backend timeout on ${route.path}.`,
+          { cause: error },
         );
       }
-    }));
+      console.warn(
+        `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, STATIC_CONTENT_REQUEST_COOLDOWN_MS));
   }
   return assets;
 }
@@ -2996,6 +3100,9 @@ async function loadStaticHydrationSeed(task, languageCode) {
       return await task.load();
     } catch (error) {
       lastError = error;
+      if (/timed out|aborted/i.test(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
       if (attempt < attempts) {
         console.warn(
           `[hydration] Retrying ${task.name} seed for ${languageCode} after attempt ${attempt}: ${error instanceof Error ? error.message : String(error)}`,
@@ -3112,9 +3219,17 @@ async function buildStaticHydrationAssets(languages, generatedAt) {
         synchronizeStaticChromeWithHydrationSeed(navigationResult.value);
       }
     }
-    const contentResults = await Promise.allSettled(
-      contentTasks.map((task) => loadStaticHydrationSeed(task, languageCode)),
-    );
+    const contentResults = [];
+    for (const task of contentTasks) {
+      try {
+        contentResults.push({
+          status: "fulfilled",
+          value: await loadStaticHydrationSeed(task, languageCode),
+        });
+      } catch (reason) {
+        contentResults.push({ status: "rejected", reason });
+      }
+    }
     const results = [navigationResult, ...contentResults];
     const languageAssets = {};
     for (let index = 0; index < results.length; index += 1) {
@@ -3388,6 +3503,7 @@ function renderRedirects(appleMerchantFileEnabled) {
     ...opaqueMediaProxy,
     ...mediaDocumentProxy,
     ...rewriteRules,
+    ...staticGenerationConfig.netlifyRedirects.split("\n").filter((line) => line.trim()),
     "/*  /index.html  200",
     "",
   ].join("\n");
@@ -3438,10 +3554,15 @@ function renderHeaders() {
     "/manifest.webmanifest",
     "  Cache-Control: public, max-age=0, must-revalidate",
     "",
+    "/.well-known/funkycommerce-tailwind-index.json",
+    "  Content-Type: application/json; charset=UTF-8",
+    "  Cache-Control: public, max-age=0, must-revalidate",
+    "",
     "/.well-known/apple-developer-merchantid-domain-association",
     "  Content-Type: text/plain; charset=UTF-8",
     "  Cache-Control: public, max-age=0, must-revalidate",
     "",
+    ...staticGenerationConfig.netlifyHeaders.split("\n"),
   ].join("\n");
 }
 
@@ -3476,6 +3597,9 @@ let staticChromeConfig = DEFAULT_STATIC_CHROME;
 try {
   staticChromeConfig = await discoverStaticChrome();
 } catch (error) {
+  if (artifactConfig.delivery === "static-first" && isBackendTimeoutError(error)) {
+    throw error;
+  }
   console.warn(
     `Static chrome discovery skipped: ${error instanceof Error ? error.message : String(error)}`,
   );
@@ -3678,7 +3802,7 @@ await writeFile(
 const sitemapXml = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-  ...sitemapRoutes.map(({ path }) => `  <url><loc>${escapeAttribute(`${sitemapOrigin}${path === "/" ? "" : path}`)}</loc></url>`),
+  ...sitemapRoutes.map(({ path }) => `  <url><loc>${escapeAttribute(sitemapUrl(sitemapOrigin, path))}</loc></url>`),
   "</urlset>",
   "",
 ].join("\n");

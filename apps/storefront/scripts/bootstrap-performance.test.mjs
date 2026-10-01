@@ -25,6 +25,16 @@ const staticNavigationRuntimeSource = await readFile(new URL("../src/lib/staticN
 const assistantSource = await readFile(new URL("../src/components/AiShoppingAssistant.tsx", import.meta.url), "utf8");
 const cookieConsentSource = await readFile(new URL("../../../packages/ui/src/layout/CookieConsentBanner.tsx", import.meta.url), "utf8");
 
+test("prerender serializes backend work and never retries timed-out requests", () => {
+  assert.match(prerenderSource, /GRAPHQL_REQUEST_COOLDOWN_MS = 250/);
+  assert.match(prerenderSource, /graphqlTransportFailure = \{ operationLabel, error \}/);
+  assert.match(prerenderSource, /GraphQL backend circuit is open after/);
+  assert.match(prerenderSource, /withSerializedGraphqlRequest/);
+  assert.match(prerenderSource, /timedOut \|\| error instanceof GraphqlResponseError \|\| !retryable/);
+  assert.doesNotMatch(prerenderSource, /slice\(offset, offset \+ 6\)/);
+  assert.match(prerenderSource, /for \(const task of contentTasks\)/);
+});
+
 test("managed storefronts preserve mobile performance and hydrate without scroll gates", () => {
   assert.match(mainSource, /const MIN_BOOTSTRAP_MS = hasPrerenderedChrome \? 0 : 320/);
   assert.match(mainSource, /isFlagshipStorefront/);
@@ -134,6 +144,9 @@ test("flagship static-first builds emit route-specific hydration for public cont
   assert.match(prerenderSource, /globalThis\.DOMParser = new JSDOM\(""\)\.window\.DOMParser/);
   assert.match(prerenderSource, /staticContentHydrationAssets\.get\(route\.path\)/);
   assert.match(prerenderSource, /artifactConfig\.delivery !== "static-first"/);
+  assert.match(prerenderSource, /STATIC_CONTENT_REQUEST_COOLDOWN_MS = 1_000/);
+  assert.match(prerenderSource, /Static-first route seeding stopped after a backend timeout/);
+  assert.match(prerenderSource, /artifactConfig\.delivery === "static-first" && isBackendTimeoutError\(error\)/);
   assert.match(prerenderSource, /artifactConfig\.delivery === "static-first"[\s\S]*24 \* 60 \* 60 \* 1_000/);
   assert.match(prerenderSource, /update\(`\$\{process\.env\.COMMIT_REF \|\| ""\}:\$\{process\.env\.DEPLOY_ID \|\| ""\}:\$\{generatedAt\}`\)/);
 });
@@ -323,6 +336,8 @@ test("generated static HTML omits the loader and keeps styles render-blocking", 
   assert.match(stripped, /<link rel="stylesheet" href="\/assets\/app\.css">/);
   assert.doesNotMatch(stripped, /data-storefront-deferred-style|media="print"/);
   assert.match(mainSource, /hasPrerenderedChrome \? domReady : initialVisualsReady/);
+  assert.match(prerenderSource, /<style data-wordpress-critical-style=/);
+  assert.match(prerenderSource, /escapeInlineCss\(staticStyleAsset\.criticalCss\)/);
   assert.match(prerenderSource, /<link rel="stylesheet" href=.*data-wordpress-static-style-source=/);
   assert.match(prerenderSource, /<link rel="preload" as="style"/);
   assert.match(prerenderSource, /const heroSrcSet = decodeAttributeEntities/);
@@ -357,6 +372,12 @@ test("flagship theme state and React-parity chrome apply before first paint", ()
   assert.match(prerenderSource, /themeMaxWidthPx/);
   assert.match(prerenderSource, /--storefront-static-max-width:\$\{themeMaxWidthPx\}px/);
   assert.match(indexSource, /max-width: var\(--storefront-static-max-width, 1280px\)/);
+  assert.match(
+    storefrontStylesSource,
+    /\.storefront-generated-route \{[\s\S]*max-width: var\(--storefront-static-max-width, 1280px\);[\s\S]*padding-block: clamp\(3rem, 8vw, 7rem\);[\s\S]*width: 100%;/,
+  );
+  const generatedRouteStyles = storefrontStylesSource.match(/\.storefront-generated-route \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(generatedRouteStyles, /calc\(\(100vw - 1280px\) \/ 2\)/);
   assert.match(indexSource, /\.storefront-static-header nav a \{[\s\S]*line-height: 1\.25rem/);
 });
 
@@ -428,7 +449,7 @@ test("interaction intent prepares code without replacing the SSG document", () =
 
 test("fleet prerendered CMS content mounts lightweight native behaviors while idle", () => {
   assert.match(mainSource, /if \(!isFlagshipStorefront \|\| deferFlagshipHomeHydration\) \{[\s\S]*import\("\.\/lib\/cmsBehaviors"\)/);
-  assert.match(mainSource, /mountCmsBehaviors\(content\)/);
+  assert.match(mainSource, /mountCmsBehaviors\(content, content\.dataset\.showCodeControls !== "false"\)/);
   assert.match(mainSource, /stopStaticCmsBehaviors\(\)/);
   assert.match(mainSource, /Static CMS behaviors could not be loaded/);
 });

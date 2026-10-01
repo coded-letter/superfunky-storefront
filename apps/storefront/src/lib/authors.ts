@@ -7,6 +7,7 @@ import {
 } from "./authorArchiveGraphqlCompatibility.ts";
 import { missingGraphqlFieldRule, requestGraphqlWithCompatibility } from "./graphqlFieldFallback.ts";
 import { shouldPreferCoreContentQueries } from "./profileGraphqlCompatibility.ts";
+import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches } from "./archiveSettings.ts";
 
 export type CmsAuthorArchive = {
   id: string;
@@ -33,7 +34,7 @@ type AuthorArchiveResult = {
     avatar: { url: string | null } | null;
     communityCover: { url: string | null } | null;
   } | null;
-  posts: { nodes: RawBlogPost[] } | null;
+  posts: { nodes: RawBlogPost[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } } | null;
 };
 
 const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
@@ -41,6 +42,8 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
     $slug: ID!
     $authorName: String!
     $language: LanguageCodeFilterEnum!
+    $first: Int!
+    $after: String
   ) {
     user(id: $slug, idType: SLUG) {
       id
@@ -57,7 +60,7 @@ const AUTHOR_ARCHIVE_QUERY = /* GraphQL */ `
         url
       }
     }
-    posts(first: 100, where: { authorName: $authorName, language: $language }) {
+    posts(first: $first, after: $after, where: { authorName: $authorName, language: $language }) {
       ${BLOG_POST_CARD_FIELDS}
     }
   }
@@ -80,6 +83,8 @@ export async function getAuthorArchive(
       slug,
       authorName: slug,
       language: backendLanguageCode,
+      first: ARCHIVE_BATCH_SIZE,
+      after: null,
     },
     [missingGraphqlFieldRule("storefrontDescription"), AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
   );
@@ -87,6 +92,24 @@ export async function getAuthorArchive(
   if (errors?.length) throw new Error(errors.map(({ message }) => message).join("; "));
   if (!data) throw new Error("The author archive query returned no data");
   if (!data.user) return null;
+
+  let firstPage: AuthorArchiveResult | null = data;
+  const { nodes } = await fetchArchiveNodesInBatches<RawBlogPost>(-1, async (first, after) => {
+    let page = firstPage;
+    firstPage = null;
+    if (!page) {
+      const result = await requestGraphqlWithCompatibility<AuthorArchiveResult>(
+        graphqlRequest,
+        query,
+        { slug, authorName: slug, language: backendLanguageCode, first, after },
+        [missingGraphqlFieldRule("storefrontDescription"), AUTHOR_ARCHIVE_COMPATIBILITY_RULE],
+      );
+      if (result.errors?.length) throw new Error(result.errors.map(({ message }) => message).join("; "));
+      if (!result.data) throw new Error("The author pagination query returned no data");
+      page = result.data;
+    }
+    return page.posts || { nodes: [], pageInfo: { hasNextPage: false } };
+  });
 
   return {
     id: data.user.id,
@@ -101,10 +124,10 @@ export async function getAuthorArchive(
     // cover image — no separate journal-only cover field.
     coverUrl: data.user.communityCover?.url || null,
     languageCode: normalizedRequestedLanguageCode,
-    posts: data.posts?.nodes
+    posts: nodes
       .filter((post) => post.author?.node.slug === (data.user?.slug || slug))
       .filter((post) => matchesAuthorPostLanguage(post, normalizedRequestedLanguageCode, configuredLanguageCodes))
-      .map(mapBlogPost) || [],
+      .map(mapBlogPost),
   };
 }
 

@@ -25,9 +25,10 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
   const t = useT();
   const { formatBaseAmount } = useCurrency();
   const { playAction } = useSoundUX();
-  const { addItem, items, openDrawer } = useCart();
+  const { addItem, items, openDrawer, openDropdown } = useCart();
+  const { cartTriggerVariant, productDescriptionsOrder } = useLayoutPreferences();
+  const openCart = () => (cartTriggerVariant === "dropdown" ? openDropdown() : openDrawer());
   const { showToast } = useToast();
-  const { productDescriptionsOrder } = useLayoutPreferences();
   const description = resolveProductQuickViewDescription(product, productDescriptionsOrder);
   const previewImages = [product.imageUrl, ...(product.gallery ?? [])].filter(Boolean) as string[];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -122,9 +123,9 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
             <span className="text-[0.68rem] font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">{product.category}</span>
           ) : null}
 
-          <h3 className="m-0 pr-8 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">{product.name}</h3>
+          <h3 className="m-0 min-w-0 break-words pr-8 font-display text-xl font-bold text-zinc-900 dark:text-zinc-100 [overflow-wrap:anywhere]">{product.name}</h3>
 
-          {description ? <p className="m-0 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p> : null}
+          {description ? <p className="m-0 line-clamp-4 min-w-0 break-words text-sm leading-relaxed text-zinc-500 dark:text-zinc-400 [overflow-wrap:anywhere]">{description}</p> : null}
 
           {(product.rating ?? product.reviewCount) ? (
             <div className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -205,7 +206,7 @@ export function ProductQuickViewModal({ product, onClose }: ProductQuickViewModa
                   showToast({
                     title: t("product.added"),
                     description: product.name,
-                    action: { label: t("cart.view_cart"), onClick: openDrawer },
+                    action: { label: t("cart.view_cart"), onClick: openCart },
                   });
                   onClose();
                 }}

@@ -67,6 +67,7 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
   const labelName = connectionName === "contentNodes" ? "title" : "name";
   const label = node?.[labelName]?.trim() || "FunkyCommerce";
   const seo = node?.seo || {};
+  const isProductArchive = ["ProductCategory", "ProductTag", "ProductBrand"].includes(type);
   const language = node?.language?.code?.trim().toLowerCase()
     || seo.language?.trim().toLowerCase()
     || sourcePath.match(/^\/([a-z]{2})(?:\/|$)/i)?.[1]?.toLowerCase()
@@ -135,13 +136,13 @@ export function cmsRouteFromNode(node, connectionName, defaultLanguage = "en", c
     opengraphModifiedTime: seo.opengraphModifiedTime?.trim() || node?.modified?.trim() || "",
     opengraphPublishedTime: seo.opengraphPublishedTime?.trim() || node?.date?.trim() || "",
     opengraphPublisher: seo.opengraphPublisher?.trim() || "",
-    opengraphSiteName: seo.opengraphSiteName?.trim() || "FunkyCommerce",
+    opengraphSiteName: seo.opengraphSiteName?.trim() || "",
     opengraphTitle: seo.opengraphTitle?.trim() || "",
-    opengraphType: seo.opengraphType?.trim() || (type === "Post" ? "article" : type?.includes("Product") ? "product" : "website"),
+    opengraphType: isProductArchive ? "website" : seo.opengraphType?.trim() || (type === "Post" ? "article" : type?.includes("Product") ? "product" : "website"),
     twitterDescription: seo.twitterDescription?.trim() || "",
     twitterTitle: seo.twitterTitle?.trim() || "",
     breadcrumbs,
-    schemaType: seo.schema?.articleType?.find(Boolean)
+    schemaType: isProductArchive ? "CollectionPage" : seo.schema?.articleType?.find(Boolean)
       || seo.schema?.pageType?.find(Boolean)
       || (type === "Post" ? "Article" : type?.includes("Product") ? "Product" : "WebPage"),
     source: "cms",

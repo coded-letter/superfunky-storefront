@@ -75,6 +75,7 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
     productPageWishlistIcon,
     productDescriptionsOrder,
     discussionLayout,
+    showCodeControls,
   } = useLayoutPreferences();
   const { data: navigationData } = useNavigationData();
   const productPresentation = navigationData?.storefrontConfig.productPresentation
@@ -177,8 +178,8 @@ function ProductTemplate({ product }: { product: CmsProductDetail }) {
 
   useEffect(() => {
     if (!contentRef.current) return;
-    return mountCmsBehaviors(contentRef.current);
-  }, [product.id]);
+    return mountCmsBehaviors(contentRef.current, showCodeControls);
+  }, [product.descriptionHtml, product.id, product.shortDescriptionHtml, showCodeControls]);
 
   const selectVariationOption = (label: string, value: string) => {
     const nextOptions = { ...selectedOptions, [label]: value };

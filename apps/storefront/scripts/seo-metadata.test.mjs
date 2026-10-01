@@ -32,11 +32,15 @@ test("prerender emits complete CMS metadata in the first document response", asy
     'property="og:image:height"',
     'property="article:published_time"',
     'name="twitter:image:alt"',
+    'name="apple-mobile-web-app-title"',
     'type="application/ld+json"',
     "data-storefront-seo",
   ]) {
     assert.ok(prerender.includes(metadata), `Expected prerender metadata: ${metadata}`);
   }
+  assert.match(prerender, /renderSeoHead\(route, routeChromeConfig\.storeName\)/);
+  assert.match(prerender, /<meta data-storefront-seo name="apple-mobile-web-app-title" content="\$\{escapeAttribute\(siteName\)\}"/);
+  assert.match(prerender, /\.replace\(\/\\s\*<meta name="apple-mobile-web-app-title"/);
   assert.match(prerender, /Cache-Control", "public, max-age=0, must-revalidate"/);
 });
 
@@ -98,6 +102,8 @@ test("controlled crawler files remain exact and product feed uses its canonical 
   assert.match(prerender, /\/product\.feed\.xml  \/product-feed\.xml  301/);
   assert.match(prerender, /apple-developer-merchantid-domain-association  \/index\.html  404/);
   assert.match(prerender, /Content-Type: text\/plain; charset=UTF-8/);
+  assert.match(prerender, /\/\.well-known\/funkycommerce-tailwind-index\.json/);
+  assert.match(prerender, /Content-Type: application\/json; charset=UTF-8/);
   assert.match(prerender, /writeAppleMerchantFile\(staticGenerationConfig\.appleMerchantFile\)/);
   assert.match(prerender, /await writeFile\(target, configuredContent\)/);
   assert.match(prerender, /if \(existingContent\.trim\(\)\) return true/);
@@ -114,7 +120,7 @@ test("prerender authenticates route discovery and preserves stable routes during
   assert.match(prerender, /process\.env\.VITE_GRAPHQL_ENDPOINT\?\.trim\(\)\s*\|\| "https:\/\/dev\.superfunky\.pro\/graphql"/);
   assert.match(prerender, /Optional route SEO discovery unavailable/);
   assert.match(prerender, /Optional public robots discovery unavailable; using core route metadata/);
-  assert.match(prerender, /\{ attempts: 5, timeoutMs: 60_000 \}/);
+  assert.match(prerender, /\{ attempts: 2, timeoutMs: 60_000 \}/);
   assert.match(prerender, /WPGraphQL community member route discovery",\s*\{ attempts: 2, timeoutMs: 10_000 \}/);
   assert.match(prerender, /community tag route discovery`,\s*\{ attempts: 2, timeoutMs: 10_000 \}/);
   assert.match(prerender, /CMS route discovery failed; refusing to generate a partial sitemap/);

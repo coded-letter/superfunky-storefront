@@ -189,3 +189,10 @@ test("shortcode markers select defaults and aliases without waking unrelated pro
     true,
   );
 });
+
+test("homepage paginated post grids require full collections rather than 20-post summaries", () => {
+  for (const type of ["post", "community-article"]) {
+    assert.equal(canUseHomepageBlogSummary("/", `<div data-funkycommerce-shortcode="grid" data-type="${type}"></div>`), false);
+  }
+  assert.equal(canUseHomepageBlogSummary("/", '<div data-funkycommerce-shortcode="slider" data-type="post"></div>'), true);
+});

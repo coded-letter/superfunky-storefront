@@ -1,4 +1,5 @@
 import { decodeHTMLStrict } from "entities";
+import { sanitizeCmsStyleAttribute } from "./sanitizePresentationStyle.ts";
 
 const ALLOWED_TAGS = new Set([
   "a", "abbr", "b", "blockquote", "br", "cite", "code", "dd", "del", "div", "dl", "dt",
@@ -9,7 +10,7 @@ const ALLOWED_TAGS = new Set([
 const VOID_TAGS = new Set(["br", "hr"]);
 const BLOCKED_ELEMENT_PATTERN = /<(script|style|iframe|object|embed|form|input|button|select|textarea|template|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 
-export function sanitizeStorefrontHtml(html: string | null | undefined): string {
+export function sanitizeStorefrontHtml(html: string | null | undefined, preservePresentation = false): string {
   if (typeof html !== "string" || !html.trim()) return "";
 
   return html
@@ -19,13 +20,20 @@ export function sanitizeStorefrontHtml(html: string | null | undefined): string 
       const tag = rawTag.toLowerCase();
       if (!ALLOWED_TAGS.has(tag)) return "";
       if (source.startsWith("</")) return VOID_TAGS.has(tag) ? "" : `</${tag}>`;
-      if (tag === "a") return sanitizeAnchor(source);
-      return `<${tag}>`;
+      const presentation = preservePresentation ? presentationAttributes(source) : "";
+      if (tag === "a") return sanitizeAnchor(source, presentation);
+      return `<${tag}${presentation}>`;
     })
     .trim();
 }
 
-function sanitizeAnchor(source: string): string {
+function presentationAttributes(source: string): string {
+  const classes = decodeHTMLStrict(readAttribute(source, "class"));
+  const style = sanitizeCmsStyleAttribute(decodeHTMLStrict(readAttribute(source, "style")));
+  return `${classes ? ` class="${escapeAttribute(classes)}"` : ""}${style ? ` style="${escapeAttribute(style)}"` : ""}`;
+}
+
+function sanitizeAnchor(source: string, presentation: string): string {
   const href = sanitizeLink(readAttribute(source, "href"));
   const title = readAttribute(source, "title");
   const attributes = [
@@ -33,7 +41,7 @@ function sanitizeAnchor(source: string): string {
     title ? ` title="${escapeAttribute(decodeHTMLStrict(title))}"` : "",
     href?.external ? ' target="_blank" rel="noopener noreferrer"' : "",
   ];
-  return `<a${attributes.join("")}>`;
+  return `<a${attributes.join("")}${presentation}>`;
 }
 
 function readAttribute(source: string, name: string): string {

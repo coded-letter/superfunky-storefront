@@ -43,6 +43,7 @@ const hydrationCachePrefixes = [
   "storefront-route-registry:v6:",
   "storefront-route-registry:v10:",
   "commerce-data:v4:",
+  "commerce-data:v6:",
   "blog-data:v4:",
   "blog-data:summary:v1:",
   "community:v11:",

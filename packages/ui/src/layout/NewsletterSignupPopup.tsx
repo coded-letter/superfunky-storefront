@@ -32,15 +32,17 @@ export function NewsletterSignupPopup({
   title,
   description,
   privacyConsentLabel,
+  brandName,
 }: {
   onSubscribe?: (email: string) => Promise<void>;
   title?: string;
   description?: string;
   privacyConsentLabel?: string;
+  brandName?: string;
 }) {
   const t = useT();
   const resolvedTitle = title ?? t("newsletter.default_title");
-  const resolvedDescription = description ?? t("newsletter.default_body");
+  const resolvedDescription = description ?? t("newsletter.default_body", { brand: brandName || "FunkyCommerce" });
   const resolvedPrivacyConsentLabel = privacyConsentLabel ?? t("newsletter.consent");
   const { playAction } = useSoundUX();
   const { showNewsletterPopup, newsletterPopupVariant, newsletterPopupCooldownDays } = useLayoutPreferences();
