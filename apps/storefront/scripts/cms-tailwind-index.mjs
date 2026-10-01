@@ -17,6 +17,7 @@ const MAX_DYNAMIC_CLASSES = 10_000;
 const INVENTORY_PAGE_SIZE = 100;
 const SOURCE_BATCH_SIZE = 10;
 const EXTRACTION_REVISION = 2;
+const DEVELOPMENT_EXTRACTION_REVISION = 3;
 const REQUEST_TIMEOUT_MS = 60_000;
 const TRANSIENT_RETRY_DELAY_MS = 500;
 const REQUEST_COOLDOWN_MS = 250;
@@ -223,7 +224,7 @@ function validateSourceBatch(payload, expectedSources) {
   });
 }
 
-function sourceDynamicClasses(source) {
+function sourceDynamicClasses(source, { includeCmsUtilities = false } = {}) {
   const tokens = extractStoredCmsClassTokens([
     source.content,
     source.excerpt,
@@ -232,7 +233,7 @@ function sourceDynamicClasses(source) {
   const dynamic = new Set();
   const rejected = [];
   for (const token of tokens) {
-    const result = evaluateCmsClassToken(token);
+    const result = evaluateCmsClassToken(token, { allowNonStableUtilities: includeCmsUtilities });
     if (result.status === "dynamic") dynamic.add(token);
     if (result.status === "rejected") rejected.push({ token, reason: result.reason });
   }
@@ -247,6 +248,8 @@ function sourceDynamicClasses(source) {
 
 export async function fetchChangedTailwindSources({
   changedSources,
+  includeCmsUtilities = false,
+  extractionRevision = EXTRACTION_REVISION,
   sleepImpl = sleep,
   ...requestOptions
 }) {
@@ -265,11 +268,11 @@ export async function fetchChangedTailwindSources({
     });
     requestCount += 1;
     for (const source of validateSourceBatch(payload, batch)) {
-      const extracted = sourceDynamicClasses(source);
+      const extracted = sourceDynamicClasses(source, { includeCmsUtilities });
       records.set(source.key, {
         version: source.version,
         classes: extracted.classes,
-        extractionRevision: EXTRACTION_REVISION,
+        extractionRevision,
       });
       rejected.push(...extracted.rejected.map((entry) => ({ ...entry, source: source.key })));
     }
@@ -292,7 +295,7 @@ function emptyIndex() {
   };
 }
 
-async function readLocalBootstrapIndex(indexOutputPath) {
+async function readLocalBootstrapIndex(indexOutputPath, options) {
   let payload;
   try {
     payload = JSON.parse(await readFile(indexOutputPath, "utf8"));
@@ -302,17 +305,17 @@ async function readLocalBootstrapIndex(indexOutputPath) {
       `Local Tailwind bootstrap index could not be read: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return validateTailwindSourceIndex(payload);
+  return validateTailwindSourceIndex(payload, options);
 }
 
-export function validateTailwindSourceIndex(payload) {
+export function validateTailwindSourceIndex(payload, { includeCmsUtilities = false } = {}) {
   if (
     !payload
     || payload.schemaVersion !== 1
     || (payload.extractionRevision !== undefined && (
       !Number.isInteger(payload.extractionRevision)
       || payload.extractionRevision < 1
-      || payload.extractionRevision > EXTRACTION_REVISION
+      || payload.extractionRevision > DEVELOPMENT_EXTRACTION_REVISION
     ))
     || typeof payload.generatedAt !== "string"
     || !Number.isFinite(Date.parse(payload.generatedAt))
@@ -341,7 +344,7 @@ export function validateTailwindSourceIndex(payload) {
         && (
           !Number.isInteger(source.extractionRevision)
           || source.extractionRevision < 1
-          || source.extractionRevision > EXTRACTION_REVISION
+          || source.extractionRevision > DEVELOPMENT_EXTRACTION_REVISION
         )
       )
     ) {
@@ -352,7 +355,8 @@ export function validateTailwindSourceIndex(payload) {
     if (
       classes.length !== source.classes.length
       || classes.some((token, index) =>
-        token !== source.classes[index] || evaluateCmsClassToken(token).status !== "dynamic")
+        token !== source.classes[index]
+        || evaluateCmsClassToken(token, { allowNonStableUtilities: includeCmsUtilities }).status !== "dynamic")
     ) {
       throw new Error(`Previous Tailwind source index contains invalid classes for ${key}.`);
     }
@@ -378,6 +382,7 @@ export async function fetchPreviousTailwindSourceIndex({
   indexUrl,
   fetchImpl = fetch,
   allowBootstrap = false,
+  includeCmsUtilities = false,
 }) {
   const url = validateHttpsUrl(indexUrl, "Tailwind source index URL");
   const response = await fetchImpl(url.href, {
@@ -410,14 +415,15 @@ export async function fetchPreviousTailwindSourceIndex({
     } catch {
       throw new Error("previous Tailwind source index returned invalid JSON");
     }
-    return validateTailwindSourceIndex(payload);
+    return validateTailwindSourceIndex(payload, { includeCmsUtilities });
   }
   return validateTailwindSourceIndex(
     await readBoundedJsonResponse(response, "previous Tailwind source index", MAX_INDEX_BYTES),
+    { includeCmsUtilities },
   );
 }
 
-function createIndex(sources, generatedAt) {
+function createIndex(sources, generatedAt, extractionRevision) {
   const normalizedSources = {};
   const dynamic = new Set();
   for (const key of [...sources.keys()].sort()) {
@@ -431,7 +437,7 @@ function createIndex(sources, generatedAt) {
   }
   return {
     schemaVersion: 1,
-    extractionRevision: EXTRACTION_REVISION,
+    extractionRevision,
     generatedAt: new Date(generatedAt).toISOString(),
     sourceCount: sources.size,
     classCount: classes.length,
@@ -451,12 +457,25 @@ export async function buildIncrementalTailwindIndex({
   sleepImpl = sleep,
   generatedAt = Date.now(),
   allowBootstrap = false,
+  includeCmsUtilities = false,
+  preferLocalIndex = false,
 }) {
   if (!siteUrl) throw new Error("VITE_SITE_URL is required for incremental CMS Tailwind extraction.");
   const requestOptions = { apiUrl, signingSecret, fetchImpl, sleepImpl };
-  let previous = await fetchPreviousTailwindSourceIndex({ indexUrl, fetchImpl, allowBootstrap });
+  const extractionRevision = includeCmsUtilities
+    ? DEVELOPMENT_EXTRACTION_REVISION
+    : EXTRACTION_REVISION;
+  let previous = preferLocalIndex
+    ? await readLocalBootstrapIndex(indexOutputPath, { includeCmsUtilities })
+    : null;
+  previous ||= await fetchPreviousTailwindSourceIndex({
+    indexUrl,
+    fetchImpl,
+    allowBootstrap,
+    includeCmsUtilities,
+  });
   if (allowBootstrap && previous.generatedAt === "1970-01-01T00:00:00.000Z") {
-    previous = await readLocalBootstrapIndex(indexOutputPath) || previous;
+    previous = await readLocalBootstrapIndex(indexOutputPath, { includeCmsUtilities }) || previous;
   }
   const inventoryResult = await fetchTailwindSourceInventory(requestOptions);
   const inventoryByKey = new Map(inventoryResult.sources.map((source) => [source.key, source]));
@@ -464,11 +483,13 @@ export async function buildIncrementalTailwindIndex({
     (source) => {
       const previousSource = previous.sources[source.key];
       return previousSource?.version !== source.version
-        || previousSource.extractionRevision !== EXTRACTION_REVISION;
+        || previousSource.extractionRevision !== extractionRevision;
     },
   );
   const changedResult = await fetchChangedTailwindSources({
     changedSources: changed,
+    includeCmsUtilities,
+    extractionRevision,
     ...requestOptions,
   });
 
@@ -481,13 +502,14 @@ export async function buildIncrementalTailwindIndex({
     nextSources.set(source.key, record);
   }
 
-  const index = createIndex(nextSources, generatedAt);
+  const index = createIndex(nextSources, generatedAt, extractionRevision);
   const indexJson = `${JSON.stringify(index)}\n`;
   if (Buffer.byteLength(indexJson) > MAX_INDEX_BYTES) {
     throw new Error("CMS Tailwind source index exceeded the 2 MiB limit.");
   }
   const { classes, dynamic } = collectCmsTailwindClassesFromTokens(
     Object.values(index.sources).flatMap((source) => source.classes),
+    { allowNonStableUtilities: includeCmsUtilities },
   );
   await mkdir(resolve(outputPath, ".."), { recursive: true });
   await mkdir(resolve(indexOutputPath, ".."), { recursive: true });

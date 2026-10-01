@@ -16,23 +16,22 @@ Default URL:
 Configure either the signed source API (`CMS_TAILWIND_SOURCE_API_URL`,
 `STOREFRONT_ARTIFACT_SIGNING_SECRET`, and `VITE_SITE_URL`) or
 `VITE_CMS_TAILWIND_MANIFEST_URL` in `apps/storefront/.env.local`. Then run this from
-the repository root:
+`workspace/frontend`:
 
 ```bash
 pnpm dev:cms
 ```
 
-The command requires a valid CMS source or manifest and finishes extraction before
-starting Vite. It fails instead of silently starting with only the local stable
-contract. Development extraction writes its incremental index under the ignored
-`.tailwind/` directory and does not replace the deployment index in `public/`.
+The command requires a valid CMS source or manifest and completes extraction before
+starting Vite. It fails rather than silently starting with only the stable contract.
+Development mode keeps its incremental index under the ignored `.tailwind/` directory,
+so it does not overwrite the deployment index in `public/`.
 
 After saving CMS content, run `pnpm --filter @funky/storefront audit:cms-tailwind` from
 a second terminal. Tailwind/Vite watch the generated
 `apps/storefront/.tailwind/cms-content.html` file and refresh compiled CSS when it
-changes. This is manual refresh, not CMS polling; rerun the extraction when content
-changes, and restart Vite if it does not detect a generated-file change. Do not use
-`--contract-only` for this workflow.
+changes. This is a manual refresh, not CMS polling; rerun extraction after content
+changes, and restart Vite if it does not detect a generated-file change.
 
 ## Static production routes
 

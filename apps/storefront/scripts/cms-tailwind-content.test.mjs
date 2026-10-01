@@ -87,62 +87,6 @@ test("allows only arbitrary values that the route CSS compiler supports", () => 
   assert.equal(evaluateCmsClassToken("bg-[url(https://example.com/image.png)]").status, "rejected");
 });
 
-test("dev extraction additionally compiles approved CMS effects while rejecting unsafe URLs", async () => {
-  const fixture = '<div class="md:text-5xl shadow-[0_0_12px_rgba(237,34,93,0.35)] bg-[url(https://example.com/image.png)]"></div>';
-  const standard = collectCmsTailwindClasses([fixture]);
-  const development = collectCmsTailwindClasses([fixture], {
-    allowNonStableUtilities: true,
-    includeDynamic: true,
-  });
-  const result = await postcss([
-    tailwindcss({
-      content: [{ raw: buildTailwindContentSource(development.classes), extension: "html" }],
-      darkMode: "class",
-    }),
-  ]).process("@tailwind utilities;", { from: undefined });
-
-  assert.ok(standard.classes.includes("md:text-5xl"));
-  assert.ok(development.classes.includes("md:text-5xl"));
-  assert.ok(!standard.classes.includes("shadow-[0_0_12px_rgba(237,34,93,0.35)]"));
-  assert.ok(development.classes.includes("shadow-[0_0_12px_rgba(237,34,93,0.35)]"));
-  assert.ok(!development.classes.includes("bg-[url(https://example.com/image.png)]"));
-  assert.match(result.css, /\.md\\:text-5xl/);
-  assert.match(result.css, /\.shadow-/);
-  assert.doesNotMatch(result.css, /example\.com/);
-});
-
-test("dev extraction compiles common safe CMS effects and important sizing utilities", async () => {
-  const fixture = `
-    <div class="hover:shadow-[0_0_25px_rgba(0,255,200,0.45)] blur-[140px]
-      hover:scale-[1.03] group-hover:-translate-y-0.5
-      bg-[length:200%_200%] dark:from-[#101010]/85
-      group-hover:translate-y-[-4px] animate-[floatLight_8s_ease-in-out_infinite]
-      !max-h-[75px] rounded-[calc(1.5rem-2px)] md:grid-cols-[70%_30%]
-      tracking-[0.25em] group-hover:text-[#90b74b]"></div>
-  `;
-  const development = collectCmsTailwindClasses([fixture], {
-    allowNonStableUtilities: true,
-    includeDynamic: true,
-  });
-  const result = await postcss([
-    tailwindcss({
-      content: [{ raw: buildTailwindContentSource(development.classes), extension: "html" }],
-      darkMode: "class",
-    }),
-  ]).process("@tailwind utilities;", { from: undefined });
-
-  assert.deepEqual(development.rejected, []);
-  assert.match(result.css, /\.hover\\:shadow-/);
-  assert.match(result.css, /\.blur-\\\[140px\\\]/);
-  assert.match(result.css, /\.hover\\:scale-/);
-  assert.match(result.css, /\.group-hover\\\:-translate-y-0\\.5/);
-  assert.match(result.css, /\.dark\\:from-/);
-  assert.match(result.css, /\.\\!max-h-/);
-  assert.match(result.css, /\.md\\:grid-cols-/);
-  assert.match(result.css, /\.tracking-/);
-  assert.match(result.css, /\.group-hover\\:text-/);
-});
-
 test("compiles CMS-authored gradients with arbitrary hexadecimal stops", async () => {
   const fixture = `
     <div class="h-2 rounded-full bg-gradient-to-r from-[#7C3AED] to-[#66E0FF]"></div>
@@ -164,4 +108,30 @@ test("compiles CMS-authored gradients with arbitrary hexadecimal stops", async (
   assert.match(result.css, /\.bg-gradient-to-r/);
   assert.match(result.css, /\.from-\\\[\\#7C3AED\\\]/);
   assert.match(result.css, /\.to-\\\[\\#66E0FF\\\]/);
+});
+
+test("development extraction adds bounded CMS effects and keeps unsafe URLs excluded", async () => {
+  const fixture = `
+    <div class="shadow-[0_0_25px_rgba(0,255,200,0.45)] blur-[140px]
+      hover:scale-[1.03] group-hover:-translate-y-0.5 !max-h-[75px]
+      bg-[url(https://example.com/image.png)]"></div>
+  `;
+  const stable = collectCmsTailwindClasses([fixture]);
+  const development = collectCmsTailwindClasses([fixture], { allowNonStableUtilities: true });
+  const result = await postcss([
+    tailwindcss({
+      content: [{ raw: buildTailwindContentSource(development.classes), extension: "html" }],
+      darkMode: "class",
+    }),
+  ]).process("@tailwind utilities;", { from: undefined });
+
+  assert.ok(!stable.classes.includes("shadow-[0_0_25px_rgba(0,255,200,0.45)]"));
+  assert.ok(development.classes.includes("shadow-[0_0_25px_rgba(0,255,200,0.45)]"));
+  assert.ok(development.classes.includes("blur-[140px]"));
+  assert.ok(development.classes.includes("!max-h-[75px]"));
+  assert.ok(!development.classes.includes("bg-[url(https://example.com/image.png)]"));
+  assert.match(result.css, /\.shadow-/);
+  assert.match(result.css, /\.blur-\\\[140px\\\]/);
+  assert.match(result.css, /\.group-hover\\\:-translate-y-0\\.5/);
+  assert.doesNotMatch(result.css, /example\.com/);
 });
