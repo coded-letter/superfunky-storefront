@@ -4,6 +4,7 @@ import { useCart, useLanguage, type CartLineItem } from "@funky/ui";
 import { authStore } from "./auth.ts";
 import { mergeCartLineItemsByMaxQuantity } from "@funky/ui";
 import { isBackendConfigured, restUrl } from "@funky/sdk";
+import { cacheRestRouteUnavailableFromResponse, isRestRouteAvailable } from "./restRouteAvailability.ts";
 import {
   ABANDONED_CART_CONFIG,
   ABANDONED_CART_ENDPOINT,
@@ -204,13 +205,19 @@ async function fetchAbandonedCartPublicConfig(
   backendLanguageCode: string,
   configuredLanguageCodes: readonly string[] = [],
 ): Promise<AbandonedCartPublicConfig | null> {
-  const endpoint = restUrl("funkycommerce/v1/abandoned-carts/config");
+  const route = "/funkycommerce/v1/abandoned-carts/config";
+  const endpoint = restUrl(route);
   if (!endpoint || !isBackendConfigured) return null;
 
   const key = publicConfigCacheKey(languageCode, backendLanguageCode);
-  const cached = publicConfigCache.get(key);
-  if (cached) return cached;
+  if (publicConfigCache.has(key)) return publicConfigCache.get(key) ?? null;
   if (publicConfigInFlight.has(key)) return publicConfigInFlight.get(key)!;
+  if (await isRestRouteAvailable(route) !== true) {
+    publicConfigCache.set(key, null);
+    return null;
+  }
+  const pendingRequest = publicConfigInFlight.get(key);
+  if (pendingRequest) return pendingRequest;
 
   const url = new URL(endpoint);
   url.searchParams.set("language", languageCode);
@@ -218,6 +225,7 @@ async function fetchAbandonedCartPublicConfig(
 
   const request = fetch(url.toString(), { cache: "no-store" })
     .then(async (response) => {
+      await cacheRestRouteUnavailableFromResponse(route, "GET", response);
       if (!response.ok) return null;
       const raw = (await response.json().catch(() => null)) as AbandonedCartPublicConfigSource | null;
       const normalized = normalizeAbandonedCartPublicConfig(raw, {

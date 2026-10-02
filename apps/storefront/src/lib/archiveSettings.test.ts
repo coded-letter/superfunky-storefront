@@ -118,13 +118,28 @@ test("Store API pagination accepts empty catalogs and unavailable Woo, but not p
   assert.deepEqual(await fetchRestArchiveNodes("https://cms.test/products", async () =>
     new Response(null, { status: 404 })), []);
   for (const response of [
-    new Response("[]"),
     new Response("[]", { headers: { "x-wp-totalpages": "2" } }),
     new Response("{}", { headers: { "x-wp-totalpages": "1" } }),
     new Response(null, { status: 500 }),
   ]) {
     await assert.rejects(fetchRestArchiveNodes("https://cms.test/products", async () => response), /WooCommerce Store API/);
   }
+});
+
+test("Store API pagination uses page lengths when cross-origin headers are unavailable", async () => {
+  const calls: number[] = [];
+  const nodes = await fetchRestArchiveNodes<number>("https://cms.test/products", async (input) => {
+    const page = Number(new URL(String(input)).searchParams.get("page"));
+    calls.push(page);
+    return new Response(JSON.stringify(page === 1
+      ? Array.from({ length: ARCHIVE_BATCH_SIZE }, (_, index) => index)
+      : [100]), {
+      headers: page === 1 ? {} : { "x-wp-totalpages": "unavailable" },
+    });
+  });
+
+  assert.equal(nodes.length, ARCHIVE_BATCH_SIZE + 1);
+  assert.deepEqual(calls, [1, 2]);
 });
 
 test("archive batching loads multiple cursor pages up to the requested total", async () => {

@@ -1,8 +1,10 @@
 import { BACKEND_ORIGIN } from "@funky/sdk";
 import { authStore } from "./auth.ts";
 import type { CmsPage } from "./pages.ts";
+import { isRestRouteAvailable } from "./restRouteAvailability.ts";
 
 const PROOF_PREFIX = "funkycommerce-page-proof:";
+const PROTECTED_PAGE_ROUTE = "/funkycommerce/v1/protected-page";
 
 export class ProtectedPageError extends Error {
   readonly kind: "auth-required" | "password-required" | "invalid-password";
@@ -28,7 +30,10 @@ function storedProof(uri: string): string | null {
 
 async function protectedPageRequest(uri: string, password?: string): Promise<Response | null> {
   if (!BACKEND_ORIGIN) return null;
-  const endpoint = new URL("/wp-json/funkycommerce/v1/protected-page", BACKEND_ORIGIN);
+  if (await isRestRouteAvailable(PROTECTED_PAGE_ROUTE, password === undefined ? "GET" : "POST") !== true) {
+    return null;
+  }
+  const endpoint = new URL(`/wp-json${PROTECTED_PAGE_ROUTE}`, BACKEND_ORIGIN);
   const token = authStore.getToken() || authStore.load()?.authToken;
   const headers: Record<string, string> = {
     Accept: "application/json",

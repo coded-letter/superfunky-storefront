@@ -15,7 +15,7 @@ test("commerce taxonomy prefetch bypasses generic and protected page lookup", ()
   assert.match(documentWarmupSource, /await Promise\.all\(boundedAssets\.map\(loadHydrationAsset\)\)/);
   assert.match(documentWarmupSource, /signal: AbortSignal\.timeout\(2_000\)/);
   assert.match(source, /content-node:v3:/);
-  assert.match(source, /\["product-category", "pro-cat", "pro-category"\]/);
+  assert.match(source, /\["product-category", "kategoria-produktu", "pro-cat", "pro-category"\]/);
   assert.match(source, /\["product-tag", "pro-tag"\]/);
   assert.match(source, /const taxonomy = commerceTaxonomyForPath\(pathname, languageCodes\)/);
   assert.match(source, /if \(taxonomy\) \{[\s\S]*getProductArchive\([\s\S]*return;/);
