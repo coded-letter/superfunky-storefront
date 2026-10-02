@@ -1,10 +1,13 @@
 import { BACKEND_ORIGIN } from "@funky/sdk";
 import { authStore } from "./auth.ts";
 import type { CmsPage } from "./pages.ts";
+import { shouldProbeProtectedPage } from "./protectedPageEligibility.ts";
 import { isRestRouteAvailable } from "./restRouteAvailability.ts";
 
 const PROOF_PREFIX = "funkycommerce-page-proof:";
 const PROTECTED_PAGE_ROUTE = "/funkycommerce/v1/protected-page";
+const unprotectedPageUris = new Set<string>();
+const protectedPageRequests = new Map<string, Promise<CmsPage | null>>();
 
 export class ProtectedPageError extends Error {
   readonly kind: "auth-required" | "password-required" | "invalid-password";
@@ -55,9 +58,28 @@ async function protectedPageRequest(uri: string, password?: string): Promise<Res
   });
 }
 
-export async function getProtectedPageByUri(uri: string): Promise<CmsPage | null> {
+export function getProtectedPageByUri(uri: string): Promise<CmsPage | null> {
+  const normalizedUri = new URL(uri, "https://storefront.invalid").pathname;
+  if (!shouldProbeProtectedPage(normalizedUri) || unprotectedPageUris.has(normalizedUri)) {
+    return Promise.resolve(null);
+  }
+  const pendingRequest = protectedPageRequests.get(normalizedUri);
+  if (pendingRequest) return pendingRequest;
+
+  const request = loadProtectedPage(normalizedUri).finally(() => {
+    protectedPageRequests.delete(normalizedUri);
+  });
+  protectedPageRequests.set(normalizedUri, request);
+  return request;
+}
+
+async function loadProtectedPage(uri: string): Promise<CmsPage | null> {
   const response = await protectedPageRequest(uri);
-  if (!response || response.status === 404) return null;
+  if (!response) return null;
+  if (response.status === 404) {
+    unprotectedPageUris.add(uri);
+    return null;
+  }
   if (response.status === 401) throw new ProtectedPageError("auth-required", "Sign in with permission to read this private page.");
   if (response.status === 403) throw new ProtectedPageError("password-required", "This page requires a password.");
   if (!response.ok) throw new Error(`Protected page request failed with status ${response.status}`);
