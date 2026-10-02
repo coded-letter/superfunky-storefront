@@ -13,6 +13,7 @@ test("protected pages use authenticated non-cacheable REST access and strict log
   assert.match(client, /X-WPGraphQL-Login-Token/);
   assert.match(client, /X-FunkyCommerce-Page-Proof/);
   assert.match(client, /cachePrivate:\s*true/);
+  assert.match(client, /isRestRouteAvailable\(PROTECTED_PAGE_ROUTE/);
   assert.match(gate, /parseStorefrontAuthRef\(`\$\{pathname\}\$\{search\}\$\{hash\}`\)/);
   assert.match(gate, /role="alert"/);
   assert.match(gate, /aria-labelledby="protected-page-title"/);

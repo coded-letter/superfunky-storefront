@@ -85,6 +85,7 @@ test("single-locale catalogs merge current Store API products with GraphQL produ
   assert.match(source, /const storeApiProducts = configuredLanguageCodes\.length <= 1\s*\?\s*await getOptionalStoreApiCatalogProducts\("catalog"\)/);
   assert.match(source, /\.\.\.storeApiProducts\.filter/);
   assert.match(source, /fetchRestArchiveNodes<StoreApiCatalogProduct>\(endpoint\)/);
+  assert.match(source, /isRestRouteAvailable\(route\) !== true/);
   assert.match(source, /Store API \$\{context\} enrichment failed; preserving authoritative GraphQL data/);
 });
 

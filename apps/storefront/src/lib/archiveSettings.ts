@@ -60,12 +60,13 @@ export async function fetchRestArchiveNodes<TNode>(endpoint: string, request: ty
     if (!Array.isArray(payload)) throw new Error("WooCommerce Store API catalog returned a non-array payload");
     const totalPagesHeader = response.headers.get("x-wp-totalpages");
     const totalPages = Number(totalPagesHeader);
-    if (totalPagesHeader === null || !Number.isSafeInteger(totalPages) || totalPages < 0) {
-      throw new Error("WooCommerce Store API catalog returned invalid pagination headers");
-    }
     nodes.push(...payload);
-    if (page >= totalPages) return nodes;
-    if (!payload.length) throw new Error("WooCommerce Store API catalog returned an incomplete page");
+    if (totalPagesHeader !== null && Number.isSafeInteger(totalPages) && totalPages >= 0) {
+      if (page >= totalPages) return nodes;
+      if (!payload.length) throw new Error("WooCommerce Store API catalog returned an incomplete page");
+    } else if (payload.length < ARCHIVE_BATCH_SIZE) {
+      return nodes;
+    }
   }
   throw new Error("WooCommerce Store API catalog exceeded 1,000 pagination batches");
 }

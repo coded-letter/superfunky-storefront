@@ -42,6 +42,7 @@ import {
   type RawLocalizedTermTranslation,
 } from "./commerceTaxonomyLanguage.ts";
 import { ARCHIVE_BATCH_SIZE, fetchArchiveNodesInBatches, fetchRestArchiveNodes } from "./archiveSettings.ts";
+import { isRestRouteAvailable } from "./restRouteAvailability.ts";
 
 export type { ProductPriceBehavior, ResolvedProductPriceMode } from "./productPriceMode.ts";
 export { resolveProductPriceMode } from "./productPriceMode.ts";
@@ -1245,7 +1246,9 @@ export function mapStoreApiCatalogProduct(product: StoreApiCatalogProduct): RawP
 }
 
 async function getStoreApiCatalogProducts(): Promise<RawProductCard[]> {
-  const endpoint = restUrl("wc/store/v1/products");
+  const route = "/wc/store/v1/products";
+  if (await isRestRouteAvailable(route) !== true) return [];
+  const endpoint = restUrl(route);
   if (!endpoint) return [];
   const products = await fetchRestArchiveNodes<StoreApiCatalogProduct>(endpoint);
   return products.map(mapStoreApiCatalogProduct);
@@ -1434,6 +1437,7 @@ export async function getProductByUriOrSlug(identifier: string): Promise<CmsProd
 }
 
 async function getStoreApiProductDetail(slug: string): Promise<CmsProductDetail | null> {
+  if (await isRestRouteAvailable("/wc/store/v1/products") !== true) return null;
   const endpoint = restUrl(`wc/store/v1/products?slug=${encodeURIComponent(slug)}&per_page=1`);
   if (!endpoint) return null;
   const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
