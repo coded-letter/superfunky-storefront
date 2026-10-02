@@ -329,7 +329,7 @@ test("intent prefetch warms documents while navigations prefer current deploys",
   assert.match(prerenderSource, /stampServiceWorkerVersion\(generatedAt\)/);
 });
 
-test("generated static HTML omits the loader and keeps styles render-blocking", () => {
+test("generated static HTML keeps critical styles blocking and defers below-the-fold styles", () => {
   const html = '<head><link rel="stylesheet" href="/assets/app.css"></head><body><div id="storefront-bootstrap">Loading</div><noscript>fallback</noscript><div id="root">static</div></body>';
   const stripped = stripBootstrapOverlay(html);
   assert.doesNotMatch(stripped, /storefront-bootstrap/);
@@ -339,6 +339,9 @@ test("generated static HTML omits the loader and keeps styles render-blocking", 
   assert.match(prerenderSource, /<style data-wordpress-critical-style=/);
   assert.match(prerenderSource, /escapeInlineCss\(staticStyleAsset\.criticalCss\)/);
   assert.match(prerenderSource, /<link rel="stylesheet" href=.*data-wordpress-static-style-source=/);
+  assert.match(prerenderSource, /media="print" data-wordpress-deferred-style/);
+  assert.match(prerenderSource, /<noscript><link rel="stylesheet" href=/);
+  assert.match(prerenderSource, /writeStaticWordPressStyleAssets/);
   assert.match(prerenderSource, /<link rel="preload" as="style"/);
   assert.match(prerenderSource, /const heroSrcSet = decodeAttributeEntities/);
   assert.doesNotMatch(prerenderSource, /staticStyleAsset\?\.inlineCss/);

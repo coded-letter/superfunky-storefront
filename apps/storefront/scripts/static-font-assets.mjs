@@ -49,7 +49,7 @@ function defaultFacePreloads(css, fontAssets) {
 
 export async function localizeStaticFontAssets(
   css,
-  { outputDirectory, fetchImpl = fetch } = {},
+  { outputDirectory, fetchImpl = fetch, preloadCss = css } = {},
 ) {
   if (!outputDirectory) throw new Error("A static font output directory is required");
   const fontFaceBlocks = [...css.matchAll(FONT_FACE_PATTERN)].map((match) => match[1]);
@@ -96,9 +96,13 @@ export async function localizeStaticFontAssets(
     const href = replacements.get(sourceUrl);
     return href ? `url(${quote}${href}${quote})` : match;
   });
+  const localizedPreloadCss = preloadCss.replace(FONT_URL_PATTERN, (match, quote, sourceUrl) => {
+    const href = replacements.get(sourceUrl);
+    return href ? `url(${quote}${href}${quote})` : match;
+  });
   return {
     css: localizedCss,
     fontAssets,
-    preloadAssets: defaultFacePreloads(localizedCss, fontAssets),
+    preloadAssets: defaultFacePreloads(localizedPreloadCss, fontAssets),
   };
 }
