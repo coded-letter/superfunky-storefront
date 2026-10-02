@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { shouldProbeProtectedPage } from "./protectedPageEligibility.ts";
 
 const source = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -14,11 +15,32 @@ test("protected pages use authenticated non-cacheable REST access and strict log
   assert.match(client, /X-FunkyCommerce-Page-Proof/);
   assert.match(client, /cachePrivate:\s*true/);
   assert.match(client, /isRestRouteAvailable\(PROTECTED_PAGE_ROUTE/);
+  assert.match(client, /!shouldProbeProtectedPage\(normalizedUri\) \|\| unprotectedPageUris\.has\(normalizedUri\)/);
+  assert.match(client, /protectedPageRequests\.get\(normalizedUri\)/);
+  assert.match(client, /unprotectedPageUris\.add\(uri\)/);
   assert.match(gate, /parseStorefrontAuthRef\(`\$\{pathname\}\$\{search\}\$\{hash\}`\)/);
   assert.match(gate, /role="alert"/);
   assert.match(gate, /aria-labelledby="protected-page-title"/);
   assert.ok(gate.indexOf("function ProtectedPageGate") < gate.indexOf("export function CmsPageContent"));
   assert.match(client, /response\.status === 429/);
+});
+
+test("protected-page fallback skips known storefront and taxonomy routes", () => {
+  for (const uri of [
+    "/kategoria-produktu/oliwa-i-przyprawy/",
+    "/pl/kategoria-produktu/oliwa-i-przyprawy/",
+    "/product-category/olive-oil/",
+    "/shop/category/olive-oil/",
+    "/product-tag/sale/",
+    "/blog/category/recipes/",
+    "/author/store-owner/",
+    "/product/sample-product/",
+    "/checkout/",
+  ]) {
+    assert.equal(shouldProbeProtectedPage(uri), false, uri);
+  }
+
+  assert.equal(shouldProbeProtectedPage("/company/shipping-policy/"), true);
 });
 
 test("CMS behaviors follow the global code-controls preference after protected-page updates", () => {
