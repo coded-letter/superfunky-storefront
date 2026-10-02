@@ -14,7 +14,7 @@ import { staticStyleSourceHash } from "../src/lib/staticStyleContract.mjs";
 import { withStorefrontEditorPolicy } from "./security-policy.mjs";
 import { normalizeStaticShortcodes } from "../src/lib/staticShortcodeMarkup.mjs";
 import { addDefaultCmsIconDimensions } from "../src/lib/cmsIconSizing.mjs";
-import { localizeStaticFontAssets } from "./static-font-assets.mjs";
+import { writeStaticWordPressStyleAssets } from "./static-wordpress-styles.mjs";
 import { stripBootstrapOverlay } from "./static-html.mjs";
 import { buildStaticRouteRegistryEntries, resolveStaticRouteRegistryPath } from "./static-route-registry.mjs";
 import { sanitizeCmsHtml, sanitizeCmsStyleAttribute } from "../src/lib/cmsBehaviors.ts";
@@ -1961,6 +1961,9 @@ async function renderRoute(route) {
     staticStyleAsset
       ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.href)}" data-wordpress-static-style-source="${escapeAttribute(staticStyleAsset.sourceHash)}" />`
       : "",
+    staticStyleAsset?.deferredHref
+      ? `<link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.deferredHref)}" media="print" data-wordpress-deferred-style /><noscript><link rel="stylesheet" href="${escapeAttribute(staticStyleAsset.deferredHref)}" /></noscript>`
+      : "",
     staticTheme ? `<style data-storefront-static-theme>${staticTheme}</style>` : "",
     `<script type="application/json" id="storefront-static-layout">${serializeStaticLayoutSeed(routeChromeConfig)}</script>`,
     routeChromeConfig.paymentGatewayCache.gateways.length
@@ -2862,37 +2865,23 @@ async function buildStaticStyleAsset(styles) {
     stylesheets,
     customCss: styles.customCss,
   });
-  const sections = [
+  const prefixSections = [
     sanitizeWordPressFontFaces(styles.fontFaceStyles),
     sanitizeWordPressGlobalStyles(styles.globalStyles),
   ];
   for (const stylesheetUrl of stylesheets) {
-    sections.push(await fetchStaticStylesheet(stylesheetUrl));
+    prefixSections.push(await fetchStaticStylesheet(stylesheetUrl));
   }
-  sections.push(
-    styles.customCss,
+  return writeStaticWordPressStyleAssets({
+    prefixSections,
+    suffixSections: [
     WORDPRESS_BLOCK_COMPATIBILITY_CSS,
     createWordPressElementTypographyCss(styles.globalStyles),
-  );
-  const sourceCss = sections.filter((section) => section.trim()).join("\n");
-  if (!sourceCss) return null;
-  if (Buffer.byteLength(sourceCss, "utf8") > 1_500_000) {
-    throw new Error("Combined WordPress static CSS exceeds the 1.5 MB build limit");
-  }
-  const localized = await localizeStaticFontAssets(sourceCss, { outputDirectory });
-  const css = localized.css;
-
-  const contentHash = createHash("sha256").update(css).digest("hex").slice(0, 16);
-  const filename = `wordpress-static-${contentHash}.css`;
-  await mkdir(resolve(outputDirectory, "assets"), { recursive: true });
-  await writeFile(resolve(outputDirectory, "assets", filename), `${css}\n`);
-  return {
-    href: `/assets/${filename}`,
+    ],
+    customCss: styles.customCss,
+    outputDirectory,
     sourceHash,
-    criticalCss: splitCustomCss(styles.customCss).critical,
-    fontAssets: localized.fontAssets,
-    preloadAssets: localized.preloadAssets,
-  };
+  });
 }
 
 async function writeStaticHydrationAsset(label, entries, generatedAt) {

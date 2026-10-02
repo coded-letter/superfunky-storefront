@@ -61,6 +61,37 @@ test("deduplicates preloads when different font faces share one localized binary
   assert.equal(result.preloadAssets.length, 1);
 });
 
+test("preloads critical fonts without pulling deferred-only fonts into the initial page", async () => {
+  const outputDirectory = await mkdtemp(join(tmpdir(), "storefront-fonts-"));
+  temporaryDirectories.push(outputDirectory);
+  const css = `
+    @font-face{font-family:"Critical";font-style:normal;font-weight:400;src:url("https://cms.test/critical.woff2") format("woff2")}
+    @font-face{font-family:"Deferred";font-style:normal;font-weight:400;src:url("https://cms.test/deferred.woff2") format("woff2")}
+  `;
+  const criticalCss = css.split('@font-face{font-family:"Deferred"')[0];
+  const result = await localizeStaticFontAssets(css, {
+    outputDirectory,
+    preloadCss: criticalCss,
+    fetchImpl: async (url) => new Response(
+      Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(28, url.endsWith("deferred.woff2") ? 8 : 7)]),
+      { headers: { "content-type": "font/woff2" } },
+    ),
+  });
+
+  assert.equal(result.fontAssets.length, 2);
+  assert.equal(result.preloadAssets.length, 1);
+  const [localizedCriticalHref] = result.css
+    .split('@font-face{font-family:"Deferred"')[0]
+    .match(/url\("([^"]+)"/)
+    .slice(1);
+  const [localizedDeferredHref] = result.css
+    .split('@font-face{font-family:"Deferred"')[1]
+    .match(/url\("([^"]+)"/)
+    .slice(1);
+  assert.equal(result.preloadAssets[0].href, localizedCriticalHref);
+  assert.notEqual(result.preloadAssets[0].href, localizedDeferredHref);
+});
+
 test("rejects non-font responses instead of publishing untrusted bytes", async () => {
   const outputDirectory = await mkdtemp(join(tmpdir(), "storefront-fonts-"));
   temporaryDirectories.push(outputDirectory);
