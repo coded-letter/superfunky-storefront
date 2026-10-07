@@ -72,7 +72,7 @@ test("BLIK reconciliation verifies Stripe and uses Woo Stripe's webhook handler"
   assert.match(checkoutContext, /hash_equals\(\s*\(string\) \$order->get_order_key\(\),\s*\(string\) \$order_key\s*\)/);
 });
 
-test("verified succeeded BLIK charges fall back to Woo Stripe's native order response handler", () => {
+test("verified succeeded BLIK charges complete pending orders even when webhook handling defers", () => {
   assert.match(checkoutContext, /function funkycommerce_process_verified_blik_charge/);
   assert.match(checkoutContext, /\$gateway\s*=\s*\$gateways\['stripe'\]/);
   assert.match(checkoutContext, /'succeeded' !== \( \$charge->status \?\? '' \)/);
@@ -80,7 +80,8 @@ test("verified succeeded BLIK charges fall back to Woo Stripe's native order res
   assert.match(checkoutContext, /\$gateway->process_response\( \$charge, \$order \)/);
   assert.match(checkoutContext, /validate_intent_for_order/);
   assert.match(checkoutContext, /\$deferred = true === \$handler->process_payment_intent/);
-  assert.match(checkoutContext, /if \( 'succeeded' === \$intent_status && ! \$deferred && ! \$order->is_paid\(\) \)/);
+  assert.match(checkoutContext, /if \( 'succeeded' === \$intent_status && ! \$order->is_paid\(\) \)/);
+  assert.match(checkoutContext, /if \( 'succeeded' === \$intent_status && ! \$order->is_paid\(\) \) \{\s*throw new \\RuntimeException\( 'The verified BLIK charge did not complete its WooCommerce order\.' \);/);
   assert.match(checkoutContext, /funkycommerce_process_verified_blik_charge\( \$order, \$intent \)/);
   assert.match(checkoutContext, /'payment_follow_up_required'\s*=>\s*true/);
   assert.match(orderSuccessPage, /payment_follow_up_required === true/);
