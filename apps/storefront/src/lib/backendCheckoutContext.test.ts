@@ -8,6 +8,10 @@ const checkoutContextPath = new URL(
 );
 const checkoutContext = readFileSync(checkoutContextPath, "utf8");
 const checkoutPage = readFileSync(new URL("../pages/CheckoutMockupPage.tsx", import.meta.url), "utf8");
+const orderSuccessPage = readFileSync(
+  new URL("../pages/OrderSuccessMockupPage.tsx", import.meta.url),
+  "utf8",
+);
 
 test("checkout registration recognizes encoded Store API rest_route URLs", () => {
   assert.match(
@@ -64,7 +68,23 @@ test("BLIK reconciliation verifies Stripe and uses Woo Stripe's webhook handler"
   assert.match(checkoutContext, /process_payment_intent/);
   assert.match(checkoutContext, /wc_stripe_allowed_payment_processing_statuses/);
   assert.match(checkoutContext, /stripe_blik[\s\S]*on-hold/);
+  assert.match(checkoutContext, /WC_Stripe_Helper::validate_intent_for_order\( \$order, \$intent, 'blik' \)/);
   assert.match(checkoutContext, /hash_equals\(\s*\(string\) \$order->get_order_key\(\),\s*\(string\) \$order_key\s*\)/);
+});
+
+test("verified succeeded BLIK charges fall back to Woo Stripe's native order response handler", () => {
+  assert.match(checkoutContext, /function funkycommerce_process_verified_blik_charge/);
+  assert.match(checkoutContext, /\$gateway\s*=\s*\$gateways\['stripe'\]/);
+  assert.match(checkoutContext, /'succeeded' !== \( \$charge->status \?\? '' \)/);
+  assert.match(checkoutContext, /hash_equals\(\s*\(string\) \( \$intent->id \?\? '' \),\s*\(string\) \( \$charge->payment_intent \?\? '' \)\s*\)/);
+  assert.match(checkoutContext, /\$gateway->process_response\( \$charge, \$order \)/);
+  assert.match(checkoutContext, /validate_intent_for_order/);
+  assert.match(checkoutContext, /\$deferred = true === \$handler->process_payment_intent/);
+  assert.match(checkoutContext, /if \( 'succeeded' === \$intent_status && ! \$deferred && ! \$order->is_paid\(\) \)/);
+  assert.match(checkoutContext, /funkycommerce_process_verified_blik_charge\( \$order, \$intent \)/);
+  assert.match(checkoutContext, /'payment_follow_up_required'\s*=>\s*true/);
+  assert.match(orderSuccessPage, /payment_follow_up_required === true/);
+  assert.match(orderSuccessPage, /order_success\.blik_follow_up_notice/);
 });
 
 test("selected PLN enables backend-controlled Stripe BLIK without changing the store base currency", () => {

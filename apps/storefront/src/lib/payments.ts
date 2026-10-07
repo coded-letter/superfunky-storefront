@@ -536,6 +536,9 @@ export async function completeBlikPayment(
           payment_result: {
             ...order.payment_result,
             payment_status: outcome === "success" ? "success" : "pending",
+            ...(payload.payment_follow_up_required === true
+              ? { payment_follow_up_required: true }
+              : {}),
           },
         },
       };

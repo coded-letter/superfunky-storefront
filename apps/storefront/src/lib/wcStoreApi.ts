@@ -330,6 +330,7 @@ export type StoreApiCheckoutResult = {
     payment_status: "success" | "failure" | "pending" | "error";
     payment_details: { key: string; value: string }[];
     redirect_url: string;
+    payment_follow_up_required?: boolean;
   };
 };
 

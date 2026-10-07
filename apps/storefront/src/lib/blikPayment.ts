@@ -5,6 +5,7 @@ export type BlikReconciliationResponse = {
   intent_status?: string;
   order_status?: string;
   message?: string;
+  payment_follow_up_required?: boolean;
 };
 
 export function buildBlikReconciliationRequest(
