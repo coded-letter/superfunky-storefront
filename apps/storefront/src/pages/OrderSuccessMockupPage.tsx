@@ -27,6 +27,9 @@ export function OrderSuccessMockupPage() {
   const orderNumber = order?.order_number ?? `FC-2026-1042`;
   const customerName = [order?.billing_address?.first_name, order?.billing_address?.last_name].filter(Boolean).join(" ") || "Jordan";
   const shippingAddress = order?.shipping_address ?? order?.billing_address;
+  const blikPaymentFollowUpRequired =
+    order?.payment_method === "stripe_blik"
+    && order.payment_result.payment_follow_up_required === true;
   const paymentLabel =
     order?.payment_method === "cod"
       ? t("order_success.payment.cod")
@@ -34,7 +37,9 @@ export function OrderSuccessMockupPage() {
         ? t("order_success.payment.cheque")
         : order?.payment_method === "bacs"
           ? t("order_success.payment.bacs")
-          : t("order_success.payment.card");
+          : order?.payment_method === "stripe_blik"
+            ? t("order_success.payment.blik")
+            : t("order_success.payment.card");
   const nativeOrderUrl = order?.payment_result?.redirect_url;
 
   return (
@@ -51,6 +56,14 @@ export function OrderSuccessMockupPage() {
             {t("order_success.thank_you", { name: customerName || t("order_success.customer_fallback"), number: orderNumber })}
           </p>
         </div>
+        {blikPaymentFollowUpRequired ? (
+          <p
+            role="status"
+            className="mx-auto m-0 max-w-xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-left text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          >
+            {t("order_success.blik_follow_up_notice")}
+          </p>
+        ) : null}
 
         <div className="mx-auto grid w-full gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-left dark:border-zinc-800 dark:bg-zinc-950/60">
           <div className="grid gap-2.5 border-b border-zinc-200 pb-3 dark:border-zinc-800">

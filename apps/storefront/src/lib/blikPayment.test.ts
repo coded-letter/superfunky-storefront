@@ -30,6 +30,15 @@ test("distinguishes approved, processing, pending, and failed BLIK intents", () 
     "processing",
   );
   assert.equal(
+    blikReconciliationOutcome({
+      payment_status: "processing",
+      intent_status: "succeeded",
+      order_status: "on-hold",
+      message: "Do not submit another payment.",
+    }),
+    "processing",
+  );
+  assert.equal(
     blikReconciliationOutcome({ payment_status: "pending", intent_status: "requires_action" }),
     "pending",
   );
