@@ -1,3 +1,4 @@
+import { ElevenLabsHeadlessReader } from "./ElevenLabsHeadlessReader";
 import {
   PostCard,
   PaginablePostGrid,
@@ -1554,6 +1555,7 @@ function UnsubscribeFormShortcode({ attributes }: ShortcodeProps) {
 }
 
 export const WORDPRESS_SHORTCODE_RENDERERS: Record<string, WordPressShortcodeRenderer> = {
+  elevenlabs_reader: (attributes) => <ElevenLabsHeadlessReader postId={Number(attributes.post_id || attributes.postId || 0)} />,
   hero: (attributes) => <HeroShortcode attributes={attributes} />,
   "video-hero": (attributes) => <VideoHeroShortcode attributes={attributes} />,
   "spotify-radio": (attributes) => <SpotifyRadioShortcode attributes={attributes} />,

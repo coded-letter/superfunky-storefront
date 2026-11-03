@@ -1,0 +1,8 @@
+/* Headless fallback styling. The authoritative shortcode styles are fetched from WP. */
+.elwr-headless-root { width:100%; min-width:0; }
+.elwr-headless-root .elwr-reader { box-sizing:border-box; width:100%; max-width:100%; border-radius:18px; background:#c94321; color:#fff; padding:20px; overflow:hidden; }
+.elwr-headless-root .elwr-reader button { cursor:pointer; }
+.elwr-headless-root .elwr-reader input[type="range"] { accent-color:#fff; }
+.elwr-headless-root .elwr-reader audio { max-width:100%; }
+.elwr-headless-error { color:#b91c1c; }
+.elwr-headless-loading { opacity:.7; }

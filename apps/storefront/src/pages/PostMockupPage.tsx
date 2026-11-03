@@ -13,6 +13,7 @@ import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import { ContentLoadingState } from "../components/ContentLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
 import { renderCmsContent } from "../components/CmsPageContent";
+import { ElevenLabsHeadlessReader } from "../components/ElevenLabsHeadlessReader";
 import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
 import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortcodeRenderers";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -277,6 +278,7 @@ function PostMockupPageInner({
           <PostContentBody
             contentRef={contentRef}
             html={preparedContent.html}
+            postId={Number(post.id)}
             className={tocLayout === "current" ? "order-1 lg:order-2" : undefined}
           />
         </div>
@@ -473,10 +475,12 @@ function TocDotRail({ entries, side }: { entries: TocEntry[]; side: "left" | "ri
 function PostContentBody({
   contentRef,
   html,
+  postId,
   className,
 }: {
   contentRef: RefObject<HTMLDivElement>;
   html: string;
+  postId: number;
   className?: string;
 }) {
   return (
@@ -487,7 +491,7 @@ function PostContentBody({
     >
       {renderCmsContent(
         html,
-        { ...WORDPRESS_SHORTCODE_RENDERERS, ...APPLICATION_SHORTCODE_RENDERERS },
+        { ...WORDPRESS_SHORTCODE_RENDERERS, elevenlabs_reader: (attrs) => <ElevenLabsHeadlessReader postId={Number(attrs.post_id || attrs.postId || postId)} />, ...APPLICATION_SHORTCODE_RENDERERS },
       )}
     </div>
   );
