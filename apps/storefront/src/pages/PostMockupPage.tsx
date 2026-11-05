@@ -1,3 +1,4 @@
+
 import {
   useEffect,
   useLayoutEffect,
@@ -14,6 +15,7 @@ import { ContentLoadingState } from "../components/ContentLoadingState";
 import { GuestStarRating } from "../components/GuestStarRating";
 import { renderCmsContent } from "../components/CmsPageContent";
 import { ElevenLabsHeadlessReader } from "../components/ElevenLabsHeadlessReader";
+import { ElevenLabsExistingMarkupAssets } from "../components/ElevenLabsExistingMarkupAssets";
 import { WORDPRESS_SHORTCODE_RENDERERS } from "../components/wordpressShortcodes";
 import { APPLICATION_SHORTCODE_RENDERERS } from "../components/applicationShortcodeRenderers";
 import { useIncrementalData } from "@funky/sdk/react";
@@ -137,11 +139,11 @@ function PostMockupPageInner({
         opengraphDescription={post.seo.opengraphDescription || undefined}
         image={post.featuredImage
           ? {
-              url: post.featuredImage.sourceUrl,
-              alt: post.featuredImage.altText || post.title,
-              width: post.featuredImage.width,
-              height: post.featuredImage.height,
-            }
+            url: post.featuredImage.sourceUrl,
+            alt: post.featuredImage.altText || post.title,
+            width: post.featuredImage.width,
+            height: post.featuredImage.height,
+          }
           : post.seo.opengraphImage
             ? { url: post.seo.opengraphImage, alt: post.title }
             : undefined}
@@ -278,8 +280,12 @@ function PostMockupPageInner({
           <PostContentBody
             contentRef={contentRef}
             html={preparedContent.html}
-            postId={Number(post.id)}
-            className={tocLayout === "current" ? "order-1 lg:order-2" : undefined}
+            postId={post.databaseId}
+            className={
+              tocLayout === "current"
+                ? "order-1 lg:order-2"
+                : undefined
+            }
           />
         </div>
 
@@ -414,11 +420,10 @@ function TableOfContents({ entries }: { entries: TocEntry[] }) {
               <a
                 href={`#${entry.id}`}
                 aria-current={isActive ? "location" : undefined}
-                className={`block rounded-lg px-3 py-1.5 transition ${
-                  isActive
-                    ? "bg-brand-100 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
-                    : "text-zinc-600 hover:bg-zinc-200/60 hover:text-brand-600 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-brand-400"
-                }`}
+                className={`block rounded-lg px-3 py-1.5 transition ${isActive
+                  ? "bg-brand-100 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"
+                  : "text-zinc-600 hover:bg-zinc-200/60 hover:text-brand-600 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-brand-400"
+                  }`}
               >
                 {entry.text}
               </a>
@@ -443,24 +448,21 @@ function TocDotRail({ entries, side }: { entries: TocEntry[]; side: "left" | "ri
 
   return (
     <div className={`group/toc fixed top-1/2 z-30 hidden -translate-y-1/2 lg:block ${side === "right" ? "right-0" : "left-0"}`}>
-      <div className={`grid gap-2 border border-zinc-200/80 bg-white/90 py-3 shadow-soft backdrop-blur transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900/90 ${
-        side === "right"
-          ? "rounded-l-2xl border-r-0 pl-1.5 pr-2 group-hover/toc:pl-3"
-          : "rounded-r-2xl border-l-0 pl-2 pr-1.5 group-hover/toc:pr-3"
-      }`}>
+      <div className={`grid gap-2 border border-zinc-200/80 bg-white/90 py-3 shadow-soft backdrop-blur transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900/90 ${side === "right"
+        ? "rounded-l-2xl border-r-0 pl-1.5 pr-2 group-hover/toc:pl-3"
+        : "rounded-r-2xl border-l-0 pl-2 pr-1.5 group-hover/toc:pr-3"
+        }`}>
         {entries.map((entry) => {
           const isActive = entry.id === activeId;
           return (
             <a key={entry.id} href={`#${entry.id}`} className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`} aria-label={entry.text} aria-current={isActive ? "location" : undefined}>
               <span
-                className={`h-2 w-2 shrink-0 rounded-full transition ${
-                  isActive ? "bg-brand-600 dark:bg-brand-400" : "bg-zinc-300 group-hover/toc:bg-brand-300 dark:bg-zinc-700"
-                }`}
+                className={`h-2 w-2 shrink-0 rounded-full transition ${isActive ? "bg-brand-600 dark:bg-brand-400" : "bg-zinc-300 group-hover/toc:bg-brand-300 dark:bg-zinc-700"
+                  }`}
               />
               <span
-                className={`max-w-0 overflow-hidden whitespace-nowrap text-xs opacity-0 transition-all duration-200 group-hover/toc:max-w-[200px] group-hover/toc:opacity-100 ${
-                  isActive ? "font-semibold text-brand-700 dark:text-brand-300" : "text-zinc-600 dark:text-zinc-300"
-                }`}
+                className={`max-w-0 overflow-hidden whitespace-nowrap text-xs opacity-0 transition-all duration-200 group-hover/toc:max-w-[200px] group-hover/toc:opacity-100 ${isActive ? "font-semibold text-brand-700 dark:text-brand-300" : "text-zinc-600 dark:text-zinc-300"
+                  }`}
               >
                 {entry.text}
               </span>
@@ -471,6 +473,7 @@ function TocDotRail({ entries, side }: { entries: TocEntry[]; side: "left" | "ri
     </div>
   );
 }
+
 
 function PostContentBody({
   contentRef,
@@ -486,16 +489,28 @@ function PostContentBody({
   return (
     <div
       ref={contentRef}
+      data-blog-root
       itemProp="articleBody"
       className={`wp-site-blocks entry-content is-layout-flow grid gap-5 text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300 ${className ?? ""}`}
     >
+      <ElevenLabsExistingMarkupAssets postId={postId} />
+
       {renderCmsContent(
         html,
-        { ...WORDPRESS_SHORTCODE_RENDERERS, elevenlabs_reader: (attrs) => <ElevenLabsHeadlessReader postId={Number(attrs.post_id || attrs.postId || postId)} />, ...APPLICATION_SHORTCODE_RENDERERS },
+        {
+          ...WORDPRESS_SHORTCODE_RENDERERS,
+          elevenlabs_reader: (attrs) => (
+            <ElevenLabsHeadlessReader
+              postId={Number(attrs.post_id || attrs.postId || postId)}
+            />
+          ),
+          ...APPLICATION_SHORTCODE_RENDERERS,
+        }
       )}
     </div>
   );
 }
+
 
 function AuthorBio({ author, layout = "fullwidth" }: { author: CmsPost["author"]; layout?: AuthorLayout }) {
   const initials = author.name

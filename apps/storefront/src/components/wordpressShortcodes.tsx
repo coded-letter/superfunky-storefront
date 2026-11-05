@@ -1,4 +1,3 @@
-import { ElevenLabsHeadlessReader } from "./ElevenLabsHeadlessReader";
 import {
   PostCard,
   PaginablePostGrid,
@@ -59,6 +58,7 @@ import {
   communityMemberMatchesRoles,
   normalizeCommunityMemberTypes,
 } from "../lib/communityMemberTypes";
+import { ElevenLabsHeadlessReader } from "./ElevenLabsHeadlessReader";
 
 export type WordPressShortcodeAttributes = Record<string, string>;
 export type WordPressShortcodeRenderer = (attributes: WordPressShortcodeAttributes) => ReactNode;
@@ -285,47 +285,46 @@ function SliderShortcode({ attributes }: ShortcodeProps) {
         renderItem={(slide, index, meta) => {
           const SlideHeading = index === 0 ? firstSlideHeadingLevel : slideHeadingLevel;
           return (
-          <article
-            key={slide.id}
-            className={`group relative flex h-full min-h-[22rem] overflow-hidden bg-zinc-900 text-left shadow-soft ${
-              fullBleed ? "items-center rounded-none" : "items-end rounded-2xl"
-            }`}
-          >
-            {slide.image ? <ResponsiveImage src={slide.image} alt="" priority={meta.isPriority} sizes="100vw" className="absolute inset-0 h-full w-full object-cover" /> : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/0" aria-hidden="true" />
-            <div
-              className={`relative grid w-full gap-2 text-white ${fullBleed ? "mx-auto px-6 py-10 sm:px-12" : "p-6 sm:p-10"}`}
-              style={fullBleed ? { maxWidth: `${themeMaxWidthPx}px` } : undefined}
+            <article
+              key={slide.id}
+              className={`group relative flex h-full min-h-[22rem] overflow-hidden bg-zinc-900 text-left shadow-soft ${fullBleed ? "items-center rounded-none" : "items-end rounded-2xl"
+                }`}
             >
-              {slide.label ? <span className="text-xs font-semibold uppercase tracking-[0.24em]">{slide.label}</span> : null}
-              <SlideHeading className="m-0 font-display text-3xl font-bold">{slide.title}</SlideHeading>
-              {slide.subtitle ? <p className="m-0 max-w-xl text-white/80">{slide.subtitle}</p> : null}
-              {primaryCtaConfig || secondaryCtaConfig ? (
-                <div className="flex flex-wrap gap-3 pt-2">
-                  {primaryCtaConfig ? (
-                    <Link
-                      to={primaryCtaConfig.href}
-                      target={primaryCtaConfig.target}
-                      rel={primaryCtaConfig.rel}
-                      className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 no-underline transition hover:-translate-y-0.5"
-                    >
-                      {primaryCtaConfig.label}
-                    </Link>
-                  ) : null}
-                  {secondaryCtaConfig ? (
-                    <Link
-                      to={secondaryCtaConfig.href}
-                      target={secondaryCtaConfig.target}
-                      rel={secondaryCtaConfig.rel}
-                      className="rounded-full border border-white/50 px-5 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
-                    >
-                      {secondaryCtaConfig.label}
-                    </Link>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </article>
+              {slide.image ? <ResponsiveImage src={slide.image} alt="" priority={meta.isPriority} sizes="100vw" className="absolute inset-0 h-full w-full object-cover" /> : null}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/0" aria-hidden="true" />
+              <div
+                className={`relative grid w-full gap-2 text-white ${fullBleed ? "mx-auto px-6 py-10 sm:px-12" : "p-6 sm:p-10"}`}
+                style={fullBleed ? { maxWidth: `${themeMaxWidthPx}px` } : undefined}
+              >
+                {slide.label ? <span className="text-xs font-semibold uppercase tracking-[0.24em]">{slide.label}</span> : null}
+                <SlideHeading className="m-0 font-display text-3xl font-bold">{slide.title}</SlideHeading>
+                {slide.subtitle ? <p className="m-0 max-w-xl text-white/80">{slide.subtitle}</p> : null}
+                {primaryCtaConfig || secondaryCtaConfig ? (
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    {primaryCtaConfig ? (
+                      <Link
+                        to={primaryCtaConfig.href}
+                        target={primaryCtaConfig.target}
+                        rel={primaryCtaConfig.rel}
+                        className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 no-underline transition hover:-translate-y-0.5"
+                      >
+                        {primaryCtaConfig.label}
+                      </Link>
+                    ) : null}
+                    {secondaryCtaConfig ? (
+                      <Link
+                        to={secondaryCtaConfig.href}
+                        target={secondaryCtaConfig.target}
+                        rel={secondaryCtaConfig.rel}
+                        className="rounded-full border border-white/50 px-5 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                      >
+                        {secondaryCtaConfig.label}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </article>
           );
         }}
       />
@@ -1420,19 +1419,19 @@ function resolveOrderSummary(
       { label: t("order_success.row.subtotal"), value: formatStoreApiMoney(totals.subtotal, totals) },
       ...(isPositiveStoreApiAmount(totals.total_discount)
         ? [{
-            label: liveOrder.coupons.length
-              ? t("order_success.row.discount_with_codes", { codes: liveOrder.coupons.map(({ code }) => code).join(", ") })
-              : t("order_success.row.discount"),
-            value: `-${formatStoreApiMoney(totals.total_discount, totals)}`,
-          }]
+          label: liveOrder.coupons.length
+            ? t("order_success.row.discount_with_codes", { codes: liveOrder.coupons.map(({ code }) => code).join(", ") })
+            : t("order_success.row.discount"),
+          value: `-${formatStoreApiMoney(totals.total_discount, totals)}`,
+        }]
         : []),
       ...(totals.total_shipping !== null
         ? [{
-            label: t("order_success.row.shipping"),
-            value: isPositiveStoreApiAmount(totals.total_shipping)
-              ? formatStoreApiMoney(totals.total_shipping, totals)
-              : t("order_success.row.free"),
-          }]
+          label: t("order_success.row.shipping"),
+          value: isPositiveStoreApiAmount(totals.total_shipping)
+            ? formatStoreApiMoney(totals.total_shipping, totals)
+            : t("order_success.row.free"),
+        }]
         : []),
       ...(isPositiveStoreApiAmount(totals.total_tax)
         ? [{ label: t("order_success.row.tax"), value: formatStoreApiMoney(totals.total_tax, totals) }]
