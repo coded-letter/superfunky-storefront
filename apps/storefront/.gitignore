@@ -1,7 +1,10 @@
 node_modules
 dist
 *.tsbuildinfo
-.env
-.env.local
+
+# Environment files
+.env*
+!.env.example
+
 .tailwind
 /public/.well-known/funkycommerce-tailwind-index.json
