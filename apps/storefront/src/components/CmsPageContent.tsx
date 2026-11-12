@@ -245,47 +245,47 @@ export function CmsPageContent({
           ? `${window.location.origin}${pathname === "/" ? "" : pathname.replace(/\/+$/, "")}`
           : page.seo.canonical || page.seo.opengraphUrl || `${window.location.origin}${pathname}`}
         languageCode={contentLanguageCode}
-          keywords={page.seo.keywords || undefined}
-          siteName={page.seo.siteName || undefined}
-          appendSiteName={false}
-          robots={
-            robots
-            || (
-              homePath
-                ? "index, follow"
-                : page.seo.robotsSource === "explicit"
-                  ? page.seo.robots
-                  : fallbackRobots || page.seo.robots
-            )
+        keywords={page.seo.keywords || undefined}
+        siteName={page.seo.siteName || undefined}
+        appendSiteName={false}
+        robots={
+          robots
+          || (
+            homePath
+              ? "index, follow"
+              : page.seo.robotsSource === "explicit"
+                ? page.seo.robots
+                : fallbackRobots || page.seo.robots
+          )
+        }
+        opengraphType={page.seo.opengraphType === "article" ? "article" : "website"}
+        opengraphTitle={page.seo.opengraphTitle || undefined}
+        opengraphDescription={page.seo.opengraphDescription || undefined}
+        image={page.featuredImage
+          ? {
+            url: page.featuredImage.sourceUrl,
+            alt: page.featuredImage.altText || page.title,
+            width: page.featuredImage.width,
+            height: page.featuredImage.height,
           }
-          opengraphType={page.seo.opengraphType === "article" ? "article" : "website"}
-          opengraphTitle={page.seo.opengraphTitle || undefined}
-          opengraphDescription={page.seo.opengraphDescription || undefined}
-          image={page.featuredImage
-            ? {
-                url: page.featuredImage.sourceUrl,
-                alt: page.featuredImage.altText || page.title,
-                width: page.featuredImage.width,
-                height: page.featuredImage.height,
-              }
-            : page.seo.opengraphImage
-              ? { url: page.seo.opengraphImage, alt: page.title }
-              : undefined}
-          opengraphPublishedTime={page.seo.opengraphPublishedTime || undefined}
-          opengraphModifiedTime={page.seo.opengraphModifiedTime || undefined}
-          opengraphAuthor={page.seo.opengraphAuthor || undefined}
-          opengraphPublisher={page.seo.opengraphPublisher || undefined}
-          twitterTitle={page.seo.twitterTitle || undefined}
-          twitterDescription={page.seo.twitterDescription || undefined}
-          schema={{
-            pageType: page.seo.pageType || undefined,
-            articleType: page.seo.articleType || undefined,
-          }}
-          breadcrumbs={page.seo.breadcrumbs}
-          translations={page.translations.map((translation) => ({
-            languageCode: translation.languageCode,
-            url: translation.uri,
-          }))}
+          : page.seo.opengraphImage
+            ? { url: page.seo.opengraphImage, alt: page.title }
+            : undefined}
+        opengraphPublishedTime={page.seo.opengraphPublishedTime || undefined}
+        opengraphModifiedTime={page.seo.opengraphModifiedTime || undefined}
+        opengraphAuthor={page.seo.opengraphAuthor || undefined}
+        opengraphPublisher={page.seo.opengraphPublisher || undefined}
+        twitterTitle={page.seo.twitterTitle || undefined}
+        twitterDescription={page.seo.twitterDescription || undefined}
+        schema={{
+          pageType: page.seo.pageType || undefined,
+          articleType: page.seo.articleType || undefined,
+        }}
+        breadcrumbs={page.seo.breadcrumbs}
+        translations={page.translations.map((translation) => ({
+          languageCode: translation.languageCode,
+          url: translation.uri,
+        }))}
       />
 
       {breadcrumbs.length > 1 ? <Breadcrumbs items={breadcrumbs} includeStructuredData={false} /> : null}
@@ -372,7 +372,8 @@ function NestedWordPressShortcodes({ html, slots }: { html: string; slots: Neste
 
   return (
     <>
-      <div ref={contentRef} className="wp-content-fragment" dangerouslySetInnerHTML={{ __html: html }} />
+
+      <div ref={contentRef} className="wp-content-fragment asas" dangerouslySetInnerHTML={{ __html: html }} />
       {slots.map(({ marker, content }, index) => (
         <DeferredShortcodePortal
           key={marker.slotId}
@@ -429,18 +430,18 @@ function DeferredShortcodePortal({
     active
       ? content
       : (
-          <div
-            role="status"
-            aria-label={`Loading ${marker.name} section`}
-            data-deferred-cms-shortcode={marker.name}
-            className="flex min-h-24 items-center justify-center"
-          >
-            <div className="relative inline-flex items-center justify-center">
-              <div className="absolute h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
-              <span className="sr-only">Loading {marker.name}</span>
-            </div>
+        <div
+          role="status"
+          aria-label={`Loading ${marker.name} section`}
+          data-deferred-cms-shortcode={marker.name}
+          className="flex min-h-24 items-center justify-center"
+        >
+          <div className="relative inline-flex items-center justify-center">
+            <div className="absolute h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-600 dark:border-t-zinc-100" />
+            <span className="sr-only">Loading {marker.name}</span>
           </div>
-        ),
+        </div>
+      ),
     target,
     marker.slotId,
   );

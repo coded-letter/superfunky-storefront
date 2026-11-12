@@ -500,25 +500,25 @@ async function getPage(id: string | number, idType: "URI" | "DATABASE_ID"): Prom
       page.translations?.flatMap((translation) =>
         translation?.uri
           ? [{
-              databaseId: translation.databaseId,
-              uri: translation.uri,
-              languageCode: translation.language?.code?.toLowerCase() || resolvePathLanguageCode(
-                translation.uri,
-                STOREFRONT_EXPECTED_LOCALES,
-                STOREFRONT_DEFAULT_LANGUAGE,
-                STOREFRONT_BACKEND_PROFILE === "blog",
-              ),
-            }]
+            databaseId: translation.databaseId,
+            uri: translation.uri,
+            languageCode: translation.language?.code?.toLowerCase() || resolvePathLanguageCode(
+              translation.uri,
+              STOREFRONT_EXPECTED_LOCALES,
+              STOREFRONT_DEFAULT_LANGUAGE,
+              STOREFRONT_BACKEND_PROFILE === "blog",
+            ),
+          }]
           : [],
       ) || [],
     author: author
       ? {
-          id: author.id,
-          name: author.name?.trim() || "Unknown author",
-          description: author.description,
-          uri: author.uri,
-          avatarUrl: author.avatar?.url || null,
-        }
+        id: author.id,
+        name: author.name?.trim() || "Unknown author",
+        description: author.description,
+        uri: author.uri,
+        avatarUrl: author.avatar?.url || null,
+      }
       : null,
     featuredImage: normalizeFeaturedImage(page.featuredImage, seo?.schema),
     scripts: page.enqueuedScripts?.nodes.map(mapScript) || [],

@@ -1,4 +1,5 @@
 export const CONTENT_SHORTCODE_NAMES = Object.freeze([
+  "elevenlabs_reader",
   "hero",
   "video-hero",
   "spotify-radio",

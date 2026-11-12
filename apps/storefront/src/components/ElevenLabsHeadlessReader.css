@@ -1,0 +1,16 @@
+.elwr-headless-root {
+    width: 100%;
+    max-width: 100%;
+}
+
+.elwr-headless-root .elwr-reader {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.elwr-headless-root .elwr-reader *,
+.elwr-headless-root .elwr-reader *::before,
+.elwr-headless-root .elwr-reader *::after {
+    box-sizing: border-box;
+}
