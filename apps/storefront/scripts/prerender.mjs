@@ -3017,6 +3017,7 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
     const routeUri = route.path === "/" ? "/" : `${route.path.replace(/\/+$/, "")}/`;
     let cacheKey = "";
     let value = null;
+    let seeded = false;
     try {
       if (productTypes.has(route.type)) {
         cacheKey = `product:${routeUri}`;
@@ -3057,6 +3058,7 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
           generatedAt,
         );
         if (asset) assets.set(route.path, asset);
+        seeded = true;
       }
     } catch (error) {
       if (isBackendTimeoutError(error)) {
@@ -3069,7 +3071,12 @@ async function buildStaticContentHydrationAssets(routes, languages, generatedAt)
         `[hydration] Route seed unavailable for ${route.path}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, STATIC_CONTENT_REQUEST_COOLDOWN_MS));
+    // A route-specific backend failure must not make the deploy appear stuck:
+    // runtime hydration remains available for that route, so only throttle
+    // requests after a successful seed.
+    if (seeded) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, STATIC_CONTENT_REQUEST_COOLDOWN_MS));
+    }
   }
   return assets;
 }
