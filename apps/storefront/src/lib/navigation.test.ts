@@ -147,7 +147,7 @@ test("optional language discovery cannot invalidate layout configuration", () =>
   assert.doesNotMatch(navigationQuery, /languages\s*\{/);
   assert.match(navigationSource, /getStorefrontLanguages\(\)/);
   assert.match(navigationSource, /getPolylangRestLanguages\(AbortSignal\.timeout\(3_000\)\)/);
-  assert.match(navigationSource, /new URL\("\/wp-json\/", BACKEND_ORIGIN\)/);
+  assert.match(navigationSource, /new URL\("wp-json\/", BACKEND_BASE_URL\)/);
   assert.match(navigationSource, /restIndex\.namespaces\.some\(\(namespace\) => namespace === "pll\/v1"\)/);
   assert.doesNotMatch(navigationSource, /const \[graphqlResponse, restLanguageResult\] = await Promise\.all\(/);
   assert.match(
@@ -212,7 +212,7 @@ test("navigation compatibility fallback is explicit for minimal backends without
   assert.match(navigationSource, /"promoHtml"/);
   assert.match(navigationSource, /"headerIconMedia"/);
   assert.match(navigationSource, /"aiAssistant"/);
-  assert.match(navigationSource, /\/wp-json\/pll\/v1\/languages/);
+  assert.match(navigationSource, /wp-json\/pll\/v1\/languages/);
   assert.match(navigationSource, /getOptionalPolylangRestLanguages\(\)/);
   assert.doesNotMatch(navigationSource, /query StorefrontNavigationCompatible \{\s*menus\(first: 100\) \{\s*nodes \{\s*id\s*databaseId\s*name\s*slug\s*locations/);
   assert.match(navigationSource, /return \[];\n\s*\}/);

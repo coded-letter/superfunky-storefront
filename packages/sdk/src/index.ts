@@ -4,6 +4,10 @@ export type {
 } from "@funky/shared";
 export {
   BACKEND_ORIGIN,
+  BACKEND_BASE_URL,
+  BACKEND_BASE_PATH,
+  backendPathFromUrl,
+  backendUrl,
   GRAPHQL_ENDPOINT,
   isBackendConfigured,
   restUrl,

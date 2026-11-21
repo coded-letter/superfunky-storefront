@@ -3,7 +3,8 @@ import test from "node:test";
 import { hasProductCardPrice } from "./productCardPrice.ts";
 
 test("recognizes explicit zero as a valid product price", () => {
-  assert.equal(hasProductCardPrice({ priceAmount: 0, priceLabel: "" }), true);
+  assert.equal(hasProductCardPrice({ priceAmount: 0, priceLabel: "" }), false);
+  assert.equal(hasProductCardPrice({ priceAmount: 0, priceLabel: "0,00 zł" }), false);
 });
 
 test("recognizes numeric, range, variation, and legacy label prices", () => {

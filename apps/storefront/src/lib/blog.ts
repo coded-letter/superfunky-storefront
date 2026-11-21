@@ -1,6 +1,8 @@
 import type { PostCardData } from "@funky/ui";
 import {
+  BACKEND_BASE_URL,
   BACKEND_ORIGIN,
+  backendPathFromUrl,
   graphqlRequest,
   STOREFRONT_BACKEND_PROFILE,
   type GraphqlResponse,
@@ -464,7 +466,7 @@ async function getRestListingTerms(
   if (!BACKEND_ORIGIN) {
     throw new Error("The blog taxonomy endpoint is unavailable because no backend origin is configured");
   }
-  const url = new URL(`/wp-json/wp/v2/${resource}`, BACKEND_ORIGIN);
+  const url = new URL(`wp-json/wp/v2/${resource}`, BACKEND_BASE_URL);
   url.searchParams.set("per_page", "100");
   url.searchParams.set("hide_empty", "true");
   url.searchParams.set("lang", languageCode);
@@ -487,7 +489,7 @@ async function getRestListingTerms(
       id: String(term.id),
       name: htmlToPlainText(term.name),
       slug: term.slug,
-      uri: new URL(term.link, BACKEND_ORIGIN).pathname,
+      uri: backendPathFromUrl(term.link, ""),
       count: Number.isFinite(term.count) ? term.count : 0,
       description: htmlToPlainText(description),
     }];

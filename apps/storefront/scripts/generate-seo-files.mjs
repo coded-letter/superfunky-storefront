@@ -54,7 +54,7 @@ export async function fetchDocument(path, {
     }
     attemptsMade = attempt;
     try {
-      const response = await fetchImpl(new URL(path, backendOrigin), {
+      const response = await fetchImpl(new URL(path.replace(/^\/+/, ""), backendOrigin), {
         headers: { "User-Agent": "FunkyCommerce-Static-SEO/1.0" },
         redirect: "follow",
         signal: signal
@@ -243,7 +243,9 @@ export async function generateSeoFiles({
     return;
   }
 
-  const backendOrigin = new URL(graphqlEndpoint).origin;
+  const backendUrl = new URL(graphqlEndpoint);
+  backendUrl.pathname = backendUrl.pathname.replace(/\/+$/, "");
+  const backendOrigin = new URL(".", backendUrl).toString();
   const frontendOrigin = siteUrl ? new URL(siteUrl).origin : null;
   const signal = AbortSignal.timeout(budgetMs);
   const fetchFromBackend = (path) => fetchDocument(path, {

@@ -1,5 +1,5 @@
 import { normalizeBackendError } from "@funky/ui";
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_URL } from "@funky/sdk";
 import type { StoreApiCheckoutResult } from "./wcStoreApi";
 import { buildCheckoutOrderClaimRequest } from "./checkoutAccountRequest";
 
@@ -8,11 +8,11 @@ export async function claimCheckoutOrder(
   billingEmail: string,
   authToken: string,
 ): Promise<number> {
-  if (!BACKEND_ORIGIN || !order.order_key) {
+  if (!BACKEND_BASE_URL || !order.order_key) {
     throw new Error("The store did not return the credentials needed to link this order.");
   }
 
-  const request = buildCheckoutOrderClaimRequest(BACKEND_ORIGIN, order, billingEmail);
+  const request = buildCheckoutOrderClaimRequest(BACKEND_BASE_URL, order, billingEmail);
   const response = await fetch(request.url, {
     method: "POST",
     cache: "no-store",

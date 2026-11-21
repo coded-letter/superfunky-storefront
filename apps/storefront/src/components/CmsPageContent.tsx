@@ -368,7 +368,7 @@ function NestedWordPressShortcodes({ html, slots }: { html: string; slots: Neste
     setTargets(slots.map(({ marker }) =>
       contentRef.current?.querySelector(`[data-funkycommerce-render-slot="${marker.slotId}"]`) || null,
     ));
-  }, [slots]);
+  }, [html, slots]);
 
   return (
     <>

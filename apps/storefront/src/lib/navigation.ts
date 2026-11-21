@@ -26,7 +26,7 @@ import type { NewsletterPopupVariant } from "@funky/ui/src/layout/NewsletterSign
 import type { CurrencyOption, LanguageOption, SocialPlatform } from "@funky/ui/src/locale/options.ts";
 import type { ProductPageLayout } from "@funky/ui/src/state/productPageLayout.ts";
 import type { RelatedProductsColumns } from "@funky/ui/src/state/LayoutPreferencesContext.tsx";
-import { BACKEND_ORIGIN, graphqlRequest, hasOnlyMissingGraphqlFields, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
+import { BACKEND_BASE_PATH, BACKEND_BASE_URL, BACKEND_ORIGIN, graphqlRequest, hasOnlyMissingGraphqlFields, STOREFRONT_BACKEND_PROFILE } from "@funky/sdk";
 import { mapBackendLanguages, mapBackendSiteLanguages } from "./languageMapping.ts";
 import { normalizeContentHref } from "./internalLinks.ts";
 import { mapFooterColumns, mapMenuItems, type RawMenuItem } from "./menuMapping.ts";
@@ -1119,7 +1119,7 @@ async function getPolylangRestLanguages(
   signal?: AbortSignal,
 ): Promise<StorefrontLanguagesQueryResult["languages"]> {
   const restIndexResponse = await fetch(
-    new URL("/wp-json/", BACKEND_ORIGIN),
+    new URL("wp-json/", BACKEND_BASE_URL),
     signal ? { signal } : undefined,
   );
   if (!restIndexResponse.ok) {
@@ -1132,7 +1132,7 @@ async function getPolylangRestLanguages(
   if (!restIndex.namespaces.some((namespace) => namespace === "pll/v1")) return [];
 
   const response = await fetch(
-    new URL("/wp-json/pll/v1/languages", BACKEND_ORIGIN),
+    new URL("wp-json/pll/v1/languages", BACKEND_BASE_URL),
     signal ? { signal } : undefined,
   );
   if (response.status === 404) return [];
@@ -2046,6 +2046,7 @@ function normalizeMenuHref(value: string | null, parentHref: string | undefined)
   return normalizeContentHref(href, {
     storefrontOrigin,
     backendOrigin: BACKEND_ORIGIN,
+    backendBasePath: BACKEND_BASE_PATH,
     baseUrl: BACKEND_ORIGIN || storefrontOrigin,
   });
 }

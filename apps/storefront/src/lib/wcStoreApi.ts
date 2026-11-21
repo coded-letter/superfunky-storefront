@@ -9,7 +9,7 @@
  * A `Nonce` is only needed when there is not yet a Cart-Token; sending both can make
  * concurrent requests race on a rotating nonce. */
 
-import { BACKEND_ORIGIN, isBackendConfigured } from "@funky/sdk";
+import { BACKEND_BASE_URL, isBackendConfigured } from "@funky/sdk";
 import { normalizeBackendError } from "@funky/ui";
 import { getAuthTokenForRequest } from "./auth";
 import { buildStoreApiHeaders, isStoreApiNonceError } from "./storeApiAuth";
@@ -22,9 +22,9 @@ let mutationQueue: Promise<void> = Promise.resolve();
 let sessionInitialization: Promise<StoreApiResponse<StoreApiCart>> | null = null;
 
 function storeApiUrl(route: string): string | undefined {
-  if (!BACKEND_ORIGIN) return undefined;
+  if (!BACKEND_BASE_URL) return undefined;
   const [path, query = ""] = route.split("?", 2);
-  const url = new URL(`${BACKEND_ORIGIN}/index.php`);
+  const url = new URL("index.php", BACKEND_BASE_URL);
   url.searchParams.set("rest_route", `/wc/store/v1/${path.replace(/^\/+/, "")}`);
   new URLSearchParams(query).forEach((value, key) => url.searchParams.append(key, value));
   return url.toString();

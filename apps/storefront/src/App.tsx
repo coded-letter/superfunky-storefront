@@ -802,6 +802,8 @@ export function App() {
                     <Route path="/:language/product-brand" element={<ProductBrandDirectoryPage />} />
                     <Route path="/shop/:slug" element={<ProductMockupPage />} />
                     <Route path="/sklep/:slug" element={<ProductMockupPage />} />
+                    <Route path="/produkt/:slug" element={<ProductMockupPage />} />
+                    <Route path="/:language/produkt/:slug" element={<ProductMockupPage />} />
                     <Route path="/product/*" element={<ProductMockupPage />} />
                     <Route path="/product-category/*" element={<ProductCategoryMockupPage />} />
                     <Route path="/kategoria-produktu/*" element={<ProductCategoryMockupPage />} />

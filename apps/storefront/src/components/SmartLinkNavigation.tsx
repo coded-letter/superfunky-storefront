@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { normalizeLanguagePath, useLanguage } from "@funky/ui";
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_PATH, BACKEND_ORIGIN } from "@funky/sdk";
 import { mountHashAnchorScroll, mountSmartLinkNavigation } from "../lib/internalLinks";
 import { prefetchStorefrontRoute } from "../lib/routePrefetch";
 import { artifactRouteHydrationEnabled } from "../lib/storefrontDocumentWarmup";
@@ -24,6 +24,7 @@ export function SmartLinkNavigation() {
       document,
       window,
       backendOrigin: BACKEND_ORIGIN,
+      backendBasePath: BACKEND_BASE_PATH,
       normalizeTo: (to) => normalizeLanguagePath(to, languageCode, configuredLanguageCodes),
       navigate: artifactRouteHydrationEnabled
         ? (to) => void prefetch(to).then(() => navigate(to), () => navigate(to))

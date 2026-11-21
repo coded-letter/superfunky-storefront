@@ -1,5 +1,6 @@
 import type { PostCardData } from "@funky/ui";
 import {
+  BACKEND_BASE_URL,
   BACKEND_ORIGIN,
   graphqlRequest,
   STOREFRONT_BACKEND_PROFILE,
@@ -440,7 +441,7 @@ export async function getPostTaxonomyArchive(
 
 async function getRestTerms(taxonomy: PostTaxonomy, languageCode: string): Promise<CmsTaxonomyTerm[]> {
   const resource = taxonomy === "category" ? "categories" : "tags";
-  const url = new URL(`/wp-json/wp/v2/${resource}`, BACKEND_ORIGIN);
+  const url = new URL(`wp-json/wp/v2/${resource}`, BACKEND_BASE_URL);
   url.searchParams.set("per_page", "100");
   url.searchParams.set("hide_empty", "true");
   url.searchParams.set("lang", languageCode);

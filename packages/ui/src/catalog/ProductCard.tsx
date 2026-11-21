@@ -518,18 +518,20 @@ export function ProductCard({
           </div>
         ) : null}
 
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-2">
-          {convertedRangeLabel && !selectedVariation ? (
-            <strong className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{convertedRangeLabel}</strong>
-          ) : (
-            <>
-              <strong className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{selectedPriceLabel}</strong>
-              {selectedCompareAtPriceLabel ? (
-                <span className="text-sm text-zinc-400 line-through dark:text-zinc-500">{selectedCompareAtPriceLabel}</span>
-              ) : null}
-            </>
-          )}
-        </div>
+        {hasPrice ? (
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-2">
+            {convertedRangeLabel && !selectedVariation ? (
+              <strong className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{convertedRangeLabel}</strong>
+            ) : (
+              <>
+                <strong className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{selectedPriceLabel}</strong>
+                {selectedCompareAtPriceLabel ? (
+                  <span className="text-sm text-zinc-400 line-through dark:text-zinc-500">{selectedCompareAtPriceLabel}</span>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
 
         {(isVariation || product.productType === "variable") && product.variationOptions?.length ? (
           <div className="grid gap-1.5 pt-0.5">

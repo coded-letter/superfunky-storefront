@@ -105,13 +105,13 @@ export function parseStripeConfirmationRedirect(
 }
 
 export function buildStripeOrderStatusRequest(
-  backendOrigin: string,
+  backendBaseUrl: string,
   confirmation: StripeConfirmationRedirect,
   intentId: string,
   orderKey: string,
   paymentMethodId?: string,
 ): { url: string; body: URLSearchParams } {
-  const url = new URL(backendOrigin);
+  const url = new URL(".", backendBaseUrl);
   url.searchParams.set("wc-ajax", "wc_stripe_update_order_status");
 
   const body = new URLSearchParams({

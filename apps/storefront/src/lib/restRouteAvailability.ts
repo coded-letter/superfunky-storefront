@@ -1,4 +1,4 @@
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_URL } from "@funky/sdk";
 
 type RestEndpoint = {
   methods?: string[];
@@ -28,16 +28,16 @@ export function restIndexHasRoute(index: unknown, route: string, method = "GET")
 }
 
 export function createRestRouteAvailability(
-  backendOrigin: string | undefined,
+  backendBaseUrl: string | undefined,
   request: typeof fetch = fetch,
 ) {
   const unavailableRoutes = new Set<string>();
   let restIndexRequest: Promise<RestIndex | null> | undefined;
 
   function getRestIndex(): Promise<RestIndex | null> {
-    if (!backendOrigin) return Promise.resolve(null);
+    if (!backendBaseUrl) return Promise.resolve(null);
     if (!restIndexRequest) {
-      restIndexRequest = request(new URL("/wp-json/", backendOrigin), {
+      restIndexRequest = request(new URL("wp-json/", backendBaseUrl), {
         headers: { Accept: "application/json" },
         cache: "no-store",
       })
@@ -52,7 +52,7 @@ export function createRestRouteAvailability(
   }
 
   async function isAvailable(route: string, method = "GET"): Promise<boolean | null> {
-    if (!backendOrigin) return false;
+    if (!backendBaseUrl) return false;
     const normalizedMethod = method.toUpperCase();
     const key = `${normalizedMethod}:${normalizeRoute(route)}`;
     if (unavailableRoutes.has(key)) return false;
@@ -74,7 +74,7 @@ export function createRestRouteAvailability(
   return { isAvailable, cacheUnavailableFromResponse };
 }
 
-const backendRestRoutes = createRestRouteAvailability(BACKEND_ORIGIN);
+const backendRestRoutes = createRestRouteAvailability(BACKEND_BASE_URL);
 
 export const isRestRouteAvailable = backendRestRoutes.isAvailable;
 export const cacheRestRouteUnavailableFromResponse = backendRestRoutes.cacheUnavailableFromResponse;

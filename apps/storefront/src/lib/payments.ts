@@ -14,7 +14,7 @@ import {
   withDigitalCheckoutAddress,
   withDigitalGatewayAddress,
 } from "./checkoutContext";
-import { BACKEND_ORIGIN, graphqlRequest, isBackendConfigured } from "@funky/sdk";
+import { BACKEND_BASE_URL, graphqlRequest, isBackendConfigured } from "@funky/sdk";
 import { getStripe } from "./stripe";
 import {
   type CryptoAsset,
@@ -410,7 +410,7 @@ export async function completeStripePayment(
     ("paymentIntent" in result ? result.paymentIntent?.id : result.setupIntent?.id) ||
     confirmation.clientSecret.split("_secret_", 1)[0];
 
-  if (!intentId || !BACKEND_ORIGIN) {
+  if (!intentId || !BACKEND_BASE_URL) {
     return {
       ok: false,
       error: result.error?.message || "Stripe did not return the payment intent needed to finish the order.",
@@ -419,7 +419,7 @@ export async function completeStripePayment(
   }
 
   const verificationRequest = buildStripeOrderStatusRequest(
-    BACKEND_ORIGIN,
+    BACKEND_BASE_URL,
     confirmation,
     intentId,
     order.order_key,
@@ -481,7 +481,7 @@ export async function completeBlikPayment(
   order: StoreApiCheckoutResult,
   billingEmail: string,
 ): Promise<PaymentSubmissionResult> {
-  if (!BACKEND_ORIGIN || !order.order_key) {
+  if (!BACKEND_BASE_URL || !order.order_key) {
     return {
       ok: false,
       error: "The store did not return the credentials needed to verify the BLIK payment.",
@@ -489,7 +489,7 @@ export async function completeBlikPayment(
     };
   }
 
-  const request = buildBlikReconciliationRequest(BACKEND_ORIGIN, order, billingEmail);
+  const request = buildBlikReconciliationRequest(BACKEND_BASE_URL, order, billingEmail);
   const deadline = Date.now() + BLIK_RECONCILIATION_TIMEOUT_MS;
 
   while (Date.now() < deadline) {

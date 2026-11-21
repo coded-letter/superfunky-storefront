@@ -5,6 +5,7 @@ import type { ProductReview, ProductVariationCombo, ProductVariationOption } fro
 import {
   graphqlRequest,
   hasOnlyMissingGraphqlFields,
+  backendPathFromUrl,
   restUrl,
   STOREFRONT_BACKEND_PROFILE,
 } from "@funky/sdk";
@@ -1267,12 +1268,7 @@ async function getOptionalStoreApiCatalogProducts(context: string): Promise<RawP
 }
 
 function storefrontPathFromUrl(value: string | undefined, fallback: string): string {
-  if (!value) return fallback;
-  try {
-    return new URL(value).pathname || fallback;
-  } catch {
-    return fallback;
-  }
+  return backendPathFromUrl(value, fallback);
 }
 
 export function matchesCommerceRouteLanguage(
@@ -1875,9 +1871,9 @@ export function mapProductCard(product: RawProductCard): CmsProductCard {
     id: product.id,
     databaseId: product.databaseId,
     featured: product.featured === true,
-    href: product.uri || (product.slug ? `/product/${product.slug}/` : undefined),
+    href: backendPathFromUrl(product.uri || undefined, product.slug ? `/product/${product.slug}/` : ""),
     slug: product.slug || "",
-    uri: product.uri || (product.slug ? `/product/${product.slug}/` : ""),
+    uri: backendPathFromUrl(product.uri || undefined, product.slug ? `/product/${product.slug}/` : ""),
     categorySlugs: product.productCategories?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
     tagSlugs: product.productTags?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],
     brandSlugs: product.productBrands?.nodes.flatMap((term) => term.slug ? [term.slug] : []) || [],

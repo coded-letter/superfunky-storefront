@@ -26,10 +26,11 @@ test("resolveProductPriceMode: a positive price always resolves to purchase", ()
   assert.equal(resolveProductPriceMode(19.99, "inquiry", "inquiry"), "purchase");
 });
 
-test("resolveProductPriceMode: an explicit price of 0 is always preserved as free, even under an inquiry default", () => {
-  assert.equal(resolveProductPriceMode(0, "inherit", "inquiry"), "free");
-  assert.equal(resolveProductPriceMode(0, "inquiry", "inquiry"), "free");
+test("resolveProductPriceMode: a zero price follows the effective no-price behavior", () => {
+  assert.equal(resolveProductPriceMode(0, "inherit", "inquiry"), "inquiry");
+  assert.equal(resolveProductPriceMode(0, "inquiry", "inquiry"), "inquiry");
   assert.equal(resolveProductPriceMode(0, "free", "inquiry"), "free");
+  assert.equal(resolveProductPriceMode(0, "inherit", "free"), "free");
 });
 
 test("resolveProductPriceMode: no price data defers to the per-product override when set", () => {
