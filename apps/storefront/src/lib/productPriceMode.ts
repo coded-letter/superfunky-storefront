@@ -14,18 +14,17 @@ export type ProductPriceBehavior = "inherit" | "free" | "inquiry";
  *  override, and the store-wide default have all been reconciled. */
 export type ResolvedProductPriceMode = "purchase" | "free" | "inquiry";
 
-/** Resolve how a product's pricing should be presented, preserving explicit free
- *  products (an actual price of 0) even when the effective no-price behaviour is
- *  "inquiry" — only products with *no* price data at all are subject to the
- *  no-price behaviour. Per-product `priceBehavior` overrides take precedence over
- *  the store-wide `noPriceBehavior` default unless it is `"inherit"`. */
+/** Resolve how a product's pricing should be presented. WooCommerce commonly
+ *  exposes an unpriced product as `0`, so zero follows the effective no-price
+ *  behaviour. Per-product `priceBehavior` overrides take precedence over the
+ *  store-wide `noPriceBehavior` default unless it is `"inherit"`. */
 export function resolveProductPriceMode(
   priceAmount: number | undefined,
   priceBehavior: ProductPriceBehavior,
   noPriceBehavior: NoPriceBehavior,
 ): ResolvedProductPriceMode {
   if (priceAmount !== undefined && priceAmount > 0) return "purchase";
-  if (priceAmount === 0) return "free";
+  if (priceAmount === 0 && priceBehavior === "free") return "free";
   const effective = priceBehavior === "inherit" ? noPriceBehavior : priceBehavior;
   return effective === "inquiry" ? "inquiry" : "free";
 }

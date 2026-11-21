@@ -17,6 +17,7 @@ export type LinkEnvironment = {
   currentUrl: string;
   storefrontOrigin: string;
   backendOrigin?: string;
+  backendBasePath?: string;
 };
 
 const NATIVE_PROTOCOLS = new Set(["mailto:", "tel:", "javascript:", "data:", "blob:"]);
@@ -31,7 +32,7 @@ const NON_CONTENT_BACKEND_PATHS = [
 
 export function normalizeContentHref(
   href: string,
-  environment: Pick<LinkEnvironment, "storefrontOrigin" | "backendOrigin"> & { baseUrl?: string },
+  environment: Pick<LinkEnvironment, "storefrontOrigin" | "backendOrigin" | "backendBasePath"> & { baseUrl?: string },
 ): string {
   const value = href.trim();
   if (!value) return value;
@@ -43,7 +44,11 @@ export function normalizeContentHref(
       url.origin === environment.storefrontOrigin
       || (url.origin === environment.backendOrigin && isBackendContentUrl(url))
     ) {
-      return `${url.pathname}${url.search}${url.hash}`;
+      const basePath = environment.backendBasePath?.replace(/\/+$/, "") || "";
+      const path = basePath && (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`))
+        ? url.pathname.slice(basePath.length) || "/"
+        : url.pathname;
+      return `${path.startsWith("/") ? path : `/${path}`}${url.search}${url.hash}`;
     }
     return url.href;
   } catch {
@@ -200,6 +205,7 @@ type SmartLinkControllerOptions = {
   document: Document;
   window: Window;
   backendOrigin?: string;
+  backendBasePath?: string;
   normalizeTo?: (to: string) => string;
   navigate: (to: string) => void;
   prefetch: (to: string) => Promise<unknown> | unknown;
@@ -213,6 +219,7 @@ export function mountSmartLinkNavigation({
   document,
   window,
   backendOrigin,
+  backendBasePath,
   normalizeTo = (to) => to,
   navigate,
   prefetch,
@@ -247,6 +254,7 @@ export function mountSmartLinkNavigation({
       const mapped = normalizeContentHref(rawHref, {
         storefrontOrigin: window.location.origin,
         backendOrigin,
+        backendBasePath,
         baseUrl: window.location.href,
       });
       if (!mapped.startsWith("/") || mapped.startsWith("//")) continue;

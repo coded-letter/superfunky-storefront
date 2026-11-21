@@ -1,10 +1,11 @@
-export const CHAT_ASSISTANT_REST_NAMESPACE = "/wp-json/funkycommerce-ai-assistant/v1";
+export const CHAT_ASSISTANT_REST_NAMESPACE = "wp-json/funkycommerce-ai-assistant/v1";
 
-export function chatAssistantEndpoints(backendOrigin: string) {
-  const origin = backendOrigin.replace(/\/+$/, "");
+export function chatAssistantEndpoints(backendBaseUrl: string | undefined) {
+  if (!backendBaseUrl) return null;
+  const baseUrl = backendBaseUrl.replace(/\/+$/, "") + "/";
   return {
-    config: `${origin}${CHAT_ASSISTANT_REST_NAMESPACE}/config`,
-    chat: `${origin}${CHAT_ASSISTANT_REST_NAMESPACE}/chat`,
+    config: `${baseUrl}${CHAT_ASSISTANT_REST_NAMESPACE}/config`,
+    chat: `${baseUrl}${CHAT_ASSISTANT_REST_NAMESPACE}/chat`,
   };
 }
 

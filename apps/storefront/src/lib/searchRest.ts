@@ -1,5 +1,6 @@
 import type { SearchResultItem } from "@funky/ui";
 import {
+  backendPathFromUrl,
   BACKEND_ORIGIN,
   STOREFRONT_DEFAULT_LANGUAGE,
   STOREFRONT_EXPECTED_LOCALES,
@@ -78,7 +79,7 @@ async function searchRestResource(
   backendOrigin: string,
   fetchImpl: typeof fetch,
 ): Promise<RestSearchNode[]> {
-  const url = new URL(`/wp-json/wp/v2/${resource}`, backendOrigin);
+  const url = new URL(`wp-json/wp/v2/${resource}`, backendOrigin);
   url.searchParams.set("search", query);
   url.searchParams.set("per_page", resource === "posts" ? "6" : "4");
   if (languageCode) url.searchParams.set("lang", languageCode);
@@ -125,7 +126,9 @@ function restPathname(link: string | undefined, backendOrigin: string): string |
   if (!link) return null;
   try {
     const url = new URL(link, backendOrigin);
-    return url.origin === new URL(backendOrigin).origin ? url.pathname : null;
+    return url.origin === new URL(backendOrigin).origin
+      ? backendPathFromUrl(url.toString(), "")
+      : null;
   } catch {
     return null;
   }

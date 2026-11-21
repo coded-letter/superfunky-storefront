@@ -57,12 +57,54 @@ export const BACKEND_ORIGIN: string | undefined = GRAPHQL_ENDPOINT
   ? new URL(GRAPHQL_ENDPOINT, typeof window === "undefined" ? "http://localhost" : window.location.origin).origin
   : undefined;
 
+/** The WordPress installation base URL, preserving a subdirectory such as
+ * `https://example.test/aqua-bar-wp/` from a GraphQL endpoint below it. */
+export const BACKEND_BASE_URL: string | undefined = GRAPHQL_ENDPOINT
+  ? (() => {
+      const endpoint = new URL(
+        GRAPHQL_ENDPOINT,
+        typeof window === "undefined" ? "http://localhost" : window.location.origin,
+      );
+      endpoint.pathname = endpoint.pathname.replace(/\/+$/, "");
+      return new URL(".", endpoint).toString();
+    })()
+  : undefined;
+export const BACKEND_BASE_PATH = BACKEND_BASE_URL
+  ? new URL(BACKEND_BASE_URL).pathname.replace(/\/+$/, "")
+  : "";
+
 /** Builds an absolute REST URL on the backend origin from a `wp-json`-relative path,
  * e.g. `restUrl("custom/v1/abandoned-cart")` →
  * `https://v1.superfunky.pro/wp-json/custom/v1/abandoned-cart`. Returns `undefined`
  * when no backend is configured. */
 export function restUrl(path: string): string | undefined {
-  if (!BACKEND_ORIGIN) return undefined;
+  if (!BACKEND_BASE_URL) return undefined;
   const cleanPath = path.replace(/^\/+/, "");
-  return `${BACKEND_ORIGIN}/wp-json/${cleanPath}`;
+  return new URL(`wp-json/${cleanPath}`, BACKEND_BASE_URL).toString();
+}
+
+/** Builds an absolute URL relative to the WordPress installation base. */
+export function backendUrl(path: string): string | undefined {
+  if (!BACKEND_BASE_URL) return undefined;
+  return new URL(path.replace(/^\/+/, ""), BACKEND_BASE_URL).toString();
+}
+
+/** Converts a backend permalink into a storefront path by removing the
+ * WordPress installation directory from its pathname. */
+export function backendPathFromUrl(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  try {
+    const url = new URL(value, BACKEND_BASE_URL || "http://localhost");
+    const basePath = BACKEND_BASE_PATH;
+    if (
+      basePath
+      && (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`))
+    ) {
+      const path = url.pathname.slice(basePath.length) || "/";
+      return path.startsWith("/") ? path : `/${path}`;
+    }
+    return url.pathname || fallback;
+  } catch {
+    return fallback;
+  }
 }

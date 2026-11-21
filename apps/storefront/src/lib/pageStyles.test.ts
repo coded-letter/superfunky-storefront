@@ -7,6 +7,7 @@ import {
   applyThemePresetVariables,
   createWordPressElementTypographyCss,
   mountPageStyles,
+  rebaseWordPressCssUrls,
   sanitizeWordPressFontFaces,
   sanitizeWordPressStylesheetUrls,
   WORDPRESS_BLOCK_COMPATIBILITY_CSS,
@@ -17,6 +18,31 @@ const bundledCss = readFileSync(new URL("../styles.css", import.meta.url), "utf8
 const photoHeroSource = readFileSync(new URL("../components/HeroMock.tsx", import.meta.url), "utf8");
 const videoHeroSource = readFileSync(new URL("../components/VideoHero.tsx", import.meta.url), "utf8");
 const themeProviderSource = readFileSync(new URL("../state/wordpressThemeStyles.tsx", import.meta.url), "utf8");
+
+test("rebases WordPress CSS asset URLs against the installation base", () => {
+  const css = rebaseWordPressCssUrls(
+    ".hero{background-image:url('/wp-content/uploads/hero.webp')} .icon{src:url(data:image/svg+xml;base64,abc)}",
+    "https://colorcloud.dev/aqua-bar-wp/",
+  );
+  assert.match(css, /https:\/\/colorcloud\.dev\/aqua-bar-wp\/wp-content\/uploads\/hero\.webp/);
+  assert.match(css, /url\(data:image\/svg\+xml;base64,abc\)/);
+});
+
+test("keeps root-install and already-prefixed CSS URLs stable", () => {
+  const css = rebaseWordPressCssUrls(
+    ".root{background:url('/wp-content/a.png')} .prefixed{background:url('/aqua-bar-wp/wp-content/b.png')} .cdn{background:url('//cdn.example.test/a.png')}",
+    "https://colorcloud.dev/aqua-bar-wp/",
+  );
+  assert.match(css, /https:\/\/colorcloud\.dev\/aqua-bar-wp\/wp-content\/a\.png/);
+  assert.match(css, /https:\/\/colorcloud\.dev\/aqua-bar-wp\/wp-content\/b\.png/);
+  assert.match(css, /url\(['"]?\/\/cdn\.example\.test\/a\.png['"]?\)/);
+
+  const rootInstallCss = rebaseWordPressCssUrls(
+    ".root{background:url('/wp-content/a.png')}",
+    "https://root.example.test/",
+  );
+  assert.match(rootInstallCss, /https:\/\/root\.example\.test\/wp-content\/a\.png/);
+});
 
 test("applied theme CSS does not wait for background data revalidation", () => {
   assert.match(themeProviderSource, /Boolean\(data\) && appliedData === data/);

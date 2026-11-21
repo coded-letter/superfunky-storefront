@@ -4,6 +4,7 @@ import { activatePrerenderImages } from "./lib/prerenderImages";
 import { captureInitialCmsPageMarkup } from "./lib/prerenderSnapshot";
 import { installStaticDocumentWarmup } from "./lib/storefrontDocumentWarmup";
 import { startRecentOrdersNotifier } from "./lib/recentOrders";
+import { backendUrl } from "@funky/sdk";
 
 activateDeferredThemeStyles(document);
 
@@ -132,12 +133,12 @@ const initialFontsReady = document.fonts.status === "loaded"
     });
 const initialVisualsReady = Promise.all([domReady, initialFontsReady]);
 if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
-  const endpoint = new URL(
-    "/wp-json/funkycommerce/v1/recent-orders",
-    import.meta.env.VITE_GRAPHQL_ENDPOINT?.trim() || location.origin,
-  ).toString();
-  window.setTimeout(() => {
-    void startRecentOrdersNotifier({
+  const endpoint = backendUrl("wp-json/funkycommerce/v1/recent-orders");
+  if (!endpoint) {
+    console.warn("Recent-order notifications are enabled but no backend is configured.");
+  } else {
+    window.setTimeout(() => {
+      void startRecentOrdersNotifier({
         enabled: true,
         itemCount: Number(prerenderedChrome.dataset.recentOrdersCount),
         intervalSeconds: Number(prerenderedChrome.dataset.recentOrdersInterval),
@@ -148,7 +149,8 @@ if (prerenderedChrome?.dataset.recentOrdersEnabled === "true") {
       .catch((error) => {
         console.error("Recent-order notifications could not start.", error);
       });
-  }, deferFlagshipHomeHydration ? 10_000 : 2_000);
+    }, deferFlagshipHomeHydration ? 10_000 : 2_000);
+  }
 }
 const currentDocumentKey = `${location.pathname}${location.search}${location.hash}`;
 let savedReloadScrollY = 0;

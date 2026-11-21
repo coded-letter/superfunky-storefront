@@ -1,4 +1,4 @@
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_URL, BACKEND_ORIGIN } from "@funky/sdk";
 import { authStore } from "./auth.ts";
 import type { CmsPage } from "./pages.ts";
 import { shouldProbeProtectedPage } from "./protectedPageEligibility.ts";
@@ -36,7 +36,7 @@ async function protectedPageRequest(uri: string, password?: string): Promise<Res
   if (await isRestRouteAvailable(PROTECTED_PAGE_ROUTE, password === undefined ? "GET" : "POST") !== true) {
     return null;
   }
-  const endpoint = new URL(`/wp-json${PROTECTED_PAGE_ROUTE}`, BACKEND_ORIGIN);
+  const endpoint = new URL(`wp-json${PROTECTED_PAGE_ROUTE}`, BACKEND_BASE_URL);
   const token = authStore.getToken() || authStore.load()?.authToken;
   const headers: Record<string, string> = {
     Accept: "application/json",

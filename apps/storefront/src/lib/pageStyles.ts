@@ -1,5 +1,6 @@
 import type { CmsThemeStyles } from "./pages";
 import { splitCustomCss } from "./customCssLayers.mjs";
+import { BACKEND_BASE_URL } from "@funky/sdk";
 
 type MountedStyle = {
   count: number;
@@ -644,18 +645,18 @@ export function mountPageStyles(styles: CmsThemeStyles | null | undefined, trust
     ? []
     : [
         mountInlineStyle("wordpress-font-faces", sanitizeWordPressFontFaces(styles?.fontFaceStyles || "")),
-        mountInlineStyle("wordpress-global-styles", sanitizeWordPressGlobalStyles(styles?.globalStyles || "")),
+        mountInlineStyle("wordpress-global-styles", sanitizeWordPressGlobalStyles(styles?.globalStyles || "", BACKEND_BASE_URL)),
         // Core block styles must follow global element defaults so variants such as
         // Button "Outline" can override the generic button background and border.
         ...stylesheets.map(mountStylesheet),
-        mountInlineStyle("wordpress-custom-css", customCss.critical),
+        mountInlineStyle("wordpress-custom-css", rebaseWordPressCssUrls(customCss.critical, BACKEND_BASE_URL)),
         // Always mounted last so block semantics survive Tailwind and theme collisions.
         mountInlineStyle("wordpress-block-compatibility", WORDPRESS_BLOCK_COMPATIBILITY_CSS, true),
       ].filter((key): key is string => Boolean(key));
   orderMountedPageStyles();
   const deferredTimer = !hasStaticStyles && customCss.deferred
     ? setTimeout(() => {
-        const key = mountInlineStyle("wordpress-custom-css-deferred", customCss.deferred);
+        const key = mountInlineStyle("wordpress-custom-css-deferred", rebaseWordPressCssUrls(customCss.deferred, BACKEND_BASE_URL));
         if (key) keys.push(key);
         orderMountedPageStyles();
       }, 2_000)
@@ -928,8 +929,42 @@ export function createWordPressElementTypographyCss(globalStyles: string): strin
   return rules.join("");
 }
 
-export function sanitizeWordPressGlobalStyles(css: string): string {
-  return css;
+export function sanitizeWordPressGlobalStyles(css: string, backendBaseUrl?: string): string {
+  return rebaseWordPressCssUrls(css, backendBaseUrl);
+}
+
+/** CSS returned by WordPress is mounted inline, so root-relative assets would
+ * otherwise resolve against the storefront origin instead of the WP install. */
+export function rebaseWordPressCssUrls(css: string, backendBaseUrl?: string): string {
+  if (!backendBaseUrl || !css) return css;
+  return css.replace(/url\(\s*(['"]?)([^)'"]+)\1\s*\)/gi, (match, quote: string, value: string) => {
+    const trimmed = value.trim();
+    if (
+      !trimmed
+      || trimmed.startsWith("#")
+      || trimmed.startsWith("data:")
+      || trimmed.startsWith("blob:")
+      || trimmed.startsWith("//")
+      || /^[a-z][a-z\d+\-.]*:/i.test(trimmed)
+    ) {
+      return match;
+    }
+    try {
+      const base = new URL(backendBaseUrl);
+      const basePath = base.pathname.replace(/\/+$/, "");
+      const resolved = trimmed.startsWith("/")
+        ? new URL(
+            trimmed === basePath || (basePath && trimmed.startsWith(`${basePath}/`))
+              ? trimmed
+              : `${basePath}/${trimmed.replace(/^\/+/, "")}`,
+            base.origin,
+          ).toString()
+        : new URL(trimmed, backendBaseUrl).toString();
+      return `url(${quote}${resolved}${quote})`;
+    } catch {
+      return match;
+    }
+  });
 }
 
 function presetVariable(category: string, slug: string): string {

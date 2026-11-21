@@ -38,6 +38,7 @@ const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 
 test("localized Woo product permalinks route to product details", () => {
   assert.match(appSource, /path="\/sklep\/:slug" element=\{<ProductMockupPage \/>}/);
+  assert.match(appSource, /path="\/produkt\/:slug" element=\{<ProductMockupPage \/>}/);
   assert.match(appSource, /path="\/kategoria-produktu\/\*" element=\{<ProductCategoryMockupPage \/>}/);
 });
 

@@ -76,6 +76,11 @@ const hasInteractiveStaticChrome = [configuredSiteHostname, configuredBackendHos
 );
 const graphqlEndpoint = process.env.VITE_GRAPHQL_ENDPOINT?.trim()
   || "https://dev.superfunky.pro/graphql";
+const backendBaseUrl = (() => {
+  const endpoint = new URL(graphqlEndpoint);
+  endpoint.pathname = endpoint.pathname.replace(/\/+$/, "");
+  return new URL(".", endpoint).toString();
+})();
 let defaultLanguage = process.env.VITE_DEFAULT_LANGUAGE?.trim().toLowerCase() || "en";
 const configuredBackendProfile = process.env.VITE_BACKEND_PROFILE?.trim().toLowerCase() || "full";
 const backendProfile = ["shell", "blog", "shop", "full"].includes(configuredBackendProfile)
@@ -1084,7 +1089,7 @@ async function discoverLanguages() {
       }));
     }
     try {
-      const response = await fetch(new URL("/wp-json/pll/v1/languages", graphqlEndpoint));
+      const response = await fetch(new URL("wp-json/pll/v1/languages", backendBaseUrl));
       if (response.ok) {
         const restLanguages = await response.json();
         if (!Array.isArray(restLanguages)) {
@@ -1141,7 +1146,7 @@ async function discoverLanguages() {
     }
   }
   try {
-    const response = await fetch(new URL("/wp-json/pll/v1/languages", graphqlEndpoint), {
+    const response = await fetch(new URL("wp-json/pll/v1/languages", backendBaseUrl), {
       signal: AbortSignal.timeout(10_000),
     });
     if (response.ok) {
@@ -1523,7 +1528,7 @@ async function discoverCmsRoutes({
 }
 
 async function discoverStoreApiProductRouteNodes() {
-  const endpoint = new URL("/wp-json/wc/store/v1/products?per_page=100", graphqlEndpoint);
+  const endpoint = new URL("wp-json/wc/store/v1/products?per_page=100", backendBaseUrl);
   const response = await fetch(endpoint, { signal: AbortSignal.timeout(20_000) });
   if (response.status === 404) return [];
   if (!response.ok) {

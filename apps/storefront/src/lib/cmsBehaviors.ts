@@ -452,6 +452,7 @@ export function mountCmsBehaviors(container: HTMLElement, showCodeControls = tru
       pendingCleanup?.();
     });
   }
+
   const requests = new Map<HTMLElement, Set<string>>();
 
   const addRequest = (element: HTMLElement, id: string) => {

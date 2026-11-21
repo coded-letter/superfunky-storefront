@@ -5,15 +5,18 @@ export type ProductCardPriceInput = {
   variationPriceAmounts?: number[];
 };
 
-/** Treat an explicit zero as a real price while rejecting products whose pricing data
- * is entirely absent. Labels remain supported for legacy/mock card data. */
+/** Treat zero as missing pricing data so unpriced products use their learn-more
+ * action instead of showing a misleading free price. Labels remain supported for
+ * legacy/mock card data when no numeric amount is available. */
 export function hasProductCardPrice({
   priceAmount,
   priceLabel,
   priceRangeLabel,
   variationPriceAmounts = [],
 }: ProductCardPriceInput): boolean {
-  if (Number.isFinite(priceAmount) && (priceAmount ?? -1) >= 0) return true;
-  if (variationPriceAmounts.some((amount) => Number.isFinite(amount) && amount >= 0)) return true;
+  if (Number.isFinite(priceAmount)) return (priceAmount ?? 0) > 0;
+  if (variationPriceAmounts.length) {
+    return variationPriceAmounts.some((amount) => Number.isFinite(amount) && amount > 0);
+  }
   return Boolean(priceRangeLabel?.trim() || priceLabel?.trim());
 }

@@ -50,7 +50,7 @@ export function artifactConfigFromEnvironment(environment = process.env) {
   return {
     mode,
     delivery,
-    origin: origin.origin,
+    origin: origin.toString().replace(/\/+$/, ""),
     siteKey,
     signingSecret,
   };

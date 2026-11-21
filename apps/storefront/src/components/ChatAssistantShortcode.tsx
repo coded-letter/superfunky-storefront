@@ -1,4 +1,4 @@
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_URL } from "@funky/sdk";
 import { Bot, MessageCircle, Send, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { chatAssistantEndpoints, resolveFlatAssistantIcon, type FlatAssistantIcon } from "../lib/chatAssistant";
@@ -33,7 +33,7 @@ function ConfiguredIcon({ config }: { config: AssistantConfig | null }) {
 }
 
 export function ChatAssistantShortcode() {
-  const endpoints = useMemo(() => chatAssistantEndpoints(BACKEND_ORIGIN), []);
+  const endpoints = useMemo(() => chatAssistantEndpoints(BACKEND_BASE_URL), []);
   const clientId = useMemo(() => crypto.randomUUID(), []);
   const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,6 +42,10 @@ export function ChatAssistantShortcode() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!endpoints) {
+      setError("The assistant backend is not configured.");
+      return;
+    }
     const controller = new AbortController();
     fetch(endpoints.config, { signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Assistant configuration is unavailable.")))
@@ -61,6 +65,11 @@ export function ChatAssistantShortcode() {
     setInput("");
     setBusy(true);
     setError("");
+    if (!endpoints) {
+      setError("The assistant backend is not configured.");
+      setBusy(false);
+      return;
+    }
     try {
       const response = await fetch(endpoints.chat, {
         method: "POST",

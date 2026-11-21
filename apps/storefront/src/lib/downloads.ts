@@ -1,5 +1,5 @@
 import { normalizeBackendError } from "@funky/ui";
-import { BACKEND_ORIGIN } from "@funky/sdk";
+import { BACKEND_BASE_URL } from "@funky/sdk";
 import { HttpRequestError } from "./requestRetry";
 
 export type OrderDownload = {
@@ -67,9 +67,9 @@ export async function getOrderDownloadAccess(input: {
   billingEmail?: string;
   accessToken?: string;
 }): Promise<OrderDownloadAccess> {
-  if (!BACKEND_ORIGIN) throw new Error("The download service is not configured.");
+  if (!BACKEND_BASE_URL) throw new Error("The download service is not configured.");
 
-  const url = new URL(`${BACKEND_ORIGIN}/index.php`);
+  const url = new URL("index.php", BACKEND_BASE_URL);
   url.searchParams.set("rest_route", `/funkycommerce/v1/orders/${input.orderId}/downloads`);
   if (input.orderKey) url.searchParams.set("key", input.orderKey);
   if (input.billingEmail) url.searchParams.set("email", input.billingEmail);
