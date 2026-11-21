@@ -173,9 +173,6 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
           name
           slug
           uri
-          language {
-            code
-          }
         }
       }
       tags {
@@ -184,9 +181,6 @@ const POST_BY_URI_QUERY = /* GraphQL */ `
           name
           slug
           uri
-          language {
-            code
-          }
         }
       }
       featuredImage {
